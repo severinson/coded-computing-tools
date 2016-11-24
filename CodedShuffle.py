@@ -6,6 +6,7 @@ import itertools as it
 import copy
 import random
 import math
+import uuid
 
 # Class representing a single coded symbol
 class Symbol(object):
@@ -744,8 +745,9 @@ def main():
     num_outputs = q # N in Li2016
     server_storage = 1/2 # \mu in Li2016    
     
-    #num_partitions = num_source_rows*server_storage / 16
+    #num_partitions = num_source_rows*server_storage
     #num_partitions = rows_per_batch
+    #num_partitions = 112 * 1/2
     num_partitions = 5
     assert num_partitions % 1 == 0
     num_partitions = int(num_partitions)
@@ -753,15 +755,23 @@ def main():
     print('Starting simulation:')    
     print('-------------------')
 
-
-    p = SystemParameters(rows_per_batch, num_servers, q, num_outputs, server_storage, num_partitions)    
-    X, A = assignmentGreedy(p)
-
-    #foo = Assignment(p)
-    #bar = foo.update(0, 0)
-    #bar.update(0, 0)
-    assignment = assignmentGreedyNew(p)
-    print(assignment)
+    # Create a system parameters struct
+    p = SystemParameters(rows_per_batch, num_servers, q, num_outputs, server_storage, num_partitions)
+    bar = branchAndBound(p)
+    print(bar)    
+    print(objectiveFunction(bar.X, bar.A, p))    
+    return
+    '''
+    bar = assignmentGreedyNew(p)
+    print(bar)
+    print(objectiveFunction(bar.X, bar.A, p))
+    '''
+    
+    bar = assignmentGreedyIndexed(p)
+    print(bar)
+    print(objectiveFunction(bar.X, bar.A, p))
+    
+    return
     
     ip_average_score, ip_worst_score = objectiveFunction(assignment.X, assignment.A, p, f=remainingUnicasts)
     print(ip_average_score, ip_worst_score)
@@ -815,10 +825,102 @@ def main():
     ip_report = ip_report + '------------------------------'
     print(ip_report)
 
+# Representation of the count vectors from the perspective of a single server
+class Perspective(object):
+    def __init__(self, score, count, rows, id=None):
+        self.score = score
+        self.count = count
+        self.rows = rows
+
+        # Generate a new ID if none was provided
+        if type(id) is uuid.UUID:
+            self.id = id
+        else:
+            self.id = uuid.uuid4()
+
+    def __str__(self):
+        s = 'Score: ' + str(self.score)
+        s = s + ' Count: ' + str(self.count)
+        s = s + ' Rows: ' + str(self.rows)
+        return s
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.rows == other.rows
+        return False
+
+    def __hash__(self):
+        return hash(self.id)
+
+    # Increment the designated column
+    def update(self, col):
+
+        # Copy the count array
+        count = np.array(self.count)
+
+        # Increment the indicated column and calculate the updated score
+        count[0][col] = count[0][col] + 1
+        score = remainingUnicasts(count)
+
+        # Return a new instance with the updated values
+        return Perspective(score, count, self.rows, id=self.id)
+
+# Representation of the perspective from a row in the assignment matrix
+class RowPerspective(object):
+    def __init__(self, perspectives=None, summary=None):
+        if perspectives == None or summary == None:
+            self.perspectives = dict()
+            self.summary = list()
+        else:
+            assert type(perspectives) is dict
+            assert type(summary) is list            
+            self.perspectives = perspectives
+            self.summary = summary
+            
+        return
+
+    def __getitem__(self, key):
+        if type(key) is not Perspective:
+            raise TypeError('Key must be of type perspective')
+        
+        return self.perspectives[key]
+
+    def __setitem__(self, key, value):
+        if type(key) is not Perspective or type(value) is not Perspective:
+            raise TypeError('Key and value must be of type perspective')
+        
+        self.perspectives[key] = value
+
+    def __delitem__(self, key):
+        if type(key) is not Perspective:
+            raise TypeError('Key must be of type perspective')
+
+        del self.perspectives[key]
+
+    def __contains__(self, key):
+        if type(key) is not Perspective:
+            raise TypeError('Key must be of type perspective')
+        
+        return key in self.perspectives
+
+    def init_summary(self, p):
+        num_perspectives = len(self.perspectives)
+        self.summary = [num_perspectives for x in range(p.num_partitions)]
+        
+    # TODO: Remove
+    def keys(self):
+        return self.perspectives.keys()
+
+    # Returns a shallow copy of itself
+    def copy(self):
+        perspectives = dict(self.perspectives)
+        summary = list(self.summary)
+        return RowPerspective(perspectives, summary)
+    
 # Class representing a storage assignment. Contains efficient methods
 # to evaluate changes in objective function etc.    
 class Assignment(object):
-    def __init__(self, p, X=None, A=None, objective_value=None, row_index=None):
+    def __init__(self, p, X=None, A=None, score=None, index=None):
         self.p = p
 
         if X == None:
@@ -832,27 +934,34 @@ class Assignment(object):
         else:
             self.A = A
 
-        if row_index == None:
+        if score == None or index == None:
+            print('Building index from scratch...')
             self.build_index()
         else:
-            self.objective_value = objective_value
-            self.row_index = row_index            
-
+            self.score = score
+            self.index = index
 
     def __str__(self):
         s = ''
         s = s + 'X:\n'
         s = s + str(self.X) + '\n'
         s = s + 'A:\n'
-        s = s + str(self.A)
-        return s
-    
-    def build_index(self):
-        self.objective_value = 0
+        s = s + str(self.A) + '\n'
+        s = s + 'Score: ' + str(self.score)
+        #s = s + 'Index summary:\n'
+        #s = s + str(self.index_summary)
         
+        return s
+
+    # Build an index pairing rows of the assignment matrix to which
+    # perspectives they appear in. Only run once when creating a new
+    # assignment.
+    def build_index(self):
+        self.score = 0
+        sq = s_q(self.p.q, self.p.num_servers, self.p.server_storage, self.p.num_source_rows)
+                
         # Index for which sets every row is contained in
-        # TODO: Can this be calculated somehow instead?
-        self.row_index = [list() for x in range(self.p.num_batches)]
+        self.index = [RowPerspective() for x in range(self.p.num_batches)]
         self.num_subsets = nchoosek(self.p.num_servers, self.p.q)        
         subsets = it.combinations(range(self.p.num_servers), self.p.q)
 
@@ -862,7 +971,6 @@ class Assignment(object):
                 rows = set()
                 [rows.add(row) for row in self.A[k]]
 
-                sq = s_q(self.p.q, self.p.num_servers, self.p.server_storage, self.p.num_source_rows)
                 for j in range(sq+1, int(self.p.server_storage*self.p.q) + 1):
                     nu = set()
                     for subset in it.combinations([x for x in Q if x != k], j):
@@ -874,12 +982,16 @@ class Assignment(object):
 
                 count_vector = np.dot(selector_vector, self.X) - self.p.num_source_rows / self.p.num_partitions
                 score = remainingUnicasts(count_vector)
-                self.objective_value = self.objective_value + score
+                self.score = self.score + score
 
-                result = {'count': count_vector, 'score': score, 'rows': rows}                
+                perspective = Perspective(score, count_vector, rows)
                 for row in rows:
-                    self.row_index[row].append(result)
-                    #self.row_index[row].append([count_vector, score])
+                    assert perspective not in self.index[row]
+                    self.index[row][perspective] = perspective
+
+        # Initialize the summaries
+        # TODO: Refactor and improve
+        [x.init_summary(self.p) for x in self.index]
 
     # Label batches
     def label(self):
@@ -889,6 +1001,19 @@ class Assignment(object):
             [self.A[x].add(row) for x in label]
             row = row + 1
         return
+
+    # Compute a bound for this assignment
+    def bound(self):
+        b = 0
+        for row_index in range(self.X.shape[0]):
+            row = self.X[row_index]
+            remaining_assignments = self.p.rows_per_batch - sum(row)
+            assert remaining_assignments >= 0
+            b = b + max(self.index[row_index].summary) * remaining_assignments
+
+        return self.score - b
+            
+        
     
     # Increment the element at [row, col] and update the objective
     # value. Returns a new assignment object. Does not change the
@@ -896,38 +1021,39 @@ class Assignment(object):
     def update(self, row, col):
 
         # Make a copy of the index
-        index = list(self.row_index)
-
-        # Copy the part we're going to modify
-        index_row = list(index[row])
+        index = [x.copy() for x in self.index]
 
         # Copy the assignment matrix and the objective value
         X = np.array(self.X)
         X[row, col] = X[row, col] + 1
-        objective_value = self.objective_value
+        objective_value = self.score
+
+        # Select the perspectives linked to the row
+        perspectives = index[row]
         
-        for i in range(len(index_row)):
-            result = index_row[i]
-            count = np.array(result['count'])
-            score = result['score']
-            rows = result['rows']
+        # Iterate over all perspectives linked to that row
+        for perspective_key in perspectives.keys():
+            perspective = perspectives[perspective_key]
 
-            count[0][col] = count[0][col] + 1
-            new_score = remainingUnicasts(count)
+            # Create a new perspective from the updated values
+            new_perspective = perspective.update(col)
+            
+            # Update the objective function
+            objective_value = objective_value - (perspective.score - new_perspective.score)
 
-            objective_value = objective_value - (result[1] - new_score)
+            # Update the index for all rows which include this perspective
+            for perspective_row in perspective.rows:
+                assert hash(new_perspective) == hash(index[perspective_row][perspective])
+                index[perspective_row][perspective] = new_perspective
 
-            new_result = {'count': count, 'score': new_score, 'rows': rows}
-            for row in rows:
-                
-            index_row[i][0] = count
-            index_row[i][1] = new_score            
-
-        # Write the change back to the list we copied
-        index[row] = index_row
-
+            # Update the summaries if the count reached zero for the
+            # indicated column
+            if new_perspective.count[0][col] == 0:
+                for perspective_row in new_perspective.rows:
+                    index[perspective_row].summary[col] = index[perspective_row].summary[col] - 1
+            
         # Return a new assignment object
-        return Assignment(self.p, X=X, A=self.A, objective_value=objective_value, row_index=index)
+        return Assignment(self.p, X=X, A=self.A, score=objective_value, index=index)
             
 def assignmentFromBatches(batches, num_servers, num_partitions, label_size):
     num_batches = len(batches)
@@ -949,6 +1075,126 @@ def assignmentFromBatches(batches, num_servers, num_partitions, label_size):
 
     return X, assignment
 
+# Branch-and-bound node
+class Node(object):
+    def __init__(self, assignment, row, remaining, symbols_separated):
+        assert type(assignment) is Assignment
+        assert type(row) is int
+        assert type(remaining) is int
+        assert type(symbols_separated) is list
+        
+        self.assignment = assignment
+
+        # Current row being assigned
+        self.row = row
+
+        # Remaining assignments for this row
+        self.remaining = remaining
+
+        self.symbols_separated = symbols_separated
+
+        self.id = uuid.uuid4()
+        return
+
+    def __hash__(self):
+        return hash(self.id)
+        
+def branchAndBound(p):
+
+    # Initialize the solver with a greedy solution
+    bestAssignment = assignmentGreedyIndexed(p)
+    bestScore = bestAssignment.score
+
+    # Set of remaining nodes to explore
+    remainingNodes = set()
+
+    # Separate symbols by partition
+    symbols_per_partition = p.num_coded_rows / p.num_partitions 
+    symbols_separated = [symbols_per_partition for x in range(p.num_partitions)]
+
+    # Add the root of the tree
+    root = Node(Assignment(p), 0, p.rows_per_batch, symbols_separated)
+    remainingNodes.add(root)
+
+    while len(remainingNodes) > 0:
+        node = remainingNodes.pop()
+
+        # If there are not more assignments for this node
+        if node.row == p.num_batches and node.remaining == 0:
+            print('Found a solution:', node.assignment)
+            
+            # If this solution is better than the previous best, store it
+            if node.assignment.score < bestAssignment.score:
+                bestAssignment = node.assignment
+                bestScore = bestAssignment.score
+
+            continue
+
+        # Iterate over all possible branches from this node
+        for col in range(p.num_partitions):
+            if node.symbols_separated[col] == 0:
+                continue
+
+            updatedAssignment = node.assignment.update(node.row, col)
+
+            # Continue if the bound for this assignment is no better
+            # than the previous best solution.
+            if updatedAssignment.bound() >= bestScore:
+                continue
+
+            row = node.row
+            remaining = node.remaining - 1
+
+            # Move to the next row if there are no more assignments
+            # for this one.
+            if remaining == 0:
+                row = row + 1
+                remaining = p.rows_per_batch
+
+            # Decrement the count of remaining symbols for the
+            # assigned partition.
+            updatedSymbolsSeparated = list(node.symbols_separated)
+            updatedSymbolsSeparated[col] = updatedSymbolsSeparated[col] - 1
+
+            print('Bound', updatedAssignment.bound(), 'Row:', row, '#nodes:', len(remainingNodes))
+
+            # Add the new node to the set of nodes to be explored
+            remainingNodes.add(Node(updatedAssignment, row, remaining, updatedSymbolsSeparated))
+
+    return bestAssignment            
+
+def assignmentGreedyIndexed(p):
+    assignment = Assignment(p)
+
+    # Separate symbols by partition
+    symbols_per_partition = p.num_coded_rows / p.num_partitions    
+    symbols_separated = [symbols_per_partition for x in range(p.num_partitions)]
+
+    for row in range(p.num_batches):
+        print('Assigning row', row)
+        for i in range(p.rows_per_batch):
+            score_best = 0
+            best_col = 0
+            
+            for col in range(p.num_partitions):
+                if symbols_separated[col] == 0:
+                    continue
+                
+                score_updated = assignment.index[row].summary[col] + symbols_separated[col] / symbols_per_partition
+                if score_updated > score_best:
+                    #print('Found a better assignment', updated_assignment.objective_value, best_assignment.objective_value)
+                    #print('Actual OF:', objectiveFunction(updated_assignment.X, updated_assignment.A, p)[0]*15)
+                    score_best = score_updated
+                    best_col = col
+
+            assignment = assignment.update(row, best_col)
+            symbols_separated[best_col] = symbols_separated[best_col] - 1
+
+            # Print bound
+            print('Bound:', assignment.bound())
+
+    return assignment
+
 def assignmentGreedyNew(p):
     assignment = Assignment(p)
 
@@ -956,26 +1202,30 @@ def assignmentGreedyNew(p):
     symbols_per_partition = p.num_coded_rows / p.num_partitions    
     symbols_separated = [symbols_per_partition for x in range(p.num_partitions)]
 
-    print(assignment.objective_value)
+    best_col = 0
+    
     for row in range(p.num_batches):
+        print('Assigning row', row)
         for i in range(p.rows_per_batch):
             best_assignment = assignment
-            best_col = None
             
             for col in range(p.num_partitions):
                 if symbols_separated[col] == 0:
                     continue
                 
                 updated_assignment = assignment.update(row, col)
-                print(updated_assignment.objective_value)
-                if updated_assignment.objective_value < best_assignment.objective_value:
-                    print(updated_assignment.objective_value, best_assignment.objective_value)
+                score_updated = updated_assignment.score - symbols_separated[col] / symbols_per_partition
+                score_best = best_assignment.score - symbols_separated[best_col] / symbols_per_partition
+
+                print('Bound:', updated_assignment.bound())
+
+                if score_updated < score_best:
                     best_assignment = updated_assignment
                     best_col = col
 
-            print('')
             assignment = best_assignment
             symbols_separated[best_col] = symbols_separated[best_col] - 1
+            print('SELECTED:', assignment.bound())
 
     return assignment
             
