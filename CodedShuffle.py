@@ -269,6 +269,8 @@ class SystemParameters(object):
         rows_per_partition = int(num_source_rows / num_partitions)
         self.rows_per_partition = rows_per_partition
 
+        self.sq = self.s_q()
+
     def __str__(self):
         s = '------------------------------\n'
         s = s + 'System Parameters:\n'
@@ -278,14 +280,33 @@ class SystemParameters(object):
         s = s + 'Wait for: ' + str(self.q) + '\n'
         s = s + 'Number of outputs: ' + str(self.num_outputs) + '\n'
         s = s + 'Server storage: ' + str(self.server_storage) + '\n'
+        s = s + 'Number of batches: ' + str(self.num_batches) + '\n'
         s = s + 'Batches: ' + str(self.num_batches) + '\n'
         s = s + '|T|: ' + str(self.server_storage * self.q) + '\n'
         s = s + 'Code rate: ' + str(self.q / self.num_servers) + '\n'
         s = s + 'Source rows: ' + str(self.num_source_rows) + '\n'
         s = s + 'Coded rows: ' + str(self.num_coded_rows) + '\n'
         s = s + 'Partitions: ' + str(self.num_partitions) + '\n'
+        s = s + 'Rows per partition: ' + str(self.rows_per_partition) + '\n'
+        s = s + 's_q: ' + str(self.sq) + '\n'
         s = s + '------------------------------'        
         return s
+
+    # Calculate the symbols received per multicast round. Defined in Li2016.    
+    def symbols_received_per_round(self, multicast_index):
+        code_rate = self.q / self.num_servers
+        num_batches = nchoosek(self.num_servers, int(self.server_storage*self.q))
+        return nchoosek(self.q - 1, multicast_index) * nchoosek(self.num_servers-self.q, int(self.server_storage*self.q)-multicast_index) * self.rows_per_batch;
+
+    # Calculate the minimum multicast index for which we need to
+    # multicast, s_q. Defined in Li2016.
+    def s_q(self):
+        needed_symbols = (1 - self.server_storage) * self.num_source_rows
+        for multicast_index in range(int(self.server_storage * self.q), 0, -1):
+            needed_symbols = needed_symbols - self.symbols_received_per_round(multicast_index)
+            if needed_symbols <= 0:
+                return max(multicast_index - 1, 1)
+        return 1    
     
 # Class representing a computation system
 class ComputationSystem(object):
@@ -623,7 +644,7 @@ class ComputationSystem(object):
         for server in self.finished_servers:
             num_symbols[server.index] = len(server.symbols.symbols)
 
-        #print('Initiating Li multicast with index', multicast_index, 'and', num_subsets, 'subsets.')
+        print('Initiating Li multicast with index', multicast_index, 'and', num_subsets, 'subsets.')
         for subset in multicasting_subsets:
             #print('subset:', [self.p.finished_servers[i].index for i in subset])
 
@@ -740,15 +761,15 @@ class ComputationSystem(object):
             
 def main():
     rows_per_batch = 2
-    num_servers = 6 # K in Li2016
-    q = 4
+    num_servers = 9 # K in Li2016
+    q = 6
     num_outputs = q # N in Li2016
     server_storage = 1/2 # \mu in Li2016    
     
     #num_partitions = num_source_rows*server_storage
     #num_partitions = rows_per_batch
     #num_partitions = 112 * 1/2
-    num_partitions = 5
+    num_partitions = 16
     assert num_partitions % 1 == 0
     num_partitions = int(num_partitions)
 
@@ -757,40 +778,49 @@ def main():
 
     # Create a system parameters struct
     p = SystemParameters(rows_per_batch, num_servers, q, num_outputs, server_storage, num_partitions)
+    print(p)
+    '''
     bar = branchAndBound(p)
     print(bar)    
     print(objectiveFunction(bar.X, bar.A, p))    
     return
+    '''
 
     '''
     bar = assignmentGreedyNew(p)
     print(bar)
     print(objectiveFunction(bar.X, bar.A, p))
     '''
-    
+
+    # Find an assignment using a solver
     assignment = assignmentGreedyIndexed(p)
-        
+    print(assignment)
+
+    # Evaluate the assignment
     ip_average_score, ip_worst_score = objectiveFunction(assignment.X, assignment.A, p, f=remainingUnicasts)
     print(ip_average_score, ip_worst_score)
 
+    # Run the simulator
     num_runs = 1
     total_load = 0
     min_load = math.inf
     max_load = 0
     results = dict()
     for i in range(num_runs):
+
+        # Create a computation system model
         system = ComputationSystem(p)
-        #system.storage_equal_per_batch()
-        #system.storage_random()
-        #system.assign_batches()
-        #X, B = assignmentFromBatches(system.batches, num_servers, num_partitions, int(server_storage*q))
-        #system.storage_equal_per_server()
+
+        # Assign symbols according to some assignment
         system.storage_from_assignment(assignment.X, assignment.A)
 
+        # Perform the map phase
         selected = system.map()
 
+        # Perform the shuffle phase
         load, psi = system.shuffle()
 
+        # Update stats
         total_load = total_load + load
         min_load = min(min_load, load)
         max_load = max(max_load, load)
@@ -800,6 +830,7 @@ def main():
     else:
         average_load = None
 
+    # Print the report
     print(p)
     
     report = ''
@@ -990,7 +1021,9 @@ class Assignment(object):
 
     # Label batches
     def label(self):
-        labels =  it.combinations(range(self.p.num_servers), int(self.p.num_coded_rows / self.p.num_batches))
+        assert self.p.server_storage * self.p.q % 1 == 0, 'Must be integer'
+        #labels =  it.combinations(range(self.p.num_servers), int(self.p.num_coded_rows / self.p.num_batches))
+        labels =  it.combinations(range(self.p.num_servers), int(self.p.server_storage * self.p.q))
         row = 0
         for label in labels:
             [self.A[x].add(row) for x in label]
@@ -1006,13 +1039,9 @@ class Assignment(object):
             assert remaining_assignments >= 0
             b = b + max(self.index[row_index].summary) * remaining_assignments
 
-        return self.score - b
+        # Bound can't be less than 0
+        return max(self.score - b, 0)
 
-    # Compute a bound for this assignment            
-    def betterBound(self):
-        b = 0
-        
-    
     # Increment the element at [row, col] and update the objective
     # value. Returns a new assignment object. Does not change the
     # current assignment object.
@@ -1104,7 +1133,8 @@ def branchAndBound(p):
     bestScore = bestAssignment.score
 
     # Set of remaining nodes to explore
-    remainingNodes = set()
+    # remainingNodes = set()
+    remainingNodes = list()
 
     # Separate symbols by partition
     symbols_per_partition = p.num_coded_rows / p.num_partitions 
@@ -1112,10 +1142,15 @@ def branchAndBound(p):
 
     # Add the root of the tree
     root = Node(Assignment(p), 0, p.rows_per_batch, symbols_separated)
-    remainingNodes.add(root)
+    # remainingNodes.add(root)
+    remainingNodes.append(root)
+
+    searched = 0
+    pruned = 0
 
     while len(remainingNodes) > 0:
         node = remainingNodes.pop()
+        searched = searched + 1
 
         # If there are not more assignments for this node
         if node.row == p.num_batches and node.remaining == 0:
@@ -1138,6 +1173,7 @@ def branchAndBound(p):
             # Continue if the bound for this assignment is no better
             # than the previous best solution.
             if updatedAssignment.bound() >= bestScore:
+                pruned = pruned + 1
                 continue
 
             row = node.row
@@ -1154,11 +1190,15 @@ def branchAndBound(p):
             updatedSymbolsSeparated = list(node.symbols_separated)
             updatedSymbolsSeparated[col] = updatedSymbolsSeparated[col] - 1
 
-            print('Bound', updatedAssignment.bound(), 'Row:', row, '#nodes:', len(remainingNodes))
+            print('Bound:', updatedAssignment.bound(),
+                  'Row:', row, '#nodes:', len(remainingNodes),
+                  "Best:", bestScore,
+                  '#searched:', searched, '#pruned:', pruned)
 
             # Add the new node to the set of nodes to be explored
-            remainingNodes.add(Node(updatedAssignment, row, remaining, updatedSymbolsSeparated))
-
+            # remainingNodes.add(Node(updatedAssignment, row, remaining, updatedSymbolsSeparated))
+            remainingNodes.append(Node(updatedAssignment, row, remaining, updatedSymbolsSeparated))
+            
     return bestAssignment            
 
 def assignmentGreedyIndexed(p):
@@ -1382,8 +1422,8 @@ def objectiveFunction(X, assignment, p, Q=None, f=remainingUnicasts):
             [rows.add(row) for row in assignment[k]]
 
             # TODO: s_q + 1?
-            sq = s_q(p.q, p.num_servers, p.server_storage, p.num_source_rows)
-            for j in range(sq+1, int(p.server_storage*p.q) + 1):
+            #sq = s_q(p.q, p.num_servers, p.server_storage, p.num_source_rows)
+            for j in range(p.sq + 1, int(p.server_storage*p.q) + 1):
                 nu = set()
                 for subset in it.combinations([x for x in Q if x != k], j):
                     rows = rows | set.intersection(*[assignment[x] for x in subset])
@@ -1534,27 +1574,7 @@ def load_eval():
     for k, v in prob.items():
         print(k, ':', v / num_runs)
 
-# Calculate the symbols received per multicast round. Defined in Li2016.    
-def symbols_received_per_round(q, num_servers, server_storage, num_source_rows, multicast_index):
-    code_rate = q / num_servers
-    num_batches = nchoosek(num_servers, int(server_storage*q))
-    rows_per_batch = num_source_rows / code_rate / num_batches
-    return nchoosek(q - 1, multicast_index) * nchoosek(num_servers-q, int(server_storage*q)-multicast_index) * rows_per_batch;
 
-# Calculate the minimum multicast index for which we need to
-# multicast, s_q. Defined in Li2016.
-def s_q(q, num_servers, server_storage, num_source_rows):
-    needed_symbols = (1 - server_storage) * num_source_rows
-    for s in range(int(server_storage * q), 0, -1):
-        needed_symbols = needed_symbols - symbols_received_per_round(q,
-                                                                     num_servers,
-                                                                     server_storage,
-                                                                     num_source_rows,
-                                                                     s)
-        if needed_symbols < 0:
-            return s
-
-    return 1
 
 # Calculate B_j as defined in Li2016
 def B_j(q, j, num_servers, server_storage, rows_per_batch, num_source_rows):    
