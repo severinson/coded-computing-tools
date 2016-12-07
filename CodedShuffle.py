@@ -761,23 +761,19 @@ def main():
     print(bar)    
     print(objectiveFunction(bar.X, bar.A, p))    
     return
+
     '''
     bar = assignmentGreedyNew(p)
     print(bar)
     print(objectiveFunction(bar.X, bar.A, p))
     '''
     
-    bar = assignmentGreedyIndexed(p)
-    print(bar)
-    print(objectiveFunction(bar.X, bar.A, p))
-    
-    return
-    
+    assignment = assignmentGreedyIndexed(p)
+        
     ip_average_score, ip_worst_score = objectiveFunction(assignment.X, assignment.A, p, f=remainingUnicasts)
     print(ip_average_score, ip_worst_score)
 
-
-    num_runs = 0
+    num_runs = 1
     total_load = 0
     min_load = math.inf
     max_load = 0
@@ -789,7 +785,7 @@ def main():
         #system.assign_batches()
         #X, B = assignmentFromBatches(system.batches, num_servers, num_partitions, int(server_storage*q))
         #system.storage_equal_per_server()
-        system.storage_from_assignment(X, A)
+        system.storage_from_assignment(assignment.X, assignment.A)
 
         selected = system.map()
 
@@ -804,7 +800,6 @@ def main():
     else:
         average_load = None
 
-    ip_average_score, ip_worst_score = objectiveFunction(X, A, p, f=remainingUnicasts)
     print(p)
     
     report = ''
@@ -1012,7 +1007,10 @@ class Assignment(object):
             b = b + max(self.index[row_index].summary) * remaining_assignments
 
         return self.score - b
-            
+
+    # Compute a bound for this assignment            
+    def betterBound(self):
+        b = 0
         
     
     # Increment the element at [row, col] and update the objective
