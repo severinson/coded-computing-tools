@@ -306,7 +306,34 @@ class SystemParameters(object):
             needed_symbols = needed_symbols - self.symbols_received_per_round(multicast_index)
             if needed_symbols <= 0:
                 return max(multicast_index - 1, 1)
-        return 1    
+        return 1
+
+    # Calculate B_j as defined in Li2016
+    # TODO: Make sure this works as intended    
+    def B_j(q, j, num_servers, server_storage, rows_per_batch, num_source_rows):    
+        return nchoosek(q-1, j) * nchoosek(num_servers-q, int(server_storage*q)-j) * rows_per_batch / num_source_rows
+
+    # Calculate the total communication load per output vector  for an
+    # unpartitioned storage design as defined in Li2016.
+    # TODO: Make sure this works as intended    
+    def unpartitioned_load(q, num_servers, server_storage, num_source_rows):
+        code_rate = q / num_servers
+        num_batches = nchoosek(num_servers, int(server_storage*q))
+        rows_per_batch = num_source_rows / code_rate / num_batches    
+        sq = s_q(q, num_servers, server_storage, num_source_rows)
+
+        L_1 = 1 - server_storage
+        for j in range(sq, int(server_storage*q) + 1):
+            Bj = B_j(q, j, num_servers, server_storage, rows_per_batch, num_source_rows)
+            L_1 = L_1 + Bj / j
+            L_1 = L_1 - Bj
+
+        L_2 = 0
+        for j in range(sq-1, int(server_storage*q) + 1):
+            L_2 = L_2 + B_j(q, j, num_servers, server_storage, rows_per_batch, num_source_rows)
+        
+        print('L_1:', L_1, 'L_2:', L_2, 'Load per output vector.')
+        return min(L_1, L_2)    
     
 # Class representing a computation system
 class ComputationSystem(object):
@@ -756,20 +783,19 @@ class ComputationSystem(object):
                     receiving_server.receive(symbol_collection)
                     transmissions = transmissions + 1
 
-        return transmissions
-    
+        return transmissions    
             
 def main():
     rows_per_batch = 2
-    num_servers = 9 # K in Li2016
-    q = 6
+    num_servers = 6 # K in Li2016
+    q = 4
     num_outputs = q # N in Li2016
     server_storage = 1/2 # \mu in Li2016    
     
     #num_partitions = num_source_rows*server_storage
     #num_partitions = rows_per_batch
     #num_partitions = 112 * 1/2
-    num_partitions = 16
+    num_partitions = 10
     assert num_partitions % 1 == 0
     num_partitions = int(num_partitions)
 
@@ -779,12 +805,15 @@ def main():
     # Create a system parameters struct
     p = SystemParameters(rows_per_batch, num_servers, q, num_outputs, server_storage, num_partitions)
     print(p)
-    '''
+
+    randomizedPerformance(p)
+    return
+
     bar = branchAndBound(p)
     print(bar)    
     print(objectiveFunction(bar.X, bar.A, p))    
     return
-    '''
+
 
     '''
     bar = assignmentGreedyNew(p)
@@ -793,7 +822,7 @@ def main():
     '''
 
     # Find an assignment using a solver
-    assignment = assignmentGreedyIndexed(p)
+    assignment = assignmentGreedy(p)
     print(assignment)
 
     # Evaluate the assignment
@@ -801,7 +830,7 @@ def main():
     print(ip_average_score, ip_worst_score)
 
     # Run the simulator
-    num_runs = 1
+    num_runs = 0
     total_load = 0
     min_load = math.inf
     max_load = 0
@@ -850,6 +879,22 @@ def main():
     ip_report = ip_report + 'Avg.: ' + str(ip_average_score) + '\n'
     ip_report = ip_report + '------------------------------'
     print(ip_report)
+
+def randomizedPerformance(p, n=100):
+    print('Calculating average performance for a randomized assignment:')
+    
+    totalAverage = 0
+    totalWorst = 0
+    
+    for i in range(n):
+        assignment = assignmentRandom(p)
+        score = objectiveFunction(assignment.X, assignment.A, p)
+        totalAverage = totalAverage + score[0]
+        totalWorst = totalWorst + score[1]
+
+    print('Average:', totalAverage / n, 'Worst:', totalWorst / n)
+    return
+    
 
 # Representation of the count vectors from the perspective of a single server
 class Perspective(object):
@@ -933,7 +978,7 @@ class RowPerspective(object):
         num_perspectives = len(self.perspectives)
         self.summary = [num_perspectives for x in range(p.num_partitions)]
         
-    # TODO: Remove
+    # TODO: Remove. Have the update method iterate over the items instead.
     def keys(self):
         return self.perspectives.keys()
 
@@ -961,7 +1006,6 @@ class Assignment(object):
             self.A = A
 
         if score == None or index == None:
-            print('Building index from scratch...')
             self.build_index()
         else:
             self.score = score
@@ -974,8 +1018,6 @@ class Assignment(object):
         s = s + 'A:\n'
         s = s + str(self.A) + '\n'
         s = s + 'Score: ' + str(self.score)
-        #s = s + 'Index summary:\n'
-        #s = s + str(self.index_summary)
         
         return s
 
@@ -1081,7 +1123,8 @@ class Assignment(object):
             
         # Return a new assignment object
         return Assignment(self.p, X=X, A=self.A, score=objective_value, index=index)
-            
+
+# TODO: Deprecated
 def assignmentFromBatches(batches, num_servers, num_partitions, label_size):
     num_batches = len(batches)
     
@@ -1132,6 +1175,9 @@ def branchAndBound(p):
     bestAssignment = assignmentGreedyIndexed(p)
     bestScore = bestAssignment.score
 
+    print('Starting with assignment:')
+    print(bestAssignment)
+
     # Set of remaining nodes to explore
     # remainingNodes = set()
     remainingNodes = list()
@@ -1153,8 +1199,9 @@ def branchAndBound(p):
         searched = searched + 1
 
         # If there are not more assignments for this node
-        if node.row == p.num_batches and node.remaining == 0:
+        if node.row == p.num_batches:            
             print('Found a solution:', node.assignment)
+            print('---------------------')
             
             # If this solution is better than the previous best, store it
             if node.assignment.score < bestAssignment.score:
@@ -1190,50 +1237,60 @@ def branchAndBound(p):
             updatedSymbolsSeparated = list(node.symbols_separated)
             updatedSymbolsSeparated[col] = updatedSymbolsSeparated[col] - 1
 
+            '''
             print('Bound:', updatedAssignment.bound(),
-                  'Row:', row, '#nodes:', len(remainingNodes),
+                  'Row:', row, 'Remaining:', remaining,
+                  '#nodes:', len(remainingNodes),
                   "Best:", bestScore,
                   '#searched:', searched, '#pruned:', pruned)
-
+            '''
+            
             # Add the new node to the set of nodes to be explored
             # remainingNodes.add(Node(updatedAssignment, row, remaining, updatedSymbolsSeparated))
             remainingNodes.append(Node(updatedAssignment, row, remaining, updatedSymbolsSeparated))
             
     return bestAssignment            
 
-def assignmentGreedyIndexed(p):
+def assignmentGreedy(p):
     assignment = Assignment(p)
 
     # Separate symbols by partition
     symbols_per_partition = p.num_coded_rows / p.num_partitions    
     symbols_separated = [symbols_per_partition for x in range(p.num_partitions)]
 
+    # Assign symbols row by row
     for row in range(p.num_batches):
-        print('Assigning row', row)
+        print('Assigning row', row, 'Bound:', assignment.bound())
+
+        # Assign rows_per_batch rows per batch
         for i in range(p.rows_per_batch):
             score_best = 0
             best_col = 0
-            
+
+            # Try one column at a time
             for col in range(p.num_partitions):
+
+                # If there are no more symbols left for this column to
+                # assign, continue
                 if symbols_separated[col] == 0:
                     continue
-                
+
+                # Evaluate the score of the assignment
                 score_updated = assignment.index[row].summary[col] + symbols_separated[col] / symbols_per_partition
+
+                # If it's better, store it
                 if score_updated > score_best:
-                    #print('Found a better assignment', updated_assignment.objective_value, best_assignment.objective_value)
-                    #print('Actual OF:', objectiveFunction(updated_assignment.X, updated_assignment.A, p)[0]*15)
                     score_best = score_updated
                     best_col = col
 
+            # Store the best assignment from this iteration
             assignment = assignment.update(row, best_col)
             symbols_separated[best_col] = symbols_separated[best_col] - 1
 
-            # Print bound
-            print('Bound:', assignment.bound())
-
     return assignment
 
-def assignmentGreedyNew(p):
+# TODO: Deprecated
+def assignmentGreedyOld(p):
     assignment = Assignment(p)
 
     # Separate symbols by partition
@@ -1268,101 +1325,17 @@ def assignmentGreedyNew(p):
     return assignment
             
 # Assign symbols randomly
-def assignmentRandom(symbols, num_batches, num_partitions, num_servers, rows_per_batch):
-    # Initialize assignment matrix
-    X = np.zeros([p.num_batches, p.num_partitions])
-    assignment = [set() for x in range(p.num_servers)]    
-    symbolsCopy = set(symbols)
+def assignmentRandom(p):
+    assignment = Assignment(p)
 
-    labels =  it.combinations(range(p.num_servers), 2)
-    for row in range(num_batches):
-        symbol_sample = random.sample(symbolsCopy, rows_per_batch)
-        while len(symbol_sample) > 0:
-            symbol = symbol_sample.pop()
-            symbolsCopy.remove(symbol)
-            col = symbol[0]
-            X[row][col] = X[row][col] + 1
-
-        label = next(labels)
-        [assignment[x].add(row) for x in label]
-
-    return X, assignment
-
-# Assign symbols into batches greedily
-def assignRowGreedy(X, A, row, symbols_separated, p):
-    best_col = 0
-    score = math.inf
-
-    for col in range(p.num_partitions):
-        if symbols_separated[col] == 0:
-            continue
-
-        X[row][col] = X[row][col] + 1
-        average_score, worst_score = objectiveFunction(X, A, p, f=remainingUnicasts)
-        X[row][col] = X[row][col] - 1
-
-        # All else being equal, favor partitions with more
-        # symbols left.
-        average_score = average_score - symbols_separated[col] / p.rows_per_partition
-        worst_score = worst_score - symbols_separated[col] / p.rows_per_partition
-
-        # Optimize over either the average or worst score
-        if average_score < score:
-            best_col = col
-            score = average_score
-                    
-        '''
-        if worst_score < score:
-        best_col = col
-        score = worst_score
-        '''
-        
-    X[row][best_col] = X[row][best_col] + 1
-    symbols_separated[best_col] = symbols_separated[best_col] - 1    
-    
-def assignmentGreedy(p):
-    # First label the batches
-    A = [set() for x in range(p.num_servers)]    
-    labels =  it.combinations(range(p.num_servers), int(p.num_coded_rows / p.num_batches))
-    row = 0
-    for label in labels:
-        [A[x].add(row) for x in label]
-        row = row + 1
-
-    # Separate symbols by partition
-    symbols_per_partition = p.num_coded_rows / p.num_partitions    
-    symbols_separated = [symbols_per_partition for x in range(p.num_partitions)]
-
-    # Assign symbols to batches one by one, always picking the choice
-    # the minimizes the objective function,
-    X = np.zeros([p.num_batches, p.num_partitions])
+    choices = random.sample(range(p.num_coded_rows), p.num_coded_rows)
+    index = 0
     for row in range(p.num_batches):
-        for i in range(p.rows_per_batch):
-            assignRowGreedy(X, A, row, symbols_separated, p)
-
-    return X, A
-
-def assignmentGreedyCol(p):
-    # First label the batches
-    A = [set() for x in range(p.num_servers)]    
-    labels =  it.combinations(range(p.num_servers), int(p.num_coded_rows / p.num_batches))
-    row = 0
-    for label in labels:
-        [A[x].add(row) for x in label]
-        row = row + 1
-
-    # Separate symbols by partition
-    symbols_per_partition = p.num_coded_rows / p.num_partitions    
-    symbols_separated = [symbols_per_partition for x in range(p.num_partitions)]
-
-    # Assign symbols to batches one by one, always picking the choice
-    # the minimizes the objective function,
-    X = np.zeros([p.num_batches, p.num_partitions])
-    for i in range(p.rows_per_batch):
-        for row in range(p.num_batches):
-            assignRowGreedy(X, A, row, symbols_separated, p)
-
-    return X, A
+        for col in range(p.rows_per_batch):            
+            assignment = assignment.update(row, choices[index] % p.num_partitions)
+            index = index + 1
+        
+    return assignment
 
 ## Various performance measures
 # Count the number of remaining unicasts
@@ -1421,8 +1394,6 @@ def objectiveFunction(X, assignment, p, Q=None, f=remainingUnicasts):
             rows = set()
             [rows.add(row) for row in assignment[k]]
 
-            # TODO: s_q + 1?
-            #sq = s_q(p.q, p.num_servers, p.server_storage, p.num_source_rows)
             for j in range(p.sq + 1, int(p.server_storage*p.q) + 1):
                 nu = set()
                 for subset in it.combinations([x for x in Q if x != k], j):
@@ -1447,158 +1418,9 @@ def objectiveFunction(X, assignment, p, Q=None, f=remainingUnicasts):
     #print('Average:', average_score, 'Worst:', worst_score)
     return average_score, worst_score
 
-def ip_eval():
-    rows_per_batch = 2
-    num_servers = 6 # K in Li2016
-    q = 4
-    num_outputs = q # N in Li2016
-    server_storage = 1/2 # \mu in Li2016    
-    
-    num_batches = int(scipy.misc.comb(num_servers, server_storage*q))
-    num_coded_rows = rows_per_batch * num_batches
-    num_source_rows = q / num_servers * num_coded_rows
-    assert num_source_rows % 1 == 0
-    num_source_rows = int(num_source_rows)
-
-    # num_partitions = num_source_rows*server_storage
-    num_partitions = 10
-    assert num_partitions % 1 == 0    
-    num_partitions = int(num_partitions)
-
-    # Create the symbol set
-    symbols = set()
-    symbols_per_partition = int(num_coded_rows / num_partitions)
-    for partition in range(num_partitions):
-        for index in range(symbols_per_partition):
-            symbols.add((partition, index))
-
-    total_score = 0
-    num_runs = 1
-    for i in range(num_runs):
-        #X, assignment = assignmentRandom(symbols, num_batches, num_partitions, num_servers, rows_per_batch)
-        X, assignment = assignmentGreedy(symbols,
-                                         num_batches,
-                                         num_partitions,
-                                         num_servers,
-                                         num_source_rows,
-                                         q,
-                                         rows_per_batch,
-                                         server_storage)
-
-        average_score, worst_score = objectiveFunction(X, assignment, num_source_rows, num_servers, q, server_storage)
-        total_score = total_score + average_score
-
-    average_score = total_score / num_runs
-    print('Average score:', average_score, 'Worst score:', worst_score)
-    print('Winning assignment:')
-    print(X)    
         
 
-        
-def load_eval():
-    rows_per_batch = 2
-    num_servers = 6 # K in Li2016
-    q = 4
-    num_outputs = q # N in Li2016
-    server_storage = 1/2 # \mu in Li2016    
-    
-    num_batches = int(scipy.misc.comb(num_servers, server_storage*q))
-    num_coded_rows = rows_per_batch * num_batches
-    num_source_rows = q / num_servers * num_coded_rows
-    assert num_source_rows % 1 == 0
-    num_source_rows = int(num_source_rows)
-
-    num_partitions = 5
-    assert num_partitions % 1 == 0    
-    num_partitions = int(num_partitions)
-
-    sq = s_q(q, num_servers, server_storage, num_source_rows)
-    multicast_batches = 0
-    #for j in range(int(max(1, server_storage*q - (num_servers - q))), int(server_storage * q)):
-    for j in range(sq+1, int(server_storage * q) + 1):
-        multicast_batches = multicast_batches + nchoosek(q, j) * nchoosek(num_servers - q,
-                                                                          int(server_storage*q) - j)
-    print('mb:', multicast_batches, 'sq:', sq)
-    multicast_batches = int(multicast_batches)
-
-    # Count the unpartitioned load
-    ul = unpartitioned_load(q, num_servers, server_storage, num_source_rows)    
-
-    system = ComputationSystem(rows_per_batch, num_servers, q, num_outputs, server_storage, num_partitions)
-    system.storage_random()    
-    # system.storage_equal_per_batch()
-    symbols = {symbol for symbol in system.symbols if symbol.output == 0}
-
-    num_runs = 100000
-    total_load = 0
-    min_load = math.inf
-    max_load = 0
-    max_unicasts = 0
-    prob = dict()
-    for i in range(num_runs):
-        #batches = random.sample(system.batches, multicast_batches)        
-        #psi = set.union(*[batch.symbols.symbols for batch in batches])
-        psi = random.sample(symbols, multicast_batches * rows_per_batch)
-        #print('psi:', len(psi))
-        partition_count = [-num_source_rows/num_partitions for x in range(num_partitions)]
-        #print('partition_count:', partition_count)
-        for partition in range(num_partitions):
-            partition_count[partition] = partition_count[partition] + len({symbol for symbol in psi
-                                                                       if symbol.partition == partition})
-        #print('partition_count:', partition_count)
-
-        # Count the number of additional unicasts caused by the partitioning
-        unicasts = 0
-        for e in partition_count:
-            if e > 0:
-                unicasts = unicasts + e
-
-        #print('Added unicasts:', unicasts)
-        #print('Source rows:', num_source_rows)
-        if unicasts not in prob:
-            prob[unicasts] = 1
-        else:
-            prob[unicasts] = prob[unicasts] + 1
-
-        load = ul + unicasts / num_source_rows / num_outputs
-        # print('Unpartitioned load', ul, 'Load for', num_partitions, 'partitions:', load)
-
-        total_load = total_load + load
-        min_load = min(min_load, load)
-        max_load = max(max_load, load)
-        max_unicasts = max(max_unicasts, unicasts)
-
-    # Print report
-    print('Average load:', total_load / num_runs, 'Min:', min_load, 'Max:', max_load, '(', max_unicasts, ')')
-    print('Partitions:', num_partitions)
-    for k, v in prob.items():
-        print(k, ':', v / num_runs)
 
 
-
-# Calculate B_j as defined in Li2016
-def B_j(q, j, num_servers, server_storage, rows_per_batch, num_source_rows):    
-    return nchoosek(q-1, j) * nchoosek(num_servers-q, int(server_storage*q)-j) * rows_per_batch / num_source_rows
-
-# Calculate the total communication load per output vector  for an
-# unpartitioned storage design as defined in Li2016.
-def unpartitioned_load(q, num_servers, server_storage, num_source_rows):
-    code_rate = q / num_servers
-    num_batches = nchoosek(num_servers, int(server_storage*q))
-    rows_per_batch = num_source_rows / code_rate / num_batches    
-    sq = s_q(q, num_servers, server_storage, num_source_rows)
-
-    L_1 = 1 - server_storage
-    for j in range(sq, int(server_storage*q) + 1):
-        Bj = B_j(q, j, num_servers, server_storage, rows_per_batch, num_source_rows)
-        L_1 = L_1 + Bj / j
-        L_1 = L_1 - Bj
-
-    L_2 = 0
-    for j in range(sq-1, int(server_storage*q) + 1):
-        L_2 = L_2 + B_j(q, j, num_servers, server_storage, rows_per_batch, num_source_rows)
-    
-    print('L_1:', L_1, 'L_2:', L_2, 'Load per output vector.')
-    return min(L_1, L_2)
     
     
