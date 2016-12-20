@@ -22,7 +22,7 @@
 # and we recommend reading the paper to understand how the scheme
 # works.
 
-
+import main
 from scipy.misc import comb as nchoosek
 import random
 import math
@@ -257,7 +257,7 @@ class Server(object):
 class ComputationSystem(object):
     #def __init__(self, rows_per_batch, num_servers, q, num_outputs, server_storage, num_partitions):
     def __init__(self, parameters):
-        assert type(parameters) is SystemParameters
+        #assert type(parameters) is main.SystemParameters
         self.p = parameters
         
         num_coded_rows = parameters.num_coded_rows
@@ -558,6 +558,7 @@ class ComputationSystem(object):
         for server in self.finished_servers:
             psi[server.index] = SymbolCollection()
 
+        # TODO: Run to 1 instead
         multicast_index = int(self.p.server_storage * self.p.q) # j in Li2016
         while multicast_index > 1:
             li_transmissions = self.li_multicast(multicast_index, psi)

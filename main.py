@@ -39,7 +39,7 @@ import solver
 # simulating the system for some parameters.
 class SystemParameters(object):
     def __init__(self, rows_per_batch, num_servers, q, num_outputs, server_storage, num_partitions):
-        # TODO: Raise exceptions instead of assertions?
+
         assert type(rows_per_batch) is int
         assert type(num_servers) is int
         assert type(q) is int
@@ -93,148 +93,65 @@ class SystemParameters(object):
         s = s + 'Coded rows: ' + str(self.num_coded_rows) + '\n'
         s = s + 'Partitions: ' + str(self.num_partitions) + '\n'
         s = s + 'Rows per partition: ' + str(self.rows_per_partition) + '\n'
-        s = s + 's_q: ' + str(self.sq) + '\n'
+        s = s + 'Multicast messages: ' + str(self.multicast_load() * self.num_source_rows * self.num_outputs) + '\n'
+        s = s + 'Unpartitioned load: ' + str(self.unpartitioned_load()) + '\n'
         s = s + '------------------------------'        
         return s
 
-    # Calculate the symbols received per multicast round. Defined in Li2016.    
-    def symbols_received_per_round(self, multicast_index):
-        code_rate = self.q / self.num_servers
-        num_batches = nchoosek(self.num_servers, int(self.server_storage*self.q))
-        return nchoosek(self.q - 1, multicast_index) * nchoosek(self.num_servers-self.q, int(self.server_storage*self.q)-multicast_index) * self.rows_per_batch;
 
-    # Calculate the minimum multicast index for which we need to
-    # multicast, s_q. Defined in Li2016.
+    # Calculate S_q as defined in Li2016
     def s_q(self):
-        needed_symbols = (1 - self.server_storage) * self.num_source_rows
-        for multicast_index in range(int(self.server_storage * self.q), 0, -1):
-            needed_symbols = needed_symbols - self.symbols_received_per_round(multicast_index)
-            if needed_symbols <= 0:
-                return max(multicast_index - 1, 1)
+        muq = int(self.server_storage * self.q)        
+        s = 0
+        for j in range(muq, 0, -1):
+            s = s + self.B_j(j)
+
+            if s > (1 - self.server_storage):
+                return max(min(j + 1, muq), 1)
+            elif s == (muq):
+                return max(j, 1)
+
         return 1
 
     # Calculate B_j as defined in Li2016
-    # TODO: Make sure this works as intended    
     def B_j(self, j):
         B_j = nchoosek(self.q-1, j) * nchoosek(self.num_servers-self.q, int(self.server_storage*self.q)-j)
         B_j = B_j / (self.q / self.num_servers) / nchoosek(self.num_servers, int(self.server_storage * self.q))
         return B_j
 
+    # The communication load after only multicasting
     def multicast_load(self):
         load = 0
         for j in range(self.sq, int(self.server_storage*self.q)):
-            print(j+1)
             load = load + self.B_j(j+1) / (j+1)
 
         return load
         
     # Calculate the total communication load per output vector  for an
     # unpartitioned storage design as defined in Li2016.
-    # TODO: Make sure this works as intended    
-    def unpartitioned_load(q, num_servers, server_storage, num_source_rows):
-        code_rate = self.q / self.num_servers
-        num_batches = nchoosek(self.num_servers, int(self.server_storage*self.q))
-        rows_per_batch = self.num_source_rows / self.code_rate / self.num_batches    
-        #sq = self.s_q(q, num_servers, server_storage, num_source_rows)
+    def unpartitioned_load(self, L2=False):
+        muq = int(self.server_storage * self.q)
 
-        L_1 = 1 - server_storage
-        for j in range(self.sq, int(self.server_storage*self.q) + 1):
+        # Load assuming remaining values are unicast
+        L_1 = 1 - self.server_storage
+        for j in range(self.sq, muq + 1):
             Bj = self.B_j(j)
             L_1 = L_1 + Bj / j
             L_1 = L_1 - Bj
 
-        L_2 = 0
-        for j in range(self.sq-1, int(self.server_storage*self.q) + 1):
-            L_2 = L_2 + B_j(j)
-        
-        print('L_1:', L_1, 'L_2:', L_2, 'Load per output vector.')
-        return min(L_1, L_2)    
+        # Load assuming more multicasting is done
+        if self.sq > 1:
+            L_2 = 0
+            for j in range(self.sq - 1, muq + 1):
+                L_2 = L_2 + self.B_j(j) / j
+        else:
+            L_2 = math.inf        
 
-# Main function with some usage examples
-def main():
-
-    '''
-    p = SystemParameters(2, # Rows per batch
-                         6, # Number of servers (K)
-                         4, # Servers to wait for (q)
-                         4, # Outputs (N)
-                         1/2, # Server storage (\mu)
-                         1) # Partitions (T)
-    print(p)
-    print(p.multicast_load())
-    return
-    #assignment = solver.assignmentHybrid(p)
-    #print(solver.objectiveFunction(assignment.X, assignment.A, p))
-    #print(assignment)
-    #T = [1, 2, 5, 10]    
-    #randomizedPerformance(p, T)
-    assignment = solver.Assignment(p)
-    X = np.array([[2, 0, 0, 0, 0],
-                   [2, 0, 0, 0, 0],
-                   [2, 0, 0, 0, 0],
-                   [0, 2, 0, 0, 0],
-                   [0, 2, 0, 0, 0],
-                   [0, 2, 0, 0, 0],
-                   [0, 0, 2, 0, 0],
-                   [0, 0, 2, 0, 0],
-                   [0, 0, 2, 0, 0],
-                   [0, 0, 0, 2, 0],
-                   [0, 0, 0, 2, 0],
-                   [0, 0, 0, 2, 0],
-                   [0, 0, 0, 0, 2],
-                   [0, 0, 0, 0, 2],
-                   [0, 0, 0, 0, 2]])
-    print(solver.objectiveFunction(X, assignment.A, p, Q=(0,1,2,3)))
-    return
-    '''
-
-    # Example usage in evaluating the performance of a scheme using
-    # our proposed solvers.    
-
-    p = SystemParameters(56, # Rows per batch
-                         9, # Number of servers (K)
-                         2, # Servers to wait for (q)
-                         2, # Outputs (N)
-                         1/2, # Server storage (\mu)
-                         1) # Partitions (T)
-    T = [1, 2, 4, 7, 8, 14, 16, 28, 56]
-    results = hybridPerformance(p, T)
-
-    #greedyPerformance(p, T)
-    #randomizedPerformance(p, T)
-    return results
-
-
-    
-    p = SystemParameters(2, # Rows per batch
-                         6, # Number of servers (K)
-                         4, # Servers to wait for (q)
-                         4, # Outputs (N)
-                         1/2, # Server storage (\mu)
-                         5) # Partitions (T)
-    assignment = solver.assignmentGreedy(p)
-    print(assignment)
-    return
-    
-    T = [1, 2, 5, 10]
-    greedyPerformance(p, T)
-    randomizedPerformance(p, T)
-
-    # Example usage of the branch-and-bound solver. The solver is only
-    # useable for very small problem instances.
-    '''
-    bar = branchAndBound(p)
-    print(bar)    
-    print(objectiveFunction(bar.X, bar.A, p))    
-    return
-    '''
-
-    # Evaluate the performance of an assignment by simulating the
-    # shuffling scheme.
-    assignment = assignmentGreedy(p)
-    simulate(p, assignment.X, assignment.A)
-
-    return
+        # Return the minimum if L2 is enabled. Otherwise return L_1        
+        if L2:
+            return min(L_1, L_2)
+        else:
+            return L_1
 
 # Evaluate the performance of the greedy assignment solver.
 # Performance is evaluated by counting the total number of remaining
@@ -294,6 +211,9 @@ def randomizedPerformance(p, partitions, n=100):
     print(results)
     return results
 
+# Evaluate the performance of the greedy solver.
+# Performance is evaluated by counting the total number of remaining
+# needed values.
 def hybridPerformance(p, partitions, n=1):
     print('Calculating hybrid performance for', partitions, 'partitions.')
     print(p)
@@ -348,11 +268,11 @@ def simulate(p, X, A, n=100):
         max_load = max(max_load, load)
         results.append(load)
 
-    average_load = total_load / num_runs
+    average_load = total_load / n
     report = ''
     report = report + 'Simulation Results:\n'
     report = report + '------------------------------\n'    
-    report = report + 'Num runs: ' + str(num_runs) + '\n'
+    report = report + 'Num runs: ' + str(n) + '\n'
     report = report + 'Max: ' + str(max_load) + '\n'
     report = report + 'Avg.: ' + str(average_load) + '\n'
     report = report + '------------------------------'

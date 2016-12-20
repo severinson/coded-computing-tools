@@ -25,6 +25,8 @@ import itertools as it
 import random
 import math
 import uuid
+import multiprocessing as mp
+import asyncio
 
 # Representation of the count vectors from the perspective of a single server
 class Perspective(object):
@@ -193,7 +195,7 @@ class Assignment(object):
                 rows = set()
                 [rows.add(row) for row in self.A[k]]
 
-                for j in range(self.p.sq+1, int(self.p.server_storage*self.p.q) + 1):
+                for j in range(self.p.sq, int(self.p.server_storage*self.p.q) + 1):
                     nu = set()
                     for subset in it.combinations([x for x in Q if x != k], j):
                         rows = rows | set.intersection(*[self.A[x] for x in subset])
@@ -414,7 +416,7 @@ class Node(object):
     def remaining(self):
         return self.p.rows_per_batch - self.assignment.X[self.row].sum()
         
-def branchAndBound(p, score=None, root=None):
+def branchAndBound(p, score=None, root=None, verbose=False):
 
     # Initialize the solver with a greedy solution
     if score is None:
@@ -424,8 +426,9 @@ def branchAndBound(p, score=None, root=None):
         bestAssignment = None
         score = score
 
-    print('Starting B&B with score:', score)
-    #print(bestAssignment)
+    if verbose:
+        print('Starting B&B with score:', score)
+
 
     # Set of remaining nodes to explore
     # remainingNodes = set()
@@ -437,7 +440,7 @@ def branchAndBound(p, score=None, root=None):
 
     # Add the root of the tree
     if root is None:
-        root = Node(p, Assignment(p), 0, p.rows_per_batch, symbols_separated)
+        root = Node(p, Assignment(p), 0, symbols_separated)
         
     # remainingNodes.add(root)
     remainingNodes.append(root)
@@ -486,26 +489,18 @@ def branchAndBound(p, score=None, root=None):
                 continue
 
             row = node.row
-            #remaining = node.remaining - 1
-
-            # Move to the next row if there are no more assignments
-            # for this one.
-            #if remaining == 0:
-            #    row = row + 1
-            #    remaining = p.rows_per_batch
 
             # Decrement the count of remaining symbols for the
             # assigned partition.
             updatedSymbolsSeparated = list(node.symbols_separated)
             updatedSymbolsSeparated[col] = updatedSymbolsSeparated[col] - 1
 
-            '''
-            print('Bound:', updatedAssignment.bound(),
-                  'Row:', row,
-                  '#nodes:', len(remainingNodes),
-                  "Best:", bestScore,
-                  '#searched:', searched, '#pruned:', pruned)
-            '''
+            if verbose:
+                print('Bound:', updatedAssignment.bound(),
+                      'Row:', row,
+                      '#nodes:', len(remainingNodes),
+                      "Best:", score,
+                      '#searched:', searched, '#pruned:', pruned)
             
             # Add the new node to the set of nodes to be explored
             # remainingNodes.add(Node(updatedAssignment, row, remaining, updatedSymbolsSeparated))
@@ -554,46 +549,49 @@ def assignmentGreedy(p):
 def assignmentHybrid(p, clear=5, cutoff=1):
 
     # Start off with a greedy assignment
+    print('Finding a candidate solution using the greedy solver.')
     assignment = assignmentGreedy(p)
     bestAssignment = assignment
 
     # Then iteratively try to improve it by de-assigning a random set
     # of batches and re-assigning them using the optimal
     # branch-and-bound solver.
-    improvement = 10 #  To make sure it runs at least 10 times
-    iterations = 1
-    while improvement / iterations >= cutoff:
-        score = bestAssignment.score
-        assignment = bestAssignment
+    for c in range(2, clear + 1):
+        print('Improving it by de-assigning', c, 'random rows at a time.')
         
-        # Keep track of the number of remaining symbols per partition    
-        symbols_separated = [0 for x in range(p.num_partitions)]
+        improvement = 100/c #  To make sure it runs at least this many times
+        iterations = 1
+        while improvement / iterations >= cutoff:
+            score = bestAssignment.score
+            assignment = bestAssignment
+        
+            # Keep track of the number of remaining symbols per partition    
+            symbols_separated = [0 for x in range(p.num_partitions)]
     
-        # Clear a few rows
-        for i in range(clear):
-            row = random.randint(0, p.num_batches - 1)
-            for col in range(p.num_partitions):
-                while assignment.X[row, col] > 0:                
-                    assignment = assignment.decrement(row, col)
-                    symbols_separated[col] = symbols_separated[col] + 1
+            # Clear a few rows
+            for i in range(c):
+                row = random.randint(0, p.num_batches - 1)
+                for col in range(p.num_partitions):
+                    while assignment.X[row, col] > 0:                
+                        assignment = assignment.decrement(row, col)
+                        symbols_separated[col] = symbols_separated[col] + 1
 
-        # Apply the branch-and-bound solver
-        root = Node(p, assignment, 0, symbols_separated)
-        newAssignment = branchAndBound(p, score=score, root=root)
+            # Apply the branch-and-bound solver
+            root = Node(p, assignment, 0, symbols_separated)
+            newAssignment = branchAndBound(p, score=score, root=root)
 
-        # If it found a better solution, overwrite the current one
-        if newAssignment is not None:
-            bestAssignment = newAssignment
-            improvement = improvement + score - bestAssignment.score
-
-        iterations = iterations + 1
-        
-        print('Iteration finished with an improvement of', score - bestAssignment.score)
+            # If it found a better solution, overwrite the current one
+            if newAssignment is not None:
+                bestAssignment = newAssignment
+                improvement = improvement + score - bestAssignment.score
+                print('Iteration finished with an improvement of', score - bestAssignment.score)
+                
+            iterations = iterations + 1
                 
     return bestAssignment
 
 # Assign symbols randomly
-def assignmentRandom(p):
+def assignmentRandom(p, verbose=False):
 
     # Create a new assignment
     assignment = Assignment(p)
@@ -669,7 +667,7 @@ def objectiveFunction(X, assignment, p, Q=None, f=remainingUnicasts):
             rows = set()
             [rows.add(row) for row in assignment[k]]
 
-            for j in range(p.sq + 1, int(p.server_storage*p.q) + 1):
+            for j in range(p.sq, int(p.server_storage*p.q) + 1):
                 nu = set()
                 for subset in it.combinations([x for x in Q if x != k], j):
                     rows = rows | set.intersection(*[assignment[x] for x in subset])
