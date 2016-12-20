@@ -1,4 +1,4 @@
-# Coded Shuffling Solvers and SImulator
+# Coded Shuffling Solvers and Simulator
 This repo contains the code relating to the article written by Albin Severinson, Alexandre Graell i Amat, and Eirik Rosnes on block-diagonal coding for distributed computation.
 
 It includes three files:
