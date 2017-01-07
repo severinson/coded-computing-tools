@@ -14,38 +14,61 @@
 # limitations under the License.                                           #
 ############################################################################
 
-# This file contains the code relating to the integer programming
-# formulation used in the paper by Albin Severinson, Alexandre Graell
-# i Amat, and Eirik Rosnes. This includes the formulations itself, and
-# the solvers presented in the article.
+"""
+This file contains the code relating to the integer programming
+formulation presented in the paper by Albin Severinson, Alexandre Graell
+i Amat, and Eirik Rosnes. This includes the formulations itself, and
+the solvers presented in the article.
 
-import numpy as np
-from scipy.misc import comb as nchoosek
+Run the file to run the unit tests.
+"""
+
 import itertools as it
 import random
-import math
 import uuid
-import multiprocessing as mp
-import asyncio
+import os
+import unittest
+import numpy as np
+from scipy.misc import comb as nchoosek
+import main
 
-# Representation of the count vectors from the perspective of a single server
 class Perspective(object):
-    def __init__(self, score, count, rows, id=None):
+    """ Representation of the count vectors from the perspective of a single server
+
+    Depending on which servers first finish the map computation, a different
+    set of batches will be involved in the multicast phase.
+
+    Attributes:
+    score: The number of additional rows required to decode all partitions.
+    count: An array where count[i] is the number of symbols from partition i.
+    rows:
+    """
+
+    def __init__(self, score, count, rows, perspective_id=None):
+        """ Create a new Perspective object
+
+        Args:
+        score: The number of additional rows required to decode all partitions.
+        count: An array where count[i] is the number of symbols from partition i.
+        rows:
+        perspective_id: A unique ID for this instance.
+        If None, one is generated.
+        """
         self.score = score
         self.count = count
         self.rows = rows
 
         # Generate a new ID if none was provided
-        if type(id) is uuid.UUID:
-            self.id = id
+        if isinstance(perspective_id, uuid.UUID):
+            self.perspective_id = perspective_id
         else:
-            self.id = uuid.uuid4()
+            self.perspective_id = uuid.uuid4()
 
     def __str__(self):
-        s = 'Score: ' + str(self.score)
-        s = s + ' Count: ' + str(self.count)
-        s = s + ' Rows: ' + str(self.rows)
-        return s
+        string = 'Score: ' + str(self.score)
+        string += ' Count: ' + str(self.count)
+        string += ' Rows: ' + str(self.rows)
+        return string
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
@@ -53,114 +76,142 @@ class Perspective(object):
         return False
 
     def __hash__(self):
-        return hash(self.id)
+        return hash(self.perspective_id)
 
-    # Increment the indicated column
     def increment(self, col):
+        """ Increment the column and update the indices.
+
+        Args:
+        col: The column of the assignment matrix to increment.
+
+        Returns:
+        A new Perspective instance with the updated values.
+        """
 
         # Copy the count array
         count = np.array(self.count)
 
         # Increment the indicated column and calculate the updated score
-        count[0][col] = count[0][col] + 1
-        score = remainingUnicasts(count)
+        count[col] = count[col] + 1
+        score = remaining_unicasts(count)
 
         # Return a new instance with the updated values
-        return Perspective(score, count, self.rows, id=self.id)
+        return Perspective(score, count, self.rows, perspective_id=self.perspective_id)
 
-    # Decrement the indicated column
     def decrement(self, col):
+        """ Decrement the column and update the indices.
+
+        Args:
+        col: The column of the assignment matrix to decrement.
+
+        Returns:
+        A new Perspective instance with the updated values.
+        """
         # Copy the count array
         count = np.array(self.count)
 
         # Increment the indicated column and calculate the updated score
-        count[0][col] = count[0][col] - 1
-        score = remainingUnicasts(count)
+        count[col] -= 1
+        score = remaining_unicasts(count)
 
         # Return a new instance with the updated values
-        return Perspective(score, count, self.rows, id=self.id)
+        return Perspective(score, count, self.rows, perspective_id=self.perspective_id)
 
-# The results index from the perspective of a row of the assignment matrix
 class BatchResult(object):
-    def __init__(self, perspectives=None, summary=None, extended_summary=None):
-        if perspectives is None or summary is None or extended_summary is None:
+    """ The results index from the perspective of a row of the assignment matrix """
+
+    def __init__(self, perspectives=None, summary=None):
+        if perspectives is None or summary is None:
             self.perspectives = dict()
         else:
-            assert type(perspectives) is dict
-            assert type(summary) is list
-            assert type(summary) is list
+            assert isinstance(perspectives, dict)
+            assert isinstance(summary, list)
+            assert isinstance(summary, list)
             self.perspectives = perspectives
             self.summary = summary
-            self.extended_summary = extended_summary
-            
+
         return
 
     def __getitem__(self, key):
-        if type(key) is not Perspective:
+        if not isinstance(key, Perspective):
             raise TypeError('Key must be of type perspective')
-        
+
         return self.perspectives[key]
 
     def __setitem__(self, key, value):
-        if type(key) is not Perspective or type(value) is not Perspective:
+        if not isinstance(key, Perspective) or not isinstance(value, Perspective):
             raise TypeError('Key and value must be of type perspective')
-        
+
         self.perspectives[key] = value
 
     def __delitem__(self, key):
-        if type(key) is not Perspective:
+        if not isinstance(key, Perspective):
             raise TypeError('Key must be of type perspective')
 
         del self.perspectives[key]
 
     def __contains__(self, key):
-        if type(key) is not Perspective:
+        if not isinstance(key, Perspective):
             raise TypeError('Key must be of type perspective')
-        
+
         return key in self.perspectives
 
-    # Build a summary of the number of perspectives that need symbols
-    # from a certain partition.
-    def init_summary(self, p):
+
+    def init_summary(self, par):
+        """ Build a summary of the number of perspectives that need symbols
+        from a certain partition.
+        """
+
         num_perspectives = len(self.perspectives)
 
         # Build a simple summary that keeps track of how many symbols
         # that need a certain partition.
-        self.summary = [num_perspectives for x in range(p.num_partitions)]
-
-        # Build a more in-depth summary that keeps track of how many
-        # perspectives need 1 symbol from a partition, how many need
-        # 2, etc,
-        self.extended_summary = [[0 for x in range(p.rows_per_partition + 1)] for y in range(p.num_partitions)]
-        for i in range(p.num_partitions):
-            self.extended_summary[i][-1] = num_perspectives
+        self.summary = [num_perspectives for x in range(par.num_partitions)]
 
     def keys(self):
+        """ Return the keys of the perspectives dict. """
         return self.perspectives.keys()
 
-    # Returns a shallow copy of itself
     def copy(self):
+        """ Returns a shallow copy of itself """
         perspectives = dict(self.perspectives)
         summary = list(self.summary)
-        extended_summary = [list(x) for x in self.extended_summary]
-        return BatchResult(perspectives, summary, extended_summary)
-            
-# Class representing a storage assignment. Contains efficient methods
-# to evaluate changes in objective function etc.    
+        return BatchResult(perspectives, summary)
+
 class Assignment(object):
-    def __init__(self, p, X=None, A=None, score=None, index=None):
-        self.p = p
+    """ Storage design representation
 
-        if X is None:
-            self.X = np.zeros([p.num_batches, p.num_partitions])
+    Representing a storage assignment. Has support for dynamic programming
+    methods to efficiently find good assignments for small instances.
+
+    Attributes:
+    assignment_matrix: An num_batches by num_partitions Numpy array, where
+    assignment_matrix[i, j] is the number of rows from partition j stored in
+    batch i.
+    labels: List of sets, where the elements of the set labels[i] are the rows
+    of the assignment_matrix stored at server i.
+    score: The sum of all unicasts that need to be sent until all partitions
+    can be decoded over all subsets that can complete the map phase. If either
+    score or index is set to None, the index will be built from scratch. Set
+    both to False to prevent the index from being built.
+    index: A list of BatchResult of length equal to the number of batches. If
+    either score or index is set to None, the index will be built from scratch.
+    Set both to False to prevent the index from being built.
+    """
+
+    def __init__(self, par, assignment_matrix=None, labels=None, score=None, index=None):
+        self.par = par
+
+        if assignment_matrix is None:
+            self.assignment_matrix = np.zeros([par.num_batches, par.num_partitions])
         else:
-            self.X = X
+            self.assignment_matrix = assignment_matrix
 
-        if A is None:            
-            self.A = [set() for x in range(p.num_servers)]
+        if labels is None:
+            self.labels = [set() for x in range(par.num_servers)]
             self.label()
         else:
-            self.A = A
+            self.labels = labels
 
         if score is None or index is None:
             self.build_index()
@@ -169,43 +220,74 @@ class Assignment(object):
             self.index = index
 
     def __str__(self):
-        s = ''
-        s = s + 'X:\n'
-        s = s + str(self.X) + '\n'
-        s = s + 'A:\n'
-        s = s + str(self.A) + '\n'
-        s = s + 'Score: ' + str(self.score)
-        
-        return s
+        string = ''
+        string += 'assignment matrix:\n'
+        string += str(self.assignment_matrix) + '\n'
+        string += 'labels:\n'
+        string += str(self.labels) + '\n'
+        string += 'Score: ' + str(self.score)
+        return string
 
-    # Build an index pairing rows of the assignment matrix to which
-    # perspectives they appear in. Only run once when creating a new
-    # assignment.
+    def save(self, directory='./assignments/'):
+        """ Save the assignment to disk
+
+        Args:
+        directory: Directory to save to
+        """
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+        np.save(directory + self.par.identifier() + '.npy', self.assignment_matrix)
+        return
+
+    # TODO: Throw exception if file doesn't exist
+    @classmethod
+    def load(cls, par, directory='./assignments/'):
+        """ Load assignment from disk
+
+        Args:
+        par: System parameters
+        directory: Directory to load from
+
+        Returns:
+        The loaded assignment
+        """
+        assignment_matrix = np.load(directory + par.identifier() + '.npy')
+        return cls(par, assignment_matrix=assignment_matrix, score=False, index=False)
+
     def build_index(self):
+        """ Build the dynamic programming index
+
+        Build an index pairing rows of the assignment matrix to which
+        perspectives they appear in. Only run once when creating a new
+        assignment.
+        """
+
         self.score = 0
-                
+
         # Index for which sets every row is contained in
-        self.index = [BatchResult(self.p) for x in range(self.p.num_batches)]
-        self.num_subsets = nchoosek(self.p.num_servers, self.p.q)        
-        subsets = it.combinations(range(self.p.num_servers), self.p.q)
+        self.index = [BatchResult(self.par) for x in range(self.par.num_batches)]
+        self.num_subsets = nchoosek(self.par.num_servers, self.par.q)
+        subsets = it.combinations(range(self.par.num_servers), self.par.q)
 
         # Build an index for which count vectors every row is part of
         for Q in subsets:
             for k in Q:
                 rows = set()
-                [rows.add(row) for row in self.A[k]]
+                for batch in self.labels[k]:
+                    rows.add(batch)
 
-                for j in range(self.p.sq, int(self.p.server_storage*self.p.q) + 1):
-                    nu = set()
+                for j in range(self.par.sq, int(self.par.server_storage*self.par.q) + 1):
                     for subset in it.combinations([x for x in Q if x != k], j):
-                        rows = rows | set.intersection(*[self.A[x] for x in subset])
+                        rows = rows | set.intersection(*[self.labels[x] for x in subset])
 
-                selector_vector = np.zeros([1, self.p.num_batches])
+                selector_vector = np.zeros(self.par.num_batches)
                 for row in rows:
-                    selector_vector[0][row] = 1
+                    selector_vector[row] = 1
 
-                count_vector = np.dot(selector_vector, self.X) - self.p.num_source_rows / self.p.num_partitions
-                score = remainingUnicasts(count_vector)
+                count_vector = np.dot(selector_vector, self.assignment_matrix)
+                count_vector -= self.par.num_source_rows / self.par.num_partitions
+                score = remaining_unicasts(count_vector)
                 self.score = self.score + score
 
                 perspective = Perspective(score, count_vector, rows)
@@ -214,90 +296,60 @@ class Assignment(object):
                     self.index[row][perspective] = perspective
 
         # Initialize the summaries
-        [x.init_summary(self.p) for x in self.index]
+        for x in self.index:
+            x.init_summary(self.par)
 
-    # Label batches
     def label(self):
-        assert self.p.server_storage * self.p.q % 1 == 0, 'Must be integer'
-        labels =  it.combinations(range(self.p.num_servers), int(self.p.server_storage * self.p.q))
+        """ Label the batches with server subsets
 
-        # Randomize the labeling
-        #labels = list(labels)
-        #labels = random.sample(labels, len(labels))
-        
+        Label all batches with subsets in the order given by itertools.combinations
+        """
+        assert self.par.server_storage * self.par.q % 1 == 0, 'Must be integer'
+        labels = it.combinations(range(self.par.num_servers),
+                                 int(self.par.server_storage * self.par.q))
         row = 0
         for label in labels:
-            [self.A[x].add(row) for x in label]
-            row = row + 1
+            for server in label:
+                self.labels[server].add(row)
+            row += 1
         return
 
-    # Compute a bound for this assignment
     def bound(self):
-        b = 0
-        for row_index in range(self.X.shape[0]):
-            row = self.X[row_index]
-            remaining_assignments = self.p.rows_per_batch - sum(row)
+        """ Compute a bound for this assignment """
+
+        assert self.index and self.score, 'Cannot compute bound if there is no index.'
+        decreased_unicasts = 0
+        for row_index in range(self.assignment_matrix.shape[0]):
+            row = self.assignment_matrix[row_index]
+            remaining_assignments = self.par.rows_per_batch - sum(row)
             assert remaining_assignments >= 0
-            b = b + max(self.index[row_index].summary) * remaining_assignments
+            decreased_unicasts += max(self.index[row_index].summary) * remaining_assignments
 
         # Bound can't be less than 0
-        return max(self.score - b, 0)
+        return max(self.score - decreased_unicasts, 0)
 
-    # Compute the bound based on the extended index. This bound is
-    # tighter than the regular bound.
-    def extended_bound(self):
-        b = 0
-        for row_index in range(self.X.shape[0]):
-            row = self.X[row_index]
-            remaining_assignments = self.p.rows_per_batch - sum(row)
-            assert remaining_assignments >= 0
-
-            # Make a copy of the extended index
-            extended_summary = [list(x) for x in self.index[row_index].extended_summary]
-
-            # Make assignments
-            for i in range(int(remaining_assignments)):
-                print(self.index[row_index].summary)
-                print(extended_summary)
-                print([sum(x[1:self.p.rows_per_partition + 1]) for x in extended_summary])
-                print(max([sum(x[1:self.p.rows_per_partition + 1]) for x in extended_summary]))
-                print('b', b)
-
-                # Sum up the scores for all possible assignments
-                score_sums = [sum(x[1:self.p.rows_per_partition + 1]) for x in extended_summary]
-
-                # Select the best one
-                best_assignment_score = max(score_sums)
-                best_assignment_index = score_sums.index(best_assignment_score)
-                
-                b = b + best_assignment_score
-                
-                print('b', b)
-                print('score', self.score)
-
-                # Update the summary
-                #for col_index in range(self.p.num_partitions):
-                for count_index in range(self.p.rows_per_partition):
-                    extended_summary[best_assignment_index][count_index] = extended_summary[best_assignment_index][count_index + 1]
-
-                extended_summary[best_assignment_index][-1] = 0
-                
-                print(extended_summary)
-                print()
-        return max(self.score - b, 0)
-                
-
-    # Increment the element at [row, col] and update the objective
-    # value. Returns a new assignment object. Does not change the
-    # current assignment object.
     def increment(self, row, col):
+        """ Increment assignment_matrix[row, col]
 
+        Increment the element at [row, col] and update the objective
+        value. Returns a new assignment object. Does not change the
+        current assignment object.
+
+        Args:
+        row: The row index
+        col: The column index
+
+        Returns:
+        A new assignment object.
+        """
+
+        assert self.index and self.score, 'Cannot increment if there is no index.'
         # Make a copy of the index
         index = [x.copy() for x in self.index]
 
         # Copy the assignment matrix and the objective value
-        X = np.array(self.X)
-        X[row, col] = X[row, col] + 1
+        assignment_matrix = np.array(self.assignment_matrix)
+        assignment_matrix[row, col] = assignment_matrix[row, col] + 1
         objective_value = self.score
 
         # Select the perspectives linked to the row
@@ -309,7 +361,7 @@ class Assignment(object):
 
             # Create a new perspective from the updated values
             new_perspective = perspective.increment(col)
-            
+
             # Update the objective function
             objective_value = objective_value - (perspective.score - new_perspective.score)
 
@@ -320,44 +372,41 @@ class Assignment(object):
 
             # Update the summaries if the count reached zero for the
             # indicated column
-            if new_perspective.count[0][col] == 0:
+            if new_perspective.count[col] == 0:
                 for perspective_row in new_perspective.rows:
-                    index[perspective_row].summary[col] = index[perspective_row].summary[col] - 1                       
+                    index[perspective_row].summary[col] = index[perspective_row].summary[col] - 1
 
-            '''
-            # Update the extended summary
-            for perspective_row in new_perspective.rows:
-                extended_summary = index[perspective_row].extended_summary
-
-                # Find the first non-zero row
-                for count_index in range(self.p.rows_per_partition, 0, -1):
-                    if extended_summary[col][count_index] > 0:
-                        break
-
-                # Decrement the index by 1
-                extended_summary[col][count_index] = extended_summary[col][count_index] - 1
-
-                # Unless this is the last element, increment the
-                # next by 1
-                if count_index >= 1:
-                    extended_summary[col][count_index - 1] = extended_summary[col][count_index - 1] + 1
-            '''        
-        
         # Return a new assignment object
-        return Assignment(self.p, X=X, A=self.A, score=objective_value, index=index)
+        return Assignment(self.par,
+                          assignment_matrix=assignment_matrix,
+                          labels=self.labels,
+                          score=objective_value,
+                          index=index)
 
-    # Decrement the element at [row, col] and update the objective
-    # value. Returns a new assignment object. Does not change the
-    # current assignment object.
     def decrement(self, row, col):
-        assert self.X[row, col] >= 1, 'Can\'t decrement a value less than 1.'
-        
+        """ Decrement assignment_matrix [row, col]
+
+        Decrement the element at [row, col] and update the objective
+        value. Returns a new assignment object. Does not change the
+        current assignment object.
+
+        Args:
+        row: The row index
+        col: The column index
+
+        Returns:
+        A new assignment object.
+        """
+
+        assert self.index and self.score, 'Cannot decrement if there is no index.'
+        assert self.assignment_matrix[row, col] >= 1, 'Can\'t decrement a value less than 1.'
+
         # Make a copy of the index
         index = [x.copy() for x in self.index]
 
         # Copy the assignment matrix and the objective value
-        X = np.array(self.X)
-        X[row, col] = X[row, col] - 1
+        assignment_matrix = np.array(self.assignment_matrix)
+        assignment_matrix[row, col] = assignment_matrix[row, col] - 1
         objective_value = self.score
 
         # Select the perspectives linked to the row
@@ -369,7 +418,7 @@ class Assignment(object):
 
             # Create a new perspective from the updated values
             new_perspective = perspective.decrement(col)
-            
+
             # Update the objective function
             objective_value = objective_value - (perspective.score - new_perspective.score)
 
@@ -380,111 +429,131 @@ class Assignment(object):
 
             # Update the summaries if the count reached zero for the
             # indicated column
-            if new_perspective.count[0][col] == -1:
+            if new_perspective.count[col] == -1:
                 for perspective_row in new_perspective.rows:
-                    index[perspective_row].summary[col] = index[perspective_row].summary[col] + 1
-        
+                    index[perspective_row].summary[col] += 1
+
         # Return a new assignment object
-        return Assignment(self.p, X=X, A=self.A, score=objective_value, index=index)
+        return Assignment(self.par,
+                          assignment_matrix=assignment_matrix,
+                          labels=self.labels,
+                          score=objective_value,
+                          index=index)
 
-# Branch-and-bound node
+    def evaluate(self, row, col):
+        """ Return the performance change that incrementing (row, col)
+        would induce without changing the assignment.
+        """
+
+        assert self.index and self.score, 'Cannot evaluateif there is no index.'
+        return self.index[row].summary[col]
+
 class Node(object):
-    def __init__(self, p, assignment, row, symbols_separated):
-        assert type(assignment) is Assignment
-        assert type(row) is int
-        assert type(symbols_separated) is list
+    """ Branch-and-bound node """
 
-        self.p = p
-        
+    def __init__(self, par, assignment, row, symbols_separated):
+        assert isinstance(assignment, Assignment)
+        assert isinstance(row, int)
+        assert isinstance(symbols_separated, list)
+
+        self.par = par
+
         self.assignment = assignment
 
         # Current row being assigned
         self.row = row
 
-        # Remaining assignments for this row
-        #self.remaining = remaining
-
         self.symbols_separated = symbols_separated
 
-        self.id = uuid.uuid4()
+        self.node_id = uuid.uuid4()
         return
 
     def __hash__(self):
-        return hash(self.id)
+        return hash(self.node_id)
 
-    # Return the number of remaining assignments for this row
     def remaining(self):
-        return self.p.rows_per_batch - self.assignment.X[self.row].sum()
-        
-def branchAndBound(p, score=None, root=None, verbose=False):
+        """ Return the number of remaining assignments for the current row. """
+        return self.par.rows_per_batch - self.assignment.assignment_matrix[self.row].sum()
+
+def branch_and_bound(par, score=None, root=None, verbose=False):
+    """ Branch-and-bound assignment solver
+
+    Finds an assignment through branch-and-bound search.
+
+    Args:
+    par: System parameters
+    score: Score of the current node.
+    root: Node to start searching from.
+    verbose: Print extra messages if True
+
+    Returns:
+    The resulting assignment
+    """
 
     # Initialize the solver with a greedy solution
     if score is None:
-        bestAssignment = assignmentGreedy(p)
-        score = bestAssignment.score
+        best_assignment = assignment_greedy(par)
+        score = best_assignment.score
     else:
-        bestAssignment = None
+        best_assignment = None
         score = score
 
     if verbose:
         print('Starting B&B with score:', score)
 
-
     # Set of remaining nodes to explore
-    # remainingNodes = set()
-    remainingNodes = list()
+    remaining_nodes = list()
 
     # Separate symbols by partition
-    symbols_per_partition = p.num_coded_rows / p.num_partitions 
-    symbols_separated = [symbols_per_partition for x in range(p.num_partitions)]
+    symbols_per_partition = par.num_coded_rows / par.num_partitions
+    symbols_separated = [symbols_per_partition for x in range(par.num_partitions)]
 
     # Add the root of the tree
     if root is None:
-        root = Node(p, Assignment(p), 0, symbols_separated)
-        
-    # remainingNodes.add(root)
-    remainingNodes.append(root)
+        root = Node(par, Assignment(par), 0, symbols_separated)
+
+    remaining_nodes.append(root)
 
     searched = 0
     pruned = 0
 
-    while len(remainingNodes) > 0:
-        node = remainingNodes.pop()
+    while len(remaining_nodes) > 0:
+        node = remaining_nodes.pop()
         searched = searched + 1
 
         # While there are no more valid assignments for this row, move
         # to the next one.
         while node.remaining() == 0:
             node.row = node.row + 1
-            if node.row == p.num_batches:
+            if node.row == par.num_batches:
                 break
-            
+
         # If there are no more assignments for this node, we've found
         # a solution.
-        if node.row == p.num_batches:            
+        if node.row == par.num_batches:
             #print('Found a solution:', node.assignment)
             #print('---------------------')
-            
+
             # If this solution is better than the previous best, store it
             if node.assignment.score < score:
-                bestAssignment = node.assignment
-                score = bestAssignment.score
+                best_assignment = node.assignment
+                score = best_assignment.score
 
             continue
 
         # Iterate over all possible branches from this node
-        for col in range(p.num_partitions):
+        for col in range(par.num_partitions):
 
             # Continue if there are no more valid assignments for this
-            # column/partition            
+            # column/partition
             if node.symbols_separated[col] == 0:
                 continue
 
-            updatedAssignment = node.assignment.increment(node.row, col)
+            updated_assignment = node.assignment.increment(node.row, col)
 
             # Continue if the bound for this assignment is no better
             # than the previous best solution.
-            if updatedAssignment.bound() >= score:
+            if updated_assignment.bound() >= score:
                 pruned = pruned + 1
                 continue
 
@@ -492,40 +561,53 @@ def branchAndBound(p, score=None, root=None, verbose=False):
 
             # Decrement the count of remaining symbols for the
             # assigned partition.
-            updatedSymbolsSeparated = list(node.symbols_separated)
-            updatedSymbolsSeparated[col] = updatedSymbolsSeparated[col] - 1
+            updated_symbols_separated = list(node.symbols_separated)
+            updated_symbols_separated[col] = updated_symbols_separated[col] - 1
 
             if verbose:
-                print('Bound:', updatedAssignment.bound(),
+                print('Bound:', updated_assignment.bound(),
                       'Row:', row,
-                      '#nodes:', len(remainingNodes),
+                      '#nodes:', len(remaining_nodes),
                       "Best:", score,
                       '#searched:', searched, '#pruned:', pruned)
-            
-            # Add the new node to the set of nodes to be explored
-            # remainingNodes.add(Node(updatedAssignment, row, remaining, updatedSymbolsSeparated))
-            remainingNodes.append(Node(p, updatedAssignment, row, updatedSymbolsSeparated))
-            
-    return bestAssignment            
 
-def assignmentGreedy(p):
-    assignment = Assignment(p)
+            # Add the new node to the set of nodes to be explored
+            remaining_nodes.append(Node(par, updated_assignment, row, updated_symbols_separated))
+
+    return best_assignment
+
+def assignment_greedy(par, verbose=False):
+    """ Greedy assignment solver.
+
+    Finds an assignment by assigning one row at a time, always greedily
+    selecting the row with largest improvement.
+
+    Args:
+    par: System parameters
+    verbose: Print extra messages if True
+
+    Returns:
+    The resulting assignment
+    """
+
+    assignment = Assignment(par)
 
     # Separate symbols by partition
-    symbols_per_partition = p.num_coded_rows / p.num_partitions    
-    symbols_separated = [symbols_per_partition for x in range(p.num_partitions)]
+    symbols_per_partition = par.num_coded_rows / par.num_partitions
+    symbols_separated = [symbols_per_partition for x in range(par.num_partitions)]
 
     # Assign symbols row by row
-    for row in range(p.num_batches):
-        #print('Assigning row', row, 'Bound:', assignment.bound())
+    for row in range(par.num_batches):
+        if verbose:
+            print('Assigning row', row, 'Bound:', assignment.bound())
 
         # Assign rows_per_batch rows per batch
-        for i in range(p.rows_per_batch):
+        for _ in range(par.rows_per_batch):
             score_best = 0
             best_col = 0
 
             # Try one column at a time
-            for col in range(p.num_partitions):
+            for col in range(par.num_partitions):
 
                 # If there are no more symbols left for this column to
                 # assign, continue
@@ -533,7 +615,8 @@ def assignmentGreedy(p):
                     continue
 
                 # Evaluate the score of the assignment
-                score_updated = assignment.index[row].summary[col] + symbols_separated[col] / symbols_per_partition
+                score_updated = assignment.evaluate(row, col)
+                score_updated = score_updated + symbols_separated[col] / symbols_per_partition
 
                 # If it's better, store it
                 if score_updated > score_best:
@@ -546,104 +629,150 @@ def assignmentGreedy(p):
 
     return assignment
 
-def assignmentHybrid(p, clear=5, cutoff=1):
+def assignment_hybrid(par, clear=10, min_runs=200, verbose=False):
+    """ Hybrid assignment solver.
+
+    Quickly finds a candidate solution and then improves it iteratively.
+
+    Args:
+    par: System parameters
+    clear: Max assignment matrix elements to decrement per iteration.
+    min_runs: The solver runs at least min_runs/c iterations, where c is the
+    number of dercemented elements.
+    verbose: Print extra messages if True
+
+    Returns:
+    The resulting assignment
+    """
 
     # Start off with a greedy assignment
-    print('Finding a candidate solution using the greedy solver.')
-    assignment = assignmentGreedy(p)
-    bestAssignment = assignment
+    if verbose:
+        print('Finding a candidate solution using the greedy solver.')
+    assignment = assignment_greedy(par, verbose=verbose)
+    best_assignment = assignment
 
     # Then iteratively try to improve it by de-assigning a random set
     # of batches and re-assigning them using the optimal
     # branch-and-bound solver.
-    for c in range(2, clear + 1):
-        print('Improving it by de-assigning', c, 'random rows at a time.')
-        
-        improvement = 100/c #  To make sure it runs at least this many times
+    for c in range(3, clear + 1):
+        if verbose:
+            print('Improving it by de-assigning', c, 'random symbols at a time.')
+
+        improvement = min_runs/c #  To make sure it runs at least this many times
         iterations = 1
-        while improvement / iterations >= cutoff:
-            score = bestAssignment.score
-            assignment = bestAssignment
-        
-            # Keep track of the number of remaining symbols per partition    
-            symbols_separated = [0 for x in range(p.num_partitions)]
-    
-            # Clear a few rows
-            for i in range(c):
-                row = random.randint(0, p.num_batches - 1)
-                for col in range(p.num_partitions):
-                    while assignment.X[row, col] > 0:                
-                        assignment = assignment.decrement(row, col)
-                        symbols_separated[col] = symbols_separated[col] + 1
+        while improvement / iterations >= 1:
+            score = best_assignment.score
+            assignment = best_assignment
+
+            # Keep track of the number of remaining symbols per partition
+            symbols_separated = [0 for x in range(par.num_partitions)]
+
+            # Clear a few symbols randomly
+            for _ in range(c):
+                row = random.randint(0, par.num_batches - 1)
+                col = random.randint(0, par.num_partitions - 1)
+
+                # While the corresponding element is zero, randomize
+                # new indices.
+                while assignment.assignment_matrix[row, col] <= 0:
+                    row = random.randint(0, par.num_batches - 1)
+                    col = random.randint(0, par.num_partitions - 1)
+
+                assignment = assignment.decrement(row, col)
+                symbols_separated[col] = symbols_separated[col] + 1
 
             # Apply the branch-and-bound solver
-            root = Node(p, assignment, 0, symbols_separated)
-            newAssignment = branchAndBound(p, score=score, root=root)
+            root = Node(par, assignment, 0, symbols_separated)
+            new_assignment = branch_and_bound(par, score=score, root=root, verbose=verbose)
 
             # If it found a better solution, overwrite the current one
-            if newAssignment is not None:
-                bestAssignment = newAssignment
-                improvement = improvement + score - bestAssignment.score
-                print('Iteration finished with an improvement of', score - bestAssignment.score)
-                
+            if new_assignment is not None:
+                best_assignment = new_assignment
+                improvement = improvement + score - best_assignment.score
+                if verbose:
+                    print('Iteration finished with an improvement of',
+                          score - best_assignment.score)
+
             iterations = iterations + 1
-                
-    return bestAssignment
 
-# Assign symbols randomly
-def assignmentRandom(p, verbose=False):
+    return best_assignment
 
-    # Create a new assignment
-    assignment = Assignment(p)
+def assign_remaining_random(par, assignment_matrix, rows_by_partition):
+    """ Assign any remaining rows randomly.
 
-    # Then pick out X and A for to manipulate manually. We don't need
-    # the indexing here.
-    X = assignment.X
-    A = assignment.A
+    Args:
+    par: System parameters
+    assignment_matrix: Assignment matrix
+    rows_by_partition: A list of row counts by partition.
+    """
 
-    choices = random.sample(range(p.num_coded_rows), p.num_coded_rows)
-    index = 0
-    for row in range(p.num_batches):
-        for col in range(p.rows_per_batch):
-            X[row, choices[index] % p.num_partitions] = X[row, choices[index] % p.num_partitions] + 1
-            index = index + 1
-        
-    return X, A
+    assert len(rows_by_partition) == par.num_partitions, \
+        'rows_by_partition must be of length equal to the number of partitions.'
 
-## Various performance measures
-# Count the number of remaining unicasts
-def remainingUnicasts(count_vector):
-    unicasts = 0
-    for e in count_vector[0]:
-        if e < 0:
-            unicasts = unicasts - e
+    # Create a set containing the indices of the partially assigned
+    # partitions
+    coded_rows_per_partition = par.num_coded_rows / par.num_partitions
+    partial_partitions = set()
 
-    return unicasts
+    #[partial_partitions.add(x) for x in range(par.num_partitions)
+    #if rows_by_partition[x] < coded_rows_per_partition]
 
-# Count the number of lost useful symbols in multicast rounds
-def lostMulticasts(count_vector):
-    lost_multicasts = 0
-    for e in count_vector[0]:
-        if e > 0:
-            lost_multicasts = lost_multicasts + e
+    for partition in range(par.num_partitions):
+        if rows_by_partition[partition] < coded_rows_per_partition:
+            partial_partitions.add(partition)
 
-    return lost_multicasts
+    # Assign symbols randomly row-wise
+    for row in range(par.num_batches):
+        row_sum = assignment_matrix[row].sum()
+        while row_sum < par.rows_per_batch:
 
-# Take the inner product with itself
-def innerProduct(count_vector):
-    return np.dot(count_vector, count_vector.T).sum()
+            # Get a random column index corresponding to a partial partition
+            col = random.sample(partial_partitions, 1)[0]
 
-# Length of the sum vector
-def norm(count_vector):
-    return math.sqrt(np.dot(count_vector, count_vector.T).sum())
+            # Increment the count
+            assignment_matrix[row, col] = assignment_matrix[row, col] + 1
+            rows_by_partition[col] += 1
+            row_sum += 1
 
-# Sum of the absolute value of the vector
-def absoluteSum(count_vector):
-    return abs(count_vector).sum()
+            # Remove the partition index if there are no more assignments
+            if rows_by_partition[col] == coded_rows_per_partition:
+                partial_partitions.remove(col)
 
-# The objective function to minimize
-def objectiveFunction(X, assignment, p, Q=None, f=remainingUnicasts):
-    
+def assignment_random(par):
+    """ Create an assignment matrix randomly.
+
+    Args:
+    par: System parameters
+
+    Returns:
+    The resulting assignment object.
+    """
+
+    assignment = Assignment(par, score=False, index=False)
+    assignment_matrix = assignment.assignment_matrix
+    rows_by_partition = [0 for x in range(par.num_partitions)]
+    assign_remaining_random(par, assignment_matrix, rows_by_partition)
+    return assignment
+
+def communication_load(par, assignment_matrix, labels, Q=None):
+    """ Calculate the communication load of an assignment.
+
+    Count the number of unicasts required for all servers to hold enough
+    symbols to deocde all partitions for some assignment exhaustively.
+
+    Args:
+    par: System parameters
+    assignment_matrix: Assignment matrix
+    labels: List of sets, where the elements of the set labels[i] are the rows
+    of the assignment_matrix stored at server i.
+    Q: Leave at None to evaluate all subsets Q, or set to a tuple of servers to
+    count unicasts only for some specific Q.
+
+    Returns:
+    Tuple with the first element the average number of unicasts required and
+    second element the worst case number of unicasts.
+    """
+
     # Count the total and worst-case score
     total_score = 0
     worst_score = 0
@@ -651,43 +780,438 @@ def objectiveFunction(X, assignment, p, Q=None, f=remainingUnicasts):
     # If a specific Q was given evaluate only that one.  Otherwise
     # evaluate all possible Q.
     if Q is None:
-        subsets = it.combinations(range(p.num_servers), p.q)
-        num_subsets = nchoosek(p.num_servers, p.q)
+        subsets = it.combinations(range(par.num_servers), par.q)
+        num_subsets = nchoosek(par.num_servers, par.q)
     else:
         subsets = [Q]
         num_subsets = 1
 
     for Q in subsets:
         set_score = 0
-        
+
         # Count over all server perspectives
         for k in Q:
             # Create the set of all symbols stored at k or sent to k
-            # via multicast.            
+            # via multicast.
             rows = set()
-            [rows.add(row) for row in assignment[k]]
+            #[rows.add(row) for row in labels[k]]
+            for batch in labels[k]:
+                rows.add(batch)
 
-            for j in range(p.sq, int(p.server_storage*p.q) + 1):
-                nu = set()
+            for j in range(par.sq, int(par.server_storage*par.q) + 1):
                 for subset in it.combinations([x for x in Q if x != k], j):
-                    rows = rows | set.intersection(*[assignment[x] for x in subset])
+                    rows = rows | set.intersection(*[labels[x] for x in subset])
 
-            selector_vector = np.zeros([1, p.num_batches])
+            selector_vector = np.zeros(par.num_batches)
             for row in rows:
-                selector_vector[0][row] = 1
+                selector_vector[row] = 1
 
-            count_vector = np.dot(selector_vector, X) - p.num_source_rows / p.num_partitions
-            score = f(count_vector)
-            
+            count_vector = np.dot(selector_vector, assignment_matrix)
+            count_vector -= par.num_source_rows / par.num_partitions
+            score = remaining_unicasts(count_vector)
+
             total_score = total_score + score
             set_score = set_score + score
 
-            #print('Q:', Q, 'Selected:', selector_vector, 'Score:', score)
-            
         if set_score > worst_score:
             worst_score = set_score
-            
+
     average_score = total_score / num_subsets
-    #print('Average:', average_score, 'Worst:', worst_score)
     return average_score, worst_score
 
+def computational_delay(par, assignment_matrix, labels, Q=None):
+    """ Calculate the computational delay of an assignment.
+
+    Calculate the number of servers required to decode all partitions for an
+    assignment exhaustively.
+
+    Args:
+    par: System parameters
+    assignment_matrix: Assignment matrix
+    labels: List of sets, where the elements of the set labels[i] are the rows
+    of the assignment_matrix stored at server i.
+
+    Returns:
+    Number of servers required averaged over all subsets.
+    """
+
+    # Count the total and worst-case score
+    total_score = 0
+    worst_score = 0
+
+    # If a specific Q was given evaluate only that one.  Otherwise
+    # evaluate all possible Q.
+    if Q is None:
+        subsets = it.combinations(range(par.num_servers), par.q)
+        num_subsets = nchoosek(par.num_servers, par.q)
+    else:
+        subsets = [Q]
+        num_subsets = 1
+
+    for Q in subsets:
+        set_score = 0
+
+        # Count the total number of symbols per partition
+        rows_by_partition = np.zeros(par.num_partitions)
+
+        # Keep track of the batches we've added
+        batches_in_Q = set()
+
+        # Add the batches from the first q servers
+        for server in Q:
+            for batch in labels[server]:
+                batches_in_Q.add(batch)
+
+        for batch in batches_in_Q:
+            rows_by_partition = np.add(rows_by_partition, assignment_matrix[batch])
+        set_score = par.q
+
+        # TODO: Add more servers until all partitions can be decoded
+        if not enough_symbols(par, rows_by_partition):
+            set_score += 1
+
+        total_score += set_score
+        if set_score > worst_score:
+            worst_score = set_score
+
+    average_score = total_score / num_subsets
+    return average_score, worst_score
+
+def enough_symbols(par, rows_by_partition):
+    """" Return True if there are enough symbols to decode all partitions.
+
+    Args:
+    par: System parameters object
+    rows_by_partition: A numpy array of row counts by partition.
+
+    Returns:
+    True if there are enough symbols to decode all partitions. Otherwise false.
+    """
+
+    assert len(rows_by_partition) == par.num_partitions, \
+        'The input array must have length equal to the number of partitions.'
+
+    for num_rows in rows_by_partition:
+        if num_rows < par.rows_per_partition:
+            return False
+
+    return True
+
+def computational_delay_sampled(par, assignment_matrix, labels, num_samples):
+    """ Estimate the computational delay of an assignment.
+
+    Estimate the number of servers required to decode all partitions for an
+    assignment through Monte Carlo simulations.
+
+    Args:
+    par: System parameters
+    assignment_matrix: Assignment matrix
+    labels: List of sets, where the elements of the set labels[i] are the rows
+    of the assignment_matrix stored at server i.
+    num_runs: Number of runs
+
+    Returns:
+    Number of servers required averaged over all n runs.
+    """
+    total_score = 0
+
+    for _ in range(num_samples):
+
+        # Generate a random sequence of servers
+        Q = random.sample(range(par.num_servers), par.num_servers)
+
+        # Count the total number of symbols per partition
+        rows_by_partition = np.zeros(par.num_partitions)
+
+        # Keep track of the batches we've added
+        batches_added = set()
+
+        # Add the batches from the first q servers
+        #[[batches_added.add(x) for x in labels[y]] for y in Q[0:par.q]]
+        for server in Q[0:par.q]:
+            for batch in labels[server]:
+                batches_added.add(batch)
+
+        for batch in batches_added:
+            rows_by_partition = np.add(rows_by_partition, assignment_matrix[batch])
+        total_score = total_score + par.q
+
+        # Add batches from more servers until there are enough rows to
+        # decode all partitions.
+        for server in Q[par.q:]:
+            if enough_symbols(par, rows_by_partition):
+                break
+
+            # Add the rows from the batches not already counted
+            for batch in {x for x in labels[server] if x not in batches_added}:
+                rows_by_partition = np.add(rows_by_partition, assignment_matrix[batch])
+
+            # Keep track of which batches we've added
+            #[batches_added.add(x) for x in labels[server]]
+            for batch in labels[server]:
+                batches_added.add(batch)
+
+            # Update the score
+            total_score = total_score + 1
+
+    average_score = total_score / num_samples
+    return average_score
+
+def remaining_unicasts(rows_by_partition):
+    """" Return the number of unicasts required to decode all partitions.
+
+    Args:
+    rows_by_partition: A numpy array of row counts by partition.
+
+    Returns:
+    The number of unicasts required to decode all partitions.
+    """
+
+    unicasts = 0
+    for num_rows in rows_by_partition:
+        if num_rows < 0:
+            unicasts = unicasts - num_rows
+
+    return unicasts
+
+def communication_load_sampled(par, assignment_matrix, labels, num_samples):
+    """ Estimate the communication load of an assignment.
+
+    Estimate the number of unicasts required for all servers to hold enough
+    symbols to deocde all partitions for some assignment through Monte Carlo
+    simulations.
+
+    Args:
+    par: System parameters
+    assignment_matrix: Assignment matrix
+    labels: List of sets, where the elements of the set labels[i] are the
+    rows of the assignment_matrix stored at server i.
+    num_runs: Number of runs
+
+    Returns:
+    Number of unicasts required averaged over all n runs.
+    """
+
+    total_score = 0
+    server_list = list(range(par.num_servers))
+
+    for _ in range(num_samples):
+
+        # Generate a random Q and k
+        Q = random.sample(server_list, par.q)
+        k = random.sample(Q, 1)[0]
+
+        # Sum the corresponding rows of the assignment matrix
+        batches = set()
+        for batch in labels[k]:
+            batches.add(batch)
+
+        # Add the rows sent in the shuffle phase
+        for j in range(par.sq, int(par.server_storage*par.q) + 1):
+            for subset in it.combinations([x for x in Q if x != k], j):
+                batches = batches | set.intersection(*[labels[x] for x in subset])
+
+        count_vector = np.zeros(par.num_partitions) - par.num_source_rows / par.num_partitions
+        for batch in batches:
+            count_vector = np.add(count_vector, assignment_matrix[batch])
+
+        # Calculate the score
+        score = remaining_unicasts(count_vector)
+        total_score = total_score + score
+
+    average_score = total_score * par.q / num_samples
+    return average_score
+
+def objective_function_sampled(par, assignment_matrix, labels, num_samples=1000):
+    """ Return the estimated communication load and computational delay.
+
+    Estimate the number of unicasts required for all servers to hold enough
+    symbols to deocde all partitions for some assignment through Monte Carlo
+    simulations.
+
+    Args:
+    par: System parameters
+    assignment_matrix: Assignment matrix
+    labels: List of sets, where the elements of the set labels[i] are the rows
+    of the assignment_matrix stored at server i.
+    n: Number of runs
+
+    Returns:
+    Tuple with first element estimated number of unicasts, and second estimated
+    number of servers required to wait for.
+    """
+    delay = computational_delay_sampled(par, assignment_matrix, labels, num_samples)
+    load = communication_load_sampled(par, assignment_matrix, labels, num_samples)
+    return load, delay
+
+def is_valid(par, assignment_matrix, verbose=False):
+    """ Evaluate if an assignment is valid and complete.
+
+    Args:
+    par: System parameters
+    assignment_matrix: Assignment matrix
+    verbose: Print why an assignment might be invalid
+
+    Returns:
+    True if the assignment matrix is valid and complete. False otherwise.
+    """
+    for row in assignment_matrix:
+        if row.sum() != par.rows_per_batch:
+            if verbose:
+                print('Row', row, 'does not sum to the number of rows per batch. Is:',
+                      row.sum(), 'Should be:', par.rows_per_batch)
+            return False
+
+    for col in assignment_matrix.T:
+        if col.sum() != par.num_coded_rows / par.num_partitions:
+            if verbose:
+                print('Column', col, 'does not sum to the number of rows per partition. Is',
+                      col.sum(), 'Should be:', par.num_coded_rows / par.num_partitions)
+            return False
+
+    return True
+
+class Tests(unittest.TestCase):
+    """ Elementary unit tests. """
+
+    def test_is_valid(self):
+        """ Verify that is_valid works correctly. """
+        par = self.get_parameters()
+        assignment_matrix = np.array([[2, 0, 0, 0, 0],
+                                      [0, 2, 0, 0, 0],
+                                      [0, 0, 2, 0, 0],
+                                      [0, 0, 0, 2, 0],
+                                      [0, 0, 0, 0, 2],
+                                      [2, 0, 0, 0, 0],
+                                      [0, 2, 0, 0, 0],
+                                      [0, 0, 2, 0, 0],
+                                      [0, 0, 0, 2, 0],
+                                      [0, 0, 0, 0, 2],
+                                      [2, 0, 0, 0, 0],
+                                      [0, 2, 0, 0, 0],
+                                      [0, 0, 2, 0, 0],
+                                      [0, 0, 0, 2, 0],
+                                      [0, 0, 0, 0, 2]])
+
+        self.assertTrue(is_valid(par, assignment_matrix))
+        assignment_matrix[0, 0] = 0
+        self.assertFalse(is_valid(par, assignment_matrix))
+        return
+
+    def test_labels(self):
+        """ Verify that the labeling is valid. """
+        par = self.get_parameters()
+        assignment = Assignment(par, score=False, index=False)
+        batches_per_server = par.server_storage * par.num_source_rows / par.rows_per_batch
+        for batches in assignment.labels:
+            self.assertEqual(len(batches), batches_per_server)
+        return
+
+    def test_random_assignment(self):
+        """ Some tests on the random assignment solver. """
+        par = self.get_parameters()
+        assignment = assignment_random(par)
+        self.assertTrue(is_valid(par, assignment.assignment_matrix))
+        self.load_eval_comp(par, assignment)
+        self.delay_eval_comp(par, assignment)
+        return
+
+    def test_greedy_assignment(self):
+        """ Some tests on the greedy assignment solver. """
+        par = self.get_parameters()
+        assignment = assignment_greedy(par)
+        self.assertTrue(is_valid(par, assignment.assignment_matrix))
+        self.load_eval_comp(par, assignment)
+        self.delay_eval_comp(par, assignment)
+        return
+
+    def test_hybrid_assignment(self):
+        """ Some tests on the hybrid assignment solver. """
+        par = self.get_parameters()
+        assignment = assignment_hybrid(par)
+        self.assertTrue(is_valid(par, assignment.assignment_matrix))
+        self.load_eval_comp(par, assignment)
+        self.delay_eval_comp(par, assignment)
+        return
+
+    def test_load_known(self):
+        """ Check the load evaluation against the known correct value. """
+        known_unicasts = 16
+        par = main.SystemParameters(2, # Rows per batch
+                                    6, # Number of servers (K)
+                                    4, # Servers to wait for (q)
+                                    4, # Outputs (N)
+                                    1/2, # Server storage (\mu)
+                                    1) # Partitions (T)
+
+        assignment = assignment_random(par)
+        self.load_known_comparison(par, assignment, known_unicasts)
+
+        assignment = assignment_greedy(par)
+        self.load_known_comparison(par, assignment, known_unicasts)
+
+        assignment = assignment_hybrid(par)
+        self.load_known_comparison(par, assignment, known_unicasts)
+        return
+
+    def load_eval_comp(self, par, assignment):
+        """ Compare the results of the exhaustive and sampled load evaluation. """
+        num_samples = 100
+        load_sampled = communication_load_sampled(par,
+                                                  assignment.assignment_matrix,
+                                                  assignment.labels,
+                                                  num_samples)
+
+        load_exhaustive_avg, load_exhaustive_worst = communication_load(par,
+                                                                        assignment.assignment_matrix,
+                                                                        assignment.labels)
+        load_difference = abs(load_sampled - load_exhaustive_avg)
+        acceptable_ratio = 0.1
+        self.assertTrue(load_difference / load_exhaustive_avg < acceptable_ratio)
+        self.assertTrue(load_sampled <= load_exhaustive_worst)
+        return
+
+    def load_known_comparison(self, par, assignment, known_unicasts):
+        """ Check the load evaluation against the known correct value. """
+        num_samples = 100
+        load_sampled = communication_load_sampled(par,
+                                                  assignment.assignment_matrix,
+                                                  assignment.labels,
+                                                  num_samples)
+
+        self.assertEqual(load_sampled, known_unicasts)
+        load_exhaustive_avg, load_exhaustive_worst = communication_load(par,
+                                                                        assignment.assignment_matrix,
+                                                                        assignment.labels)
+        self.assertEqual(load_exhaustive_avg, known_unicasts)
+        self.assertEqual(load_exhaustive_worst, known_unicasts)
+        return
+
+    def delay_eval_comp(self, par, assignment):
+        """ Compare the results of the exhaustive and sampled delay evaluation. """
+        num_samples = 100
+        delay_sampled = computational_delay_sampled(par,
+                                                    assignment.assignment_matrix,
+                                                    assignment.labels,
+                                                    num_samples)
+
+        delay_exhaustive_avg, delay_exhaustive_worst = computational_delay(par,
+                                                                           assignment.assignment_matrix,
+                                                                           assignment.labels)
+
+        delay_difference = abs(delay_sampled - delay_exhaustive_avg)
+        acceptable_ratio = 0.1
+        self.assertTrue(delay_difference / delay_exhaustive_avg < acceptable_ratio)
+        self.assertTrue(delay_sampled <= delay_exhaustive_worst)
+        return
+
+    def get_parameters(self):
+        """ Get some test parameters. """
+        return main.SystemParameters(2, # Rows per batch
+                                     6, # Number of servers (K)
+                                     4, # Servers to wait for (q)
+                                     4, # Outputs (N)
+                                     1/2, # Server storage (\mu)
+                                     5) # Partitions (T)
+if __name__ == '__main__':
+    unittest.main()
