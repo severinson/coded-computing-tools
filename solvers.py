@@ -15,10 +15,8 @@
 ############################################################################
 
 """
-This file contains the code relating to the integer programming
-formulation presented in the paper by Albin Severinson, Alexandre Graell
-i Amat, and Eirik Rosnes. This includes the formulations itself, and
-the solvers presented in the article.
+This module contains the various solvers we have developed for the integer
+programming problem presented in the paper.
 
 Run the file to run the unit tests.
 """
@@ -29,7 +27,6 @@ import uuid
 import unittest
 import numpy as np
 from scipy.misc import comb as nchoosek
-import main
 import model
 
 class Node(object):
@@ -232,6 +229,7 @@ def assignment_hybrid(par, clear=10, min_runs=200, verbose=False):
     # Start off with a greedy assignment
     if verbose:
         print('Finding a candidate solution using the greedy solver.')
+
     assignment = assignment_greedy(par, verbose=verbose)
     best_assignment = assignment
 
@@ -281,6 +279,259 @@ def assignment_hybrid(par, clear=10, min_runs=200, verbose=False):
 
     return best_assignment
 
+def assign_block(par, assignment_matrix, row, min_col, max_col):
+    """ Assign rows to all slots between min_col and max_col.
+
+    This method won't work when max_col - min_col > par.rows_per_batch.
+
+    Args:
+    par: System parameters
+    assignment_matrix: The assignment matrix
+    row: The assignment matrix rows to assign rows to
+    min_col: Start of block
+    max_col: End of block
+
+    Returns:
+    The wrapped column index. If there are 10 columns and max_col is 12, 2 is returned.
+    """
+
+    assert (max_col - min_col) <= par.rows_per_batch
+
+    if min_col == max_col:
+        return max_col
+
+    wrapped_col = max_col
+    if max_col >= par.num_partitions:
+        wrapped_col = max_col - par.num_partitions
+        assignment_matrix[row, 0:wrapped_col] += 1
+
+    max_col = min(par.num_partitions, max_col)
+    assignment_matrix[row][min_col:max_col] += 1
+
+    return wrapped_col
+
+def assignment_block(par, verbose=True):
+    """ Create an assignment using a block-diagonal structure.
+
+    Args:
+    par: System parametetrs
+    verbose: Print extra messages if True.
+
+    Returns: The resulting assignment
+    """
+
+    assignment = model.Assignment(par, score=False, index=False)
+    assignment_matrix = assignment.assignment_matrix
+
+    # If there are more coded rows than matrix elements, add that
+    # number of rows to each element.
+    rows_per_element = int(par.num_coded_rows / (par.num_partitions * par.num_batches))
+    rows_by_partition = [par.num_batches * rows_per_element] * par.num_partitions
+    if rows_per_element > 0:
+        for row in range(par.num_batches):
+            for col in range(par.num_partitions):
+                assignment_matrix[row, col] = rows_per_element
+
+    # Assign the remaining rows in a block-diagonal fashion
+    remaining_rows_per_batch = par.rows_per_batch - rows_per_element * par.num_partitions
+    min_col = 0
+    for row in range(par.num_batches):
+        max_col = min_col + remaining_rows_per_batch
+        min_col = assign_block(par, assignment_matrix, row, min_col, max_col)
+
+    return assignment
+
+    coded_rows_per_partition = par.num_coded_rows / par.num_partitions
+    partial_partitions = set()
+
+    for partition in range(par.num_partitions):
+        if rows_by_partition[partition] < coded_rows_per_partition:
+            partial_partitions.add(partition)
+
+    # Assign any remaining rows randomly
+    # Assign symbols randomly row-wise
+    for row in range(par.num_batches):
+        row_sum = assignment_matrix[row].sum()
+        incremented_partitions = set()
+
+        while row_sum < par.rows_per_batch:
+
+            # Get a random column index corresponding to a partial partition
+            partial_non_incremented = {col for col in partial_partitions
+                                       if col not in incremented_partitions}
+
+            if len(partial_non_incremented) > 0:
+                col = random.sample(partial_non_incremented, 1)[0]
+            else:
+                col = random.sample(partial_partitions, 1)[0]
+
+            #print(assignment_matrix[row], partial_non_incremented, col)
+            """
+            while assignment_matrix[row, col] > rows_per_element and len(partial_partitions) > 1:
+                print(row, col, partial_partitions)
+                col = random.sample(partial_partitions, 1)[0]
+            """
+
+            # Increment the count
+            assignment_matrix[row, col] += 1
+            rows_by_partition[col] += 1
+            incremented_partitions.add(col)
+            row_sum += 1
+
+            # Remove the partition index if there are no more assignments
+            if rows_by_partition[col] == coded_rows_per_partition:
+                partial_partitions.remove(col)
+
+    return assignment
+
+def assignment_heuristic(par, verbose=True):
+    """ Create an assignment using heuristics.
+
+    Args:
+    par: System parametetrs
+    verbose: Print extra messages if True.
+
+    Returns: The resulting assignment
+    """
+
+    assignment = model.Assignment(par, score=False, index=False)
+    assignment_matrix = assignment.assignment_matrix
+    remaining_rows = par.num_coded_rows
+
+    # If there are more coded rows than matrix elements, add that
+    # number of rows to each element.
+    rows_per_element = int(par.num_coded_rows / (par.num_partitions * par.num_batches))
+    rows_by_partition = [par.num_batches * rows_per_element] * par.num_partitions
+    if rows_per_element > 0:
+        for row in range(par.num_batches):
+            for col in range(par.num_partitions):
+                assignment_matrix[row, col] = rows_per_element
+
+    # Assign any remaining rows randomly
+    coded_rows_per_partition = par.num_coded_rows / par.num_partitions
+    partial_partitions = set()
+
+    for partition in range(par.num_partitions):
+        if rows_by_partition[partition] < coded_rows_per_partition:
+            partial_partitions.add(partition)
+
+    # Assign symbols randomly row-wise
+    for row in range(par.num_batches):
+        row_sum = assignment_matrix[row].sum()
+        incremented_partitions = set()
+
+        while row_sum < par.rows_per_batch:
+
+            # Get a random column index corresponding to a partial partition
+            partial_non_incremented = {col for col in partial_partitions
+                                       if col not in incremented_partitions}
+
+            if len(partial_non_incremented) > 0:
+                col = random.sample(partial_non_incremented, 1)[0]
+            else:
+                col = random.sample(partial_partitions, 1)[0]
+
+            #print(assignment_matrix[row], partial_non_incremented, col)
+            """
+            while assignment_matrix[row, col] > rows_per_element and len(partial_partitions) > 1:
+                print(row, col, partial_partitions)
+                col = random.sample(partial_partitions, 1)[0]
+            """
+
+            # Increment the count
+            assignment_matrix[row, col] += 1
+            rows_by_partition[col] += 1
+            incremented_partitions.add(col)
+            row_sum += 1
+
+            # Remove the partition index if there are no more assignments
+            if rows_by_partition[col] == coded_rows_per_partition:
+                partial_partitions.remove(col)
+
+    return assignment
+
+def assignment_annealing(par, num_samples=100, verbose=False):
+    """ Create an assignment through simulated annealing.
+
+    A candidate solution is generated randomly. Parts of the rows are
+    de-assigned and re-assigned randomly. If the new solution performs better,
+    it replaces the old. Solutions are evaluated through sampling, so the
+    current solution will sometimes be replaced by a worse solution.
+
+    Args:
+    par: System parametetrs
+    num_samples: Number of samples taken when evaluating a solution.
+    verbose: Extra printouts if True.
+
+    Returns:
+    The resulting assignment.
+    """
+
+    # Find a candidate solution
+    if verbose:
+        print('Finding a candidate solution.')
+
+    num_subsets = nchoosek(par.num_servers, par.q)
+    assignment = assignment_random(par)
+    best_assignment = assignment
+    load = communication_load_sampled(par, best_assignment.assignment_matrix, best_assignment.labels, num_samples)
+    load /= num_subsets * par.q
+    delay = computational_delay_sampled(par, best_assignment.assignment_matrix, best_assignment.labels, num_samples)
+    best_score = load + delay
+
+    num_clear = max(int(par.num_coded_rows / 10), 3)
+    coded_rows_per_partition = par.num_coded_rows / par.num_partitions
+
+    while num_clear > 3:
+        if verbose:
+            print('De-assigning', num_clear, 'rows per iteration.')
+
+        improvement = 100
+        num_iterations = 1
+
+        # Clear and re-assign rows until the average improvement drops
+        # below the threshold.
+        while improvement / num_iterations > 0.01 or num_iterations < par.num_coded_rows / num_clear:
+            assignment = best_assignment.copy()
+
+            # Clear rows
+            rows_by_partition = [coded_rows_per_partition] * par.num_partitions
+            for _ in range(num_clear):
+                row = random.randint(0, par.num_batches - 1)
+                col = random.randint(0, par.num_partitions - 1)
+
+                # While the corresponding element is zero, randomize
+                # new indices.
+                while assignment.assignment_matrix[row, col] <= 0:
+                    row = random.randint(0, par.num_batches - 1)
+                    col = random.randint(0, par.num_partitions - 1)
+
+                assignment.assignment_matrix[row, col] -= 1
+                rows_by_partition[col] -= 1
+
+            # Re-assign the rows
+            assign_remaining_random(par, assignment.assignment_matrix, rows_by_partition)
+            load = communication_load_sampled(par, assignment.assignment_matrix, assignment.labels, num_samples)
+            load /= num_subsets * par.q
+            delay = computational_delay_sampled(par, assignment.assignment_matrix, assignment.labels, num_samples)
+            new_score = load + delay
+
+            print('Best score:', best_score, 'New score:', new_score)
+            if new_score < best_score:
+                improvement += best_score - new_score
+                if verbose:
+                    print('Iteration finished with an improvement of',
+                          best_score - new_score, 'Score:', new_score)
+
+                best_assignment = assignment
+                best_score = new_score
+
+            num_iterations += 1
+
+        num_clear = int(num_clear / 2)
+
+    return best_assignment
+
 def assign_remaining_random(par, assignment_matrix, rows_by_partition):
     """ Assign any remaining rows randomly.
 
@@ -298,9 +549,6 @@ def assign_remaining_random(par, assignment_matrix, rows_by_partition):
     coded_rows_per_partition = par.num_coded_rows / par.num_partitions
     partial_partitions = set()
 
-    #[partial_partitions.add(x) for x in range(par.num_partitions)
-    #if rows_by_partition[x] < coded_rows_per_partition]
-
     for partition in range(par.num_partitions):
         if rows_by_partition[partition] < coded_rows_per_partition:
             partial_partitions.add(partition)
@@ -314,7 +562,7 @@ def assign_remaining_random(par, assignment_matrix, rows_by_partition):
             col = random.sample(partial_partitions, 1)[0]
 
             # Increment the count
-            assignment_matrix[row, col] = assignment_matrix[row, col] + 1
+            assignment_matrix[row, col] += 1
             rows_by_partition[col] += 1
             row_sum += 1
 
@@ -322,16 +570,18 @@ def assign_remaining_random(par, assignment_matrix, rows_by_partition):
             if rows_by_partition[col] == coded_rows_per_partition:
                 partial_partitions.remove(col)
 
-def assignment_random(par):
+def assignment_random(par, verbose=False):
     """ Create an assignment matrix randomly.
 
     Args:
     par: System parameters
+    verbose: Unused
 
     Returns:
     The resulting assignment object.
     """
 
+    random.seed()
     assignment = model.Assignment(par, score=False, index=False)
     assignment_matrix = assignment.assignment_matrix
     rows_by_partition = [0 for x in range(par.num_partitions)]
@@ -454,9 +704,11 @@ def computational_delay(par, assignment_matrix, labels, Q=None):
         if not enough_symbols(par, rows_by_partition):
             set_score += 1
 
-        total_score += set_score
-        if set_score > worst_score:
-            worst_score = set_score
+        delay = par.computational_delay(q=set_score)
+
+        total_score += delay
+        if delay > worst_score:
+            worst_score = delay
 
     average_score = total_score / num_subsets
     return average_score, worst_score
@@ -500,6 +752,7 @@ def computational_delay_sampled(par, assignment_matrix, labels, num_samples):
     total_score = 0
 
     for _ in range(num_samples):
+        servers_waited_for = par.q
 
         # Generate a random sequence of servers
         Q = random.sample(range(par.num_servers), par.num_servers)
@@ -511,14 +764,12 @@ def computational_delay_sampled(par, assignment_matrix, labels, num_samples):
         batches_added = set()
 
         # Add the batches from the first q servers
-        #[[batches_added.add(x) for x in labels[y]] for y in Q[0:par.q]]
         for server in Q[0:par.q]:
             for batch in labels[server]:
                 batches_added.add(batch)
 
         for batch in batches_added:
             rows_by_partition = np.add(rows_by_partition, assignment_matrix[batch])
-        total_score = total_score + par.q
 
         # Add batches from more servers until there are enough rows to
         # decode all partitions.
@@ -531,12 +782,14 @@ def computational_delay_sampled(par, assignment_matrix, labels, num_samples):
                 rows_by_partition = np.add(rows_by_partition, assignment_matrix[batch])
 
             # Keep track of which batches we've added
-            #[batches_added.add(x) for x in labels[server]]
             for batch in labels[server]:
                 batches_added.add(batch)
 
             # Update the score
-            total_score = total_score + 1
+            servers_waited_for += 1
+
+        delay = par.computational_delay(q=servers_waited_for)
+        total_score += delay
 
     average_score = total_score / num_samples
     return average_score
@@ -607,6 +860,7 @@ def objective_function_sampled(par, assignment_matrix, labels, num_samples=1000)
     Tuple with first element estimated number of unicasts, and second estimated
     number of servers required to wait for.
     """
+    random.seed()
     delay = computational_delay_sampled(par, assignment_matrix, labels, num_samples)
     load = communication_load_sampled(par, assignment_matrix, labels, num_samples)
     return load, delay
@@ -641,15 +895,42 @@ class Tests(unittest.TestCase):
         self.delay_eval_comp(par, assignment)
         return
 
+    def test_annealing_assignment(self):
+        """ Some tests on the hybrid assignment solver. """
+        par = self.get_parameters()
+        assignment = assignment_annealing(par)
+        self.assertTrue(model.is_valid(par, assignment.assignment_matrix, verbose=True))
+        self.load_eval_comp(par, assignment)
+        self.delay_eval_comp(par, assignment)
+        return
+
+    def test_heuristic_assignment(self):
+        """ Some tests on the heuristic assignment solver. """
+        par = self.get_parameters()
+        assignment = assignment_heuristic(par)
+        self.assertTrue(model.is_valid(par, assignment.assignment_matrix, verbose=True))
+        self.load_eval_comp(par, assignment)
+        self.delay_eval_comp(par, assignment)
+        return
+
+    def test_block_assignment(self):
+        """ Some tests on the block assignment solver. """
+        par = self.get_parameters()
+        assignment = assignment_block(par)
+        self.assertTrue(model.is_valid(par, assignment.assignment_matrix, verbose=True))
+        self.load_eval_comp(par, assignment)
+        self.delay_eval_comp(par, assignment)
+        return
+
     def test_load_known(self):
         """ Check the load evaluation against the known correct value. """
         known_unicasts = 16
-        par = main.SystemParameters(2, # Rows per batch
-                                    6, # Number of servers (K)
-                                    4, # Servers to wait for (q)
-                                    4, # Outputs (N)
-                                    1/2, # Server storage (\mu)
-                                    1) # Partitions (T)
+        par = model.SystemParameters(2, # Rows per batch
+                                     6, # Number of servers (K)
+                                     4, # Servers to wait for (q)
+                                     4, # Outputs (N)
+                                     1/2, # Server storage (\mu)
+                                     1) # Partitions (T)
 
         assignment = assignment_random(par)
         self.load_known_comparison(par, assignment, known_unicasts)
@@ -659,6 +940,31 @@ class Tests(unittest.TestCase):
 
         assignment = assignment_hybrid(par)
         self.load_known_comparison(par, assignment, known_unicasts)
+
+        assignment = assignment_annealing(par)
+        self.load_known_comparison(par, assignment, known_unicasts)
+        return
+
+    def test_delay_known(self):
+        """ Check the load evaluation against the known correct value. """
+        par = model.SystemParameters(2, # Rows per batch
+                                     6, # Number of servers (K)
+                                     4, # Servers to wait for (q)
+                                     4, # Outputs (N)
+                                     1/2, # Server storage (\mu)
+                                     1) # Partitions (T)
+
+        assignment = assignment_random(par)
+        self.delay_known_comparison(par, assignment)
+
+        assignment = assignment_greedy(par)
+        self.delay_known_comparison(par, assignment)
+
+        assignment = assignment_hybrid(par)
+        self.delay_known_comparison(par, assignment)
+
+        assignment = assignment_annealing(par)
+        self.delay_known_comparison(par, assignment)
         return
 
     def load_eval_comp(self, par, assignment):
@@ -710,6 +1016,30 @@ class Tests(unittest.TestCase):
         acceptable_ratio = 0.1
         self.assertTrue(delay_difference / delay_exhaustive_avg < acceptable_ratio)
         self.assertTrue(delay_sampled <= delay_exhaustive_worst)
+        return
+
+    def delay_known_comparison(self, par, assignment):
+        """ Check the delay evaluation against the known correct value. """
+        known_delay = par.computational_delay()
+        num_samples = 100
+        delay_sampled = computational_delay_sampled(par,
+                                                    assignment.assignment_matrix,
+                                                    assignment.labels,
+                                                    num_samples)
+
+        difference = abs(delay_sampled - known_delay)
+        self.assertTrue(difference < known_delay / 100)
+
+        delay_exhaustive_avg, delay_exhaustive_worst = computational_delay(par,
+                                                                           assignment.assignment_matrix,
+                                                                           assignment.labels)
+
+        difference = abs(delay_exhaustive_worst - known_delay)
+        self.assertTrue(difference < known_delay / 100)
+
+        difference = abs(delay_exhaustive_avg - known_delay)
+        self.assertTrue(difference < known_delay / 100)
+
         return
 
     def get_parameters(self):

@@ -18,12 +18,15 @@
 This module contains code relating to the system model presented in the
 paper by Li et al, as well as the integer programming formulation presented
 by us. This module is used primarily by the various solvers.
+
+Run the file to run the unit tests.
 """
 
 import math
 import itertools as it
 import uuid
 import os
+import tempfile
 import unittest
 import numpy as np
 from scipy.misc import comb as nchoosek
@@ -69,14 +72,22 @@ class SystemParameters(object):
         assert num_source_rows / num_partitions % 1 == 0, \
             'There must be an integer number of source rows per partition.'
 
+        assert num_coded_rows / num_partitions % 1 == 0, \
+            'There must be an integer number of coded rows per partition. num_partitions: %d' \
+            % num_partitions
+
         rows_per_partition = int(num_source_rows / num_partitions)
         self.rows_per_partition = rows_per_partition
 
         self.sq = self.s_q()
+
+        # Setup a dict to cache delay computations in
+        self.cached_delays = dict()
+
         return
 
     @classmethod
-    def parameters_from_rows(cls, rows_per_server, rows_per_partition, min_num_servers, code_rate, muq):
+    def fixed_complexity_parameters(cls, rows_per_server, rows_per_partition, min_num_servers, code_rate, muq):
         """ Attempt to find a set of servers with a fixed number of rows per
         server and rows per partition. """
 
@@ -147,13 +158,23 @@ class SystemParameters(object):
         string += '------------------------------'
         return string
 
+    def old_identifier(self):
+        """ Return the old string identifier for these parameters. """
+        string = 'm_' + str(self.num_source_rows)
+        string += '_K_' + str(self.num_servers)
+        string += '_q_' + str(self.q)
+        string += '_N_' + str(self.num_outputs)
+        string += '_mu_' + str(self.server_storage)
+        string += '_T_' + str(self.num_partitions)
+        return string
+
     def identifier(self):
         """ Return a string identifier for these parameters. """
         string = 'm_' + str(self.num_source_rows)
         string += '_K_' + str(self.num_servers)
         string += '_q_' + str(self.q)
         string += '_N_' + str(self.num_outputs)
-        string += '_mu_' + str(self.server_storage)
+        string += '_muq_' + str(int(self.server_storage * self.q))
         string += '_T_' + str(self.num_partitions)
         return string
 
@@ -225,6 +246,39 @@ class SystemParameters(object):
             return min(load_1, load_2)
         else:
             return load_1
+
+    def computational_delay(self, q=None):
+        """ Return the computational delay.
+
+        Calculates the computational delay assuming a shifted exponential distribution.
+        We avoid approximating the result through a logarithm as it is not
+        explained in the paper.
+
+        Args:
+        q: The number of servers to wait for. If q is None, the value in self is used.
+
+        Returns:
+        The computational delay.
+        """
+
+        assert q is None or isinstance(q, int)
+        if q is None:
+            q = self.q
+
+        # Return a cached result if there is one
+        if q in self.cached_delays:
+            return self.cached_delays[q]
+
+        delay = 1
+        for j in range(self.num_servers - q + 1, self.num_servers):
+            delay += 1 / j
+
+        delay *= self.server_storage * self.num_outputs
+
+        # Cache the result
+        self.cached_delays[q] = delay
+
+        return delay
 
 class Perspective(object):
     """ Representation of the count vectors from the perspective of a single server
@@ -434,7 +488,6 @@ class Assignment(object):
         np.save(directory + self.par.identifier() + '.npy', self.assignment_matrix)
         return
 
-    # TODO: Throw exception if file doesn't exist
     @classmethod
     def load(cls, par, directory='./assignments/'):
         """ Load assignment from disk
@@ -642,6 +695,23 @@ class Assignment(object):
         assert self.index and self.score, 'Cannot evaluateif there is no index.'
         return self.index[row].summary[col]
 
+    def copy(self):
+        """ Return a deep copy of the assignment. """
+
+        assignment_matrix = np.array(self.assignment_matrix)
+        if self.index:
+            index = [x.copy() for x in self.index]
+            score = self.score
+        else:
+            index = False
+            score = False
+
+        return Assignment(self.par,
+                          assignment_matrix=assignment_matrix,
+                          labels=self.labels,
+                          score=score,
+                          index=index)
+
 def is_valid(par, assignment_matrix, verbose=False):
     """ Evaluate if an assignment is valid and complete.
 
@@ -653,6 +723,7 @@ def is_valid(par, assignment_matrix, verbose=False):
     Returns:
     True if the assignment matrix is valid and complete. False otherwise.
     """
+
     for row in assignment_matrix:
         if row.sum() != par.rows_per_batch:
             if verbose:
@@ -686,7 +757,6 @@ def remaining_unicasts(rows_by_partition):
 
     return unicasts
 
-# TODO: Test load/save
 class Tests(unittest.TestCase):
     """ Elementary unit tests. """
 
@@ -721,6 +791,46 @@ class Tests(unittest.TestCase):
         batches_per_server = par.server_storage * par.num_source_rows / par.rows_per_batch
         for batches in assignment.labels:
             self.assertEqual(len(batches), batches_per_server)
+        return
+
+    def test_save_load(self):
+        """ Verify that saving and loading works. """
+        par = self.get_parameters()
+        assignment = Assignment(par)
+        assignment.assignment_matrix = np.array([[2, 0, 0, 0, 0],
+                                                 [0, 2, 0, 0, 0],
+                                                 [0, 0, 2, 0, 0],
+                                                 [0, 0, 0, 2, 0],
+                                                 [0, 0, 0, 0, 2],
+                                                 [2, 0, 0, 0, 0],
+                                                 [0, 2, 0, 0, 0],
+                                                 [0, 0, 2, 0, 0],
+                                                 [0, 0, 0, 2, 0],
+                                                 [0, 0, 0, 0, 2],
+                                                 [2, 0, 0, 0, 0],
+                                                 [0, 2, 0, 0, 0],
+                                                 [0, 0, 2, 0, 0],
+                                                 [0, 0, 0, 2, 0],
+                                                 [0, 0, 0, 0, 2]])
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            assignment.save(directory=tmpdirname)
+            assignment_loaded = Assignment.load(par, directory=tmpdirname)
+            self.assertTrue(np.array_equal(assignment.assignment_matrix, assignment_loaded.assignment_matrix))
+
+        return
+
+    def test_load(self):
+        """ Verify that loading non-existent files throws the correct exception. """
+        par = SystemParameters(2, # Rows per batch
+                               6, # Number of servers (K)
+                               4, # Servers to wait for (q)
+                               4, # Outputs (N)
+                               1/2, # Server storage (\mu)
+                               10) # Partitions (T)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            with self.assertRaises(FileNotFoundError):
+                assignment_loaded = Assignment.load(par, directory=tmpdirname)
         return
 
     def get_parameters(self):
