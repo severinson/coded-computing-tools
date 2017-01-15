@@ -40,6 +40,10 @@ def simulate(parameters, solver, directory, num_runs, num_samples=100, verbose=F
     verbose: Passed to the solver.
     """
 
+    # Create the directory to store the results in if it doesn't exist
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
     for par, i in zip(parameters, range(1, len(parameters) + 1)):
 
         # Try to load the results from disk
