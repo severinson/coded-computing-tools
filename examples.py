@@ -375,11 +375,11 @@ def main():
 
     ## Run simulations for various solvers and parameters
     # Load-delay parameters
-    simulate(get_parameters_load_delay(), solvers.assignment_block, './results/heuristic/', 1)
+    simulate(get_parameters_load_delay(), solvers.assignment_heuristic, './results/heuristic/', 1)
     simulate(get_parameters_load_delay(), solvers.assignment_random, './results/random/', 100)
 
     # Partitioning parameters
-    simulate(get_parameters_partitioning(), solvers.assignment_block, './results/heuristic/', 1)
+    simulate(get_parameters_partitioning(), solvers.assignment_heuristic, './results/heuristic/', 1)
     simulate(get_parameters_partitioning(), solvers.assignment_random, './results/random/', 100)
 
     # Create the plots

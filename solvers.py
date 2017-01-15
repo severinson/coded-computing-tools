@@ -310,7 +310,7 @@ def assign_block(par, assignment_matrix, row, min_col, max_col):
 
     return wrapped_col
 
-def assignment_block(par, verbose=True):
+def assignment_heuristic(par, verbose=True):
     """ Create an assignment using a block-diagonal structure.
 
     Args:
@@ -349,72 +349,6 @@ def assignment_block(par, verbose=True):
             partial_partitions.add(partition)
 
     # Assign any remaining rows randomly
-    # Assign symbols randomly row-wise
-    for row in range(par.num_batches):
-        row_sum = assignment_matrix[row].sum()
-        incremented_partitions = set()
-
-        while row_sum < par.rows_per_batch:
-
-            # Get a random column index corresponding to a partial partition
-            partial_non_incremented = {col for col in partial_partitions
-                                       if col not in incremented_partitions}
-
-            if len(partial_non_incremented) > 0:
-                col = random.sample(partial_non_incremented, 1)[0]
-            else:
-                col = random.sample(partial_partitions, 1)[0]
-
-            #print(assignment_matrix[row], partial_non_incremented, col)
-            """
-            while assignment_matrix[row, col] > rows_per_element and len(partial_partitions) > 1:
-                print(row, col, partial_partitions)
-                col = random.sample(partial_partitions, 1)[0]
-            """
-
-            # Increment the count
-            assignment_matrix[row, col] += 1
-            rows_by_partition[col] += 1
-            incremented_partitions.add(col)
-            row_sum += 1
-
-            # Remove the partition index if there are no more assignments
-            if rows_by_partition[col] == coded_rows_per_partition:
-                partial_partitions.remove(col)
-
-    return assignment
-
-def assignment_heuristic(par, verbose=True):
-    """ Create an assignment using heuristics.
-
-    Args:
-    par: System parametetrs
-    verbose: Print extra messages if True.
-
-    Returns: The resulting assignment
-    """
-
-    assignment = model.Assignment(par, score=False, index=False)
-    assignment_matrix = assignment.assignment_matrix
-    remaining_rows = par.num_coded_rows
-
-    # If there are more coded rows than matrix elements, add that
-    # number of rows to each element.
-    rows_per_element = int(par.num_coded_rows / (par.num_partitions * par.num_batches))
-    rows_by_partition = [par.num_batches * rows_per_element] * par.num_partitions
-    if rows_per_element > 0:
-        for row in range(par.num_batches):
-            for col in range(par.num_partitions):
-                assignment_matrix[row, col] = rows_per_element
-
-    # Assign any remaining rows randomly
-    coded_rows_per_partition = par.num_coded_rows / par.num_partitions
-    partial_partitions = set()
-
-    for partition in range(par.num_partitions):
-        if rows_by_partition[partition] < coded_rows_per_partition:
-            partial_partitions.add(partition)
-
     # Assign symbols randomly row-wise
     for row in range(par.num_batches):
         row_sum = assignment_matrix[row].sum()
@@ -908,15 +842,6 @@ class Tests(unittest.TestCase):
         """ Some tests on the heuristic assignment solver. """
         par = self.get_parameters()
         assignment = assignment_heuristic(par)
-        self.assertTrue(model.is_valid(par, assignment.assignment_matrix, verbose=True))
-        self.load_eval_comp(par, assignment)
-        self.delay_eval_comp(par, assignment)
-        return
-
-    def test_block_assignment(self):
-        """ Some tests on the block assignment solver. """
-        par = self.get_parameters()
-        assignment = assignment_block(par)
         self.assertTrue(model.is_valid(par, assignment.assignment_matrix, verbose=True))
         self.load_eval_comp(par, assignment)
         self.delay_eval_comp(par, assignment)
