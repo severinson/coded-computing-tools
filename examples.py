@@ -14,7 +14,8 @@
 # limitations under the License.                                           #
 ############################################################################
 
-# This is file contains some usage examples.
+""" This is module contains coded used to run the simulations and generate the
+plots we present in our paper. """
 
 import math
 import sys
@@ -23,397 +24,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import model
 import solvers
-
-# Evaluate the speed of the greedy solver
-def greedyRuntime():
-    rows_per_batch = [2, 20, 40, 80, 160]
-    results = dict()
-    for r in rows_per_batch:
-        p = model.SystemParameters(r, # Rows per batch
-                                   6, # Number of servers (K)
-                                   4, # Servers to wait for (q)
-                                   4, # Outputs (N)
-                                   1/2, # Server storage (\mu)
-                                   1) # Partitions (T)
-        main.greedyPerformance(p, [1], n=10)
-
-# Evaluate the performance for varying size matrices using the hybrid
-# solvers.
-def ex1():
-    num_servers = 6
-    q = 4
-    server_storage = 1/2
-    #rows_per_batch = [2, 4, 8, 16, 32, 64, 128]
-    rows_per_batch = [128];
-    #partitions = [10, 20, 40, 80, 160, 320, 640]
-    partitions = [640];
-    parameters = list()
-    for i in range(len(rows_per_batch)):
-        p = model.SystemParameters(rows_per_batch[i],
-                                   num_servers,
-                                   q,
-                                   q,
-                                   server_storage,
-                                   partitions[i])
-        parameters.append(p)
-
-    results = main.performanceEval(parameters)
-    return results
-
-# Evaluate the performance of random assignments for varying size
-# matrices.
-def ex2():
-    num_servers = 6
-    q = 4
-    server_storage = 1/2
-    rows_per_batch = [256, 512, 1024, 2048, 4096, 8192, 16384]
-    partitions = [1280, 2560, 5120, 10240, 20480, 40960, 81920]
-
-    for i in range(len(rows_per_batch)):
-        p = model.SystemParameters(rows_per_batch[i], num_servers, q, q, server_storage, partitions[i])
-        print(p)
-
-        df = list()
-        n = 100
-        for j in range(n):
-            X, A = solvers.assignmentRandom(p)
-            avg_load, avg_missed_delay = solvers.objective_function_sampled(p, X, A)
-
-            result = dict()
-            result['sampled'] = avg_load
-            df.append(result)
-
-        df = pd.Series(df)
-        df.to_csv(p.identifier() + '.csv')
-
-    return
-
-# Compare the exhaustive and sampled objective functions
-def ex3():
-    num_servers = 6
-    q = 4
-    server_storage = 1/2
-    rows_per_batch = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
-    partitions = [2, 20, 40, 80, 160, 320, 640, 1280, 2560, 5120, 10240, 20480, 40960, 81920]
-    n = 100
-
-    for i in range(len(rows_per_batch)):
-        p = model.SystemParameters(rows_per_batch[i], num_servers, q, q, server_storage, partitions[i])
-
-        # Try to load the results from disk
-        try:
-            pd.read_csv('./results/' + p.identifier() + '.csv')
-            continue
-
-        # Generate the data if we couldn't find it
-        except FileNotFoundError:
-            print('Running simulations for:')
-            print(p)
-
-            df = list()
-            for j in range(n):
-                X, A = solvers.assignmentRandom(p)
-                avg_load, avg_missed_delay = solvers.objective_function_sampled(p, X, A)
-
-                result = dict()
-                result['sampled'] = avg_load
-                df.append(result)
-
-            df = pd.DataFrame(df)
-            df.to_csv('./results/' + p.identifier() + '.csv')
-
-    return
-
-def ex4():
-    num_servers = 6
-    q = 4
-    server_storage = 1/2
-    rows_per_batch = [4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
-    partitions = [20, 40, 80, 160, 320, 640, 1280, 2560, 5120, 10240]
-    results = list()
-
-    for i in range(len(rows_per_batch)):
-        p = model.SystemParameters(rows_per_batch[i], num_servers, q, q, server_storage, partitions[i])
-        df = pd.read_csv(p.identifier() + '.csv')
-        results = list()
-
-        rows = int(df.size / 2)
-        for j in range(rows):
-            r = eval(df.iloc[j][1])
-            results.append(r)
-
-        df = pd.DataFrame(results)
-        df.to_csv(p.identifier() + '.csv')
-
-    return
-
-def ex5():
-    num_servers = 6
-    q = 4
-    server_storage = 1/2
-    rows_per_batch = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
-    partitions = [10, 20, 40, 80, 160, 320, 640, 1280, 2560, 5120, 10240, 20480, 40960, 81920]
-    results = list()
-
-    for i in range(len(rows_per_batch)):
-        p = model.SystemParameters(rows_per_batch[i], num_servers, q, q, server_storage, partitions[i])
-        df = pd.read_csv('./results/' + p.identifier() + '.csv')
-        load = (df['sampled'] + p.num_multicasts()) / p.num_source_rows / p.num_outputs / p.unpartitioned_load()
-
-        plt.rc('text', usetex=True)
-        plt.rc('font', family='serif')
-        plt.semilogx([p.num_source_rows for x in range(len(load))], load, 'b.')
-
-        '''
-        if 'exhaustive' in df:
-            load = df['exhaustive'] / p.num_source_rows / p.num_outputs / p.unpartitioned_load()
-            plt.semilogx([p.num_source_rows for x in range(len(load))], load, 'b.')
-        '''
-
-        plt.grid()
-        plt.ylabel('Communication Load Increase', fontsize=15)
-        plt.xlabel('$m$', fontsize=15)
-
-    plt.show()
-    return
-
-def ex6():
-    num_servers = [60, 600, 6000]
-    q = [40, 400, 4000]
-    server_storage = [1/x for x in q]
-    num_outputs = q
-    rows_per_batch = 2
-    partitions = [10, 100, 1000]
-    n = 100
-
-    for i in range(len(q)):
-        p = model.SystemParameters(rows_per_batch, num_servers[i], q[i], num_outputs[i], server_storage[i], partitions[i])
-
-        # Try to load the results from disk
-        try:
-            pd.read_csv('./results/' + p.identifier() + '.csv')
-            continue
-
-        # Generate the data if we couldn't find it
-        except FileNotFoundError:
-            print('Running simulations for:')
-            print(p)
-
-            df = list()
-            for j in range(n):
-                X, A = solvers.assignmentRandom(p)
-                avg_load, avg_missed_delay = solvers.objective_function_sampled(p, X, A)
-
-                result = dict()
-                result['sampled'] = avg_load
-                result['delay'] = avg_missed_delay
-                df.append(result)
-
-            df = pd.DataFrame(df)
-            df.to_csv(p.identifier() + '.csv')
-
-    return
-
-# Histograms
-def ex7():
-    num_servers = 6
-    q = 4
-    server_storage = 1/2
-    rows_per_batch = [2]#, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
-    partitions = [10]#, 20, 40, 80, 160, 320, 640, 1280, 2560, 5120, 10240]
-
-    for i in range(len(rows_per_batch)):
-        p = model.SystemParameters(rows_per_batch[i], num_servers, q, q, server_storage, partitions[i])
-        df = pd.read_csv('./results/' + p.identifier() + '.csv')
-
-        load = (df['sampled'] + p.num_multicasts()) / p.num_source_rows / p.num_outputs / p.unpartitioned_load()
-        fig = plt.figure()
-        plt.hist(load, bins=20, normed=True)
-        plt.grid()
-        plt.xlabel('Communication Load Increase')
-        plt.ylabel('Probability Density')
-
-        load = (df['exhaustive'] + p.num_multicasts()) / p.num_source_rows / p.num_outputs / p.unpartitioned_load()
-        fig = plt.figure()
-        plt.hist(load, bins=20, normed=True)
-        plt.grid()
-        plt.xlabel('Communication Load Increase')
-        plt.ylabel('Probability Density')
-
-    plt.show()
-    return
-
-def ex8():
-    num_servers = [60, 600, 6000]
-    q = [40, 400, 4000]
-    server_storage = [1/x for x in q]
-    num_outputs = q
-    rows_per_batch = 2
-    partitions = [10, 100, 1000]
-    n = 100
-
-    for i in range(len(q)):
-        p = model.SystemParameters(rows_per_batch, num_servers[i], q[i], num_outputs[i], server_storage[i], partitions[i])
-        df = pd.read_csv('./results/' + p.identifier() + '.csv')
-        load = (df['sampled'] + p.num_multicasts()) / p.num_source_rows / p.num_outputs / p.unpartitioned_load()
-
-        plt.rc('text', usetex=True)
-        plt.rc('font', family='serif')
-        plt.semilogx([p.num_servers for x in range(len(load))], load, 'b.')
-        plt.grid()
-        plt.ylabel('Communication Load Increase', fontsize=15)
-        plt.xlabel('$K$', fontsize=15)
-
-    plt.show()
-    return
-
-def ex9():
-    num_servers = [60, 600]
-    q = [40, 400]
-    server_storage = [1/x for x in q]
-    num_outputs = q
-    rows_per_batch = 2
-    partitions = [100, 1000]
-    parameters = [model.SystemParameters(rows_per_batch, x[0], x[1], x[2], x[3], x[4])
-                  for x in zip(num_servers, q, num_outputs, server_storage, partitions)]
-
-    directory = './tmp/'
-    simulations(parameters, directory=directory)
-    plots(parameters, directory=directory)
-
-def ex10():
-    num_servers = 6
-    q = 4
-    server_storage = 1/2
-    rows_per_batch = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
-    partitions = [10, 20, 40, 80, 160, 320, 640, 1280, 2560, 5120, 10240]
-    parameters = [model.SystemParameters(x[0], num_servers, q, q, server_storage, x[1]) for x in zip(rows_per_batch, partitions)]
-
-    directory = './tmp/'
-    simulations(parameters, directory=directory)
-    plots(parameters, directory=directory)
-
-def ex11():
-    rows_per_server = 2000
-    rows_per_partition = 10
-    code_rate = 2/3
-    muq = 2
-    min_num_servers = 3
-    parameters = list()
-    for i in range(7):
-        p = model.SystemParameters.parameters_from_rows(rows_per_server,
-                                                        rows_per_partition,
-                                                        min_num_servers,
-                                                        code_rate,
-                                                        muq)
-        min_num_servers = p.num_servers
-        parameters.append(p)
-        print(p)
-
-    directory = './results/heuristic/'
-    #simulations(parameters, solvers.assignment_heuristic, n=100, directory=directory)
-
-    par = parameters[-1]
-    simulations([par], solvers.assignment_heuristic, n=100, directory=directory)
-
-    directories = ['./results/random/', './results/hybrid/', './results/heuristic/']
-    plots(parameters, directories=directories)
-
-# Histogram of the sampled objective functions
-def ex12():
-    rows_per_batch = 16
-    num_servers = 126
-    q = 84
-    server_storage = 2 / q
-    num_outputs = q
-    partitions = 8400
-    p = model.SystemParameters(rows_per_batch, num_servers, q, num_outputs, server_storage, partitions)
-    directory = './histogram_repeated/'
-
-    # Try to load the results from disk
-    try:
-        df = pd.read_csv(directory + p.identifier() + '.csv')
-
-    # Otherwise run the simulations
-    except FileNotFoundError:
-        print('Running simulations for:')
-        print(p)
-
-        X, A = solvers.assignmentRandom(p)
-        assert solvers.is_valid(p, X)
-
-        n = 1000
-        df = list()
-        for i in range(n):
-
-            # Evaluate it
-            avg_load, avg_delay = solvers.sampledObjectiveFunction(X, A, p, n=1)
-            print(avg_load, avg_delay)
-
-            # Store the results
-            result = dict()
-            result['load'] = avg_load
-            result['delay'] = avg_delay
-            df.append(result)
-
-            # Write a dot to show that progress is being made
-            sys.stdout.write('.')
-            sys.stdout.flush()
-
-        print('')
-
-        # Create a pandas dataframe and write it to disk
-        df = pd.DataFrame(df)
-        df.to_csv(directory + p.identifier() + '.csv')
-
-    # Histogram of the load
-    fig = plt.figure()
-    load = (df['load'] + p.num_multicasts()) / p.num_source_rows / p.num_outputs / p.unpartitioned_load()
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    plt.hist(load, bins=20, normed=True)
-    plt.hist(load[0:100], bins=20, normed=True)
-    plt.grid(True, which='both')
-    #plt.ylabel('Communication Load Increase', fontsize=15)
-    #plt.xlabel('$K$', fontsize=15)
-
-    #plt.plot(load.mean(), 0, 'b*')
-    #plt.plot(load[0:100].mean(), 0, 'r*')
-
-    # Histogram of the delay
-    fig = plt.figure()
-    delay = df['delay'] / p.q
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    plt.hist(delay, bins=20, normed=True)
-    plt.hist(delay[0:100], bins=20, normed=True)
-    plt.grid(True, which='both')
-    #plt.ylabel('Computational Delay Increase', fontsize=15)
-    #plt.xlabel('$K$', fontsize=15)
-
-    plt.show()
-    return
-
-def rename_files():
-    """ Rename files to conform to the new identifier standard. """
-    rows_per_server = 2000
-    rows_per_partition = 10
-    code_rate = 2/3
-    muq = 2
-    min_num_servers = 3
-    parameters = list()
-    old_directory = './tmp/'
-    directory = './results/'
-    for i in range(7):
-        p = model.SystemParameters.parameters_from_rows(rows_per_server,
-                                                        rows_per_partition,
-                                                        min_num_servers,
-                                                        code_rate,
-                                                        muq)
-        min_num_servers = p.num_servers
-        df = pd.read_csv(old_directory + p.old_identifier() + '.csv')
-        df.to_csv(directory + p.identifier() + '.csv')
-        print(p)
 
 def simulate(parameters, solver, directory, num_runs, num_samples=100, verbose=False):
     """ Run simulations for the parameters returned by get_parameters()
@@ -532,7 +142,8 @@ def partitioning_plots(parameters):
 
             result = results[key]
 
-            load = (df['load'] + par.num_multicasts()) / par.num_source_rows / par.num_outputs / par.unpartitioned_load()
+            load = df['load'] + par.num_multicasts()
+            load /= par.num_source_rows * par.num_outputs * par.unpartitioned_load()
             result['load']['mean'].append(load.mean())
             result['load']['min'].append(load.min())
             result['load']['max'].append(load.max())
@@ -561,7 +172,7 @@ def partitioning_plots(parameters):
         yerr = np.array([load_mean - load_min, load_max - load_mean])
         plt.errorbar(partitions, load_mean, yerr=yerr, fmt='none', ecolor=color)
 
-    x1,x2,y1,y2 = plt.axis()
+    x1, x2, y1, y2 = plt.axis()
     plt.axis([x1, x2, 0.95, 1.2])
     plt.legend(loc='upper left', numpoints=1)
     plt.setp(ax1.get_yticklabels(), fontsize=10)
@@ -587,7 +198,7 @@ def partitioning_plots(parameters):
         yerr = np.array([delay_mean - delay_min, delay_max - delay_mean])
         plt.errorbar(partitions, delay_mean, yerr=yerr, fmt='none', ecolor=color)
 
-    x1,x2,y1,y2 = plt.axis()
+    x1, x2, y1, y2 = plt.axis()
     plt.axis([x1, x2, 0.95, 1.5])
     plt.setp(ax2.get_xticklabels(), fontsize=12, weight='bold')
     plt.setp(ax2.get_yticklabels(), fontsize=10)
@@ -615,7 +226,6 @@ def load_delay_plots(parameters):
     #colors = ['b', 'r', 'k']
     colors = ['b', 'r']
     markers = ['o', 'd']
-    width = [10, 10, 7]
     #keys = ['random', 'hybrid', 'block']
     keys = ['Random', 'Heuristic']
 
@@ -649,7 +259,8 @@ def load_delay_plots(parameters):
 
             result = results[key]
 
-            load = (df['load'] + par.num_multicasts()) / par.num_source_rows / par.num_outputs / par.unpartitioned_load()
+            load = df['load'] + par.num_multicasts()
+            load /= par.num_source_rows * par.num_outputs * par.unpartitioned_load()
             result['load']['mean'].append(load.mean())
             result['load']['min'].append(load.min())
             result['load']['max'].append(load.max())
@@ -717,100 +328,8 @@ def load_delay_plots(parameters):
 
     return
 
-def load_delay_scatter_plots():
-    """ Scatter plots of the  load and delay for the parameters returned by get_parameters().
-
-    Attempts to load results from disk and will skip any missing results.
-    """
-
-    for par in parameters:
-        for directory, color, w in zip(directories, colors, width):
-            try:
-                df = pd.read_csv(directory + par.identifier() + '.csv')
-            except FileNotFoundError:
-                continue
-
-            load = (df['load'] + par.num_multicasts()) / par.num_source_rows / par.num_outputs / par.unpartitioned_load()
-            load_mean = load.mean()
-            #plt.semilogx([par.num_servers for x in range(len(load))], load, color + '.')
-            plt.semilogx(par.num_servers, load_mean, color + '.', label='YO')
-            yerr = np.array([[load_mean - load.min()], [load.max() - load_mean]])
-            plt.errorbar(par.num_servers, load_mean, yerr=yerr, ecolor=color, capsize=w)
-
-    #plt.legend(handles, ['Random', 'Heuristic + random', 'Hybrid'])
-    plt.legend()
-
-    # Plot the delay
-    fig = plt.figure()
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    plt.grid(True, which='both')
-    plt.ylabel('Computational Delay Increase', fontsize=15)
-    plt.xlabel('$K$', fontsize=15)
-    plt.autoscale()
-    plt.legend(['Random', 'Heuristic + random', 'Hybrid'])
-
-    for par in parameters:
-        for directory, color, w in zip(directories, colors, width):
-            try:
-                df = pd.read_csv(directory + par.identifier() + '.csv')
-            except FileNotFoundError:
-                continue
-
-            delay = df['delay'] / par.q
-            delay_mean = delay.mean()
-
-            #plt.semilogx([par.num_servers for x in range(len(delay))], delay, marker)
-            plt.semilogx(par.num_servers, delay_mean, color + '.')
-            yerr = np.array([[delay_mean - delay.min()], [delay.max() - delay_mean]])
-            plt.errorbar(par.num_servers, delay_mean, yerr=yerr, ecolor=color, capsize=w)
-    plt.show()
-
-def plots(parameters, directories=['./results/']):
-    fig = plt.figure()
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    plt.grid(True, which='both')
-    plt.ylabel('Communication Load Increase', fontsize=15)
-    plt.xlabel('$K$', fontsize=15)
-
-    for p in parameters:
-        for directory in directories:
-            try:
-                df = pd.read_csv(directory + p.identifier() + '.csv')
-            except FileNotFoundError:
-                continue
-
-            if 'load' not in df:
-                continue
-
-            load = (df['load'] + p.num_multicasts()) / p.num_source_rows / p.num_outputs / p.unpartitioned_load()
-            plt.semilogx([p.num_servers for x in range(len(load))], load, '.')
-
-    fig = plt.figure()
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    plt.grid(True, which='both')
-    plt.ylabel('Computational Delay Increase', fontsize=15)
-    plt.xlabel('$K$', fontsize=15)
-
-    for p in parameters:
-        for directory in directories:
-            try:
-                df = pd.read_csv(directory + p.identifier() + '.csv')
-            except FileNotFoundError:
-                continue
-
-            if 'delay' not in df:
-                continue
-
-            delay = df['delay'] / p.q
-            plt.semilogx([p.num_servers for x in range(len(delay))], delay, '.')
-
-    plt.show()
-
 def get_parameters_load_delay():
-    """ Get a list of parameters. """
+    """ Get a list of parameters for the load-delay plot. """
 
     rows_per_server = 2000
     rows_per_partition = 10
@@ -828,18 +347,25 @@ def get_parameters_load_delay():
     return parameters
 
 def get_parameters_partitioning():
-    """ Get a list of parameters. """
+    """ Get a list of parameters for the partitioning plot. """
 
     rows_per_batch = 250
     num_servers = 9
     q = 6
     num_outputs = q
     server_storage = 1/3
-    num_partitions = [2,3,4,5,6,8,10,12,15,20,24,25,30,40,50,60,75,100,120,125,150,200,250,300,375,500,600,750,1000,1500,3000]
+    num_partitions = [2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 24, 25, 30, 40, 50, 60,
+                      75, 100, 120, 125, 150, 200, 250, 300, 375, 500, 600, 750,
+                      1000, 1500, 3000]
 
     parameters = list()
     for partitions in num_partitions:
-        par = model.SystemParameters(rows_per_batch, num_servers, q, num_outputs, server_storage, partitions)
+        par = model.SystemParameters(rows_per_batch,
+                                     num_servers,
+                                     q,
+                                     num_outputs,
+                                     server_storage,
+                                     partitions)
         parameters.append(par)
 
     return parameters
@@ -847,19 +373,19 @@ def get_parameters_partitioning():
 def main():
     """ Main examples function """
 
-    for par in get_parameters_load_delay():
-        print(par.num_source_rows / par.num_partitions)
+    ## Run simulations for various solvers and parameters
+    # Load-delay parameters
+    simulate(get_parameters_load_delay(), solvers.assignment_block, './results/heuristic/', 1)
+    simulate(get_parameters_load_delay(), solvers.assignment_random, './results/random/', 100)
 
-    return
-    parameters = get_parameters_load_delay()
-    #parameters = get_parameters_partitioning()
+    # Partitioning parameters
+    simulate(get_parameters_partitioning(), solvers.assignment_block, './results/heuristic/', 1)
+    simulate(get_parameters_partitioning(), solvers.assignment_random, './results/random/', 100)
 
-    # Run simulations for various solvers
-    simulate(parameters, solvers.assignment_block, './results/heuristic/', 1)
-    #simulate(parameters, solvers.assignment_random, './results/random/', 100)
-
+    # Create the plots
     load_delay_plots(get_parameters_load_delay())
     partitioning_plots(get_parameters_partitioning())
+
     return
 
 if __name__ == '__main__':
