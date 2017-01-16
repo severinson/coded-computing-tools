@@ -48,27 +48,27 @@ def communication_load(par, assignment_matrix, labels, Q=None):
     # If a specific Q was given evaluate only that one.  Otherwise
     # evaluate all possible Q.
     if Q is None:
-        subsets = it.combinations(range(par.num_servers), par.q)
+        finished_servers_subsets = it.combinations(range(par.num_servers), par.q)
         num_subsets = nchoosek(par.num_servers, par.q)
     else:
-        subsets = [Q]
+        finished_servers_subsets = [Q]
         num_subsets = 1
 
-    for Q in subsets:
+    for finished_servers in finished_servers_subsets:
         set_score = 0
 
         # Count over all server perspectives
-        for k in Q:
+        for server in finished_servers:
             # Create the set of all symbols stored at k or sent to k
             # via multicast.
             rows = set()
 
-            for batch in labels[k]:
+            for batch in labels[server]:
                 rows.add(batch)
 
             for j in range(par.sq, int(par.server_storage*par.q) + 1):
-                for subset in it.combinations([x for x in Q if x != k], j):
-                    rows = rows | set.intersection(*[labels[x] for x in subset])
+                for multicast_subset in it.combinations([x for x in finished_servers if x != server], j):
+                    rows = rows | set.intersection(*[labels[x] for x in multicast_subset])
 
             selector_vector = np.zeros(par.num_batches)
             for row in rows:
@@ -110,27 +110,27 @@ def computational_delay(par, assignment_matrix, labels, Q=None):
     # If a specific Q was given evaluate only that one.  Otherwise
     # evaluate all possible Q.
     if Q is None:
-        subsets = it.combinations(range(par.num_servers), par.q)
+        finished_servers_subsets = it.combinations(range(par.num_servers), par.q)
         num_subsets = nchoosek(par.num_servers, par.q)
     else:
-        subsets = [Q]
+        finished_servers_subsets = [Q]
         num_subsets = 1
 
-    for Q in subsets:
+    for finished_servers in finished_servers_subsets:
         set_score = 0
 
         # Count the total number of symbols per partition
         rows_by_partition = np.zeros(par.num_partitions)
 
         # Keep track of the batches we've added
-        batches_in_Q = set()
+        batches = set()
 
         # Add the batches from the first q servers
-        for server in Q:
+        for server in finished_servers:
             for batch in labels[server]:
-                batches_in_Q.add(batch)
+                batches.add(batch)
 
-        for batch in batches_in_Q:
+        for batch in batches:
             rows_by_partition = np.add(rows_by_partition, assignment_matrix[batch])
         set_score = par.q
 
@@ -189,7 +189,7 @@ def computational_delay_sampled(par, assignment_matrix, labels, num_samples):
         servers_waited_for = par.q
 
         # Generate a random sequence of servers
-        Q = random.sample(range(par.num_servers), par.num_servers)
+        finished_servers = random.sample(range(par.num_servers), par.num_servers)
 
         # Count the total number of symbols per partition
         rows_by_partition = np.zeros(par.num_partitions)
@@ -198,7 +198,7 @@ def computational_delay_sampled(par, assignment_matrix, labels, num_samples):
         batches_added = set()
 
         # Add the batches from the first q servers
-        for server in Q[0:par.q]:
+        for server in finished_servers[0:par.q]:
             for batch in labels[server]:
                 batches_added.add(batch)
 
@@ -207,7 +207,7 @@ def computational_delay_sampled(par, assignment_matrix, labels, num_samples):
 
         # Add batches from more servers until there are enough rows to
         # decode all partitions.
-        for server in Q[par.q:]:
+        for server in finished_servers[par.q:]:
             if enough_symbols(par, rows_by_partition):
                 break
 
@@ -251,19 +251,20 @@ def communication_load_sampled(par, assignment_matrix, labels, num_samples):
 
     for _ in range(num_samples):
 
-        # Generate a random Q and k
-        Q = random.sample(server_list, par.q)
-        k = random.sample(Q, 1)[0]
+        # Generate a random set of finished servers and select one
+        finished_servers = random.sample(server_list, par.q)
+        finished_server = random.sample(finished_servers, 1)[0]
 
         # Sum the corresponding rows of the assignment matrix
         batches = set()
-        for batch in labels[k]:
+        for batch in labels[finished_server]:
             batches.add(batch)
 
         # Add the rows sent in the shuffle phase
         for j in range(par.sq, int(par.server_storage*par.q) + 1):
-            for subset in it.combinations([x for x in Q if x != k], j):
-                batches = batches | set.intersection(*[labels[x] for x in subset])
+            for multicast_subset in it.combinations([x for x in finished_servers
+                                                     if x != finished_server], j):
+                batches = batches | set.intersection(*[labels[x] for x in multicast_subset])
 
         count_vector = np.zeros(par.num_partitions) - par.num_source_rows / par.num_partitions
         for batch in batches:
