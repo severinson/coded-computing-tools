@@ -18,12 +18,15 @@
 plots we present in our paper. """
 
 import math
+import os
 import sys
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import model
-import solvers
+import evaluation
+from solvers import randomsolver
+from solvers import heuristicsolver
 
 def simulate(parameters, solver, directory, num_runs, num_samples=100, verbose=False):
     """ Run simulations for the parameters returned by get_parameters()
@@ -39,6 +42,7 @@ def simulate(parameters, solver, directory, num_runs, num_samples=100, verbose=F
     num_samples: The number of objective function samples.
     verbose: Passed to the solver.
     """
+    directory += solver.identifier + '/'
 
     # Create the directory to store the results in if it doesn't exist
     if not os.path.exists(directory):
@@ -66,14 +70,14 @@ def simulate(parameters, solver, directory, num_runs, num_samples=100, verbose=F
             for _ in range(num_runs):
 
                 # Create an assignment
-                assignment = solver(par, verbose=verbose)
+                assignment = solver.solve(par, verbose=verbose)
                 assert model.is_valid(par, assignment.assignment_matrix, verbose=True)
 
                 # Evaluate it
-                avg_load, avg_delay = solvers.objective_function_sampled(par,
-                                                                         assignment.assignment_matrix,
-                                                                         assignment.labels,
-                                                                         num_samples=num_samples)
+                avg_load, avg_delay = evaluation.objective_function_sampled(par,
+                                                                            assignment.assignment_matrix,
+                                                                            assignment.labels,
+                                                                            num_samples=num_samples)
 
                 # Store the results
                 result = dict()
@@ -379,12 +383,12 @@ def main():
 
     ## Run simulations for various solvers and parameters
     # Load-delay parameters
-    simulate(get_parameters_load_delay(), solvers.assignment_heuristic, './results/heuristic/', 1)
-    simulate(get_parameters_load_delay(), solvers.assignment_random, './results/random/', 100)
+    simulate(get_parameters_load_delay(), heuristicsolver.HeuristicSolver(), './results/', 1)
+    simulate(get_parameters_load_delay(), randomsolver.RandomSolver(), './resultsm/', 100)
 
     # Partitioning parameters
-    simulate(get_parameters_partitioning(), solvers.assignment_heuristic, './results/heuristic/', 1)
-    simulate(get_parameters_partitioning(), solvers.assignment_random, './results/random/', 100)
+    simulate(get_parameters_partitioning(), heuristicsolver.HeuristicSolver(), './results/', 1)
+    simulate(get_parameters_partitioning(), randomsolver.RandomSolver(), './results/', 100)
 
     # Create the plots
     load_delay_plots(get_parameters_load_delay())
