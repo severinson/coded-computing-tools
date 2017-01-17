@@ -307,17 +307,22 @@ def main():
 
     ## Run simulations for various solvers and parameters
     # Load-delay parameters
-    simulation.simulate(get_parameters_load_delay(),
-                        heuristicsolver.HeuristicSolver(), './results/', 1)
+    simulation.simulate(parameters=get_parameters_load_delay(),
+                        solver=heuristicsolver.HeuristicSolver(),
+                        directory='./results/', num_runs=1)
 
-    simulation.simulate(get_parameters_load_delay(),
-                        randomsolver.RandomSolver(), './results/', 100)
+    simulation.simulate(parameters=get_parameters_load_delay(),
+                        solver=randomsolver.RandomSolver(),
+                        directory='./results/', num_runs=100)
 
     # Partitioning parameters
-    simulation.simulate(get_parameters_partitioning(),
-                        heuristicsolver.HeuristicSolver(), './results/', 1)
-    simulation.simulate(get_parameters_partitioning(),
-                        randomsolver.RandomSolver(), './results/', 100)
+    simulation.simulate(parameters=get_parameters_partitioning(),
+                        solver=heuristicsolver.HeuristicSolver(),
+                        directory='./results/', num_runs=1)
+
+    simulation.simulate(parameters=get_parameters_partitioning(),
+                        solver=randomsolver.RandomSolver(),
+                        directory='./results/', num_runs=100)
 
     # Create the plots
     load_delay_plots(get_parameters_load_delay())
