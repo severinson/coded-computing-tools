@@ -306,23 +306,19 @@ def main():
     """ Main examples function """
 
     ## Run simulations for various solvers and parameters
-    # Load-delay parameters
-    simulation.simulate(parameters=get_parameters_load_delay(),
-                        solver=heuristicsolver.HeuristicSolver(),
-                        directory='./results/', num_runs=1)
+    heuristic_simulator = simulation.Simulator(solver=heuristicsolver.HeuristicSolver(),
+                                               directory='./tmp/')
 
-    simulation.simulate(parameters=get_parameters_load_delay(),
-                        solver=randomsolver.RandomSolver(),
-                        directory='./results/', num_runs=100)
+    random_simulator = simulation.Simulator(solver=randomsolver.RandomSolver(),
+                                            directory='./tmp/', num_runs=100)
+
+    # Load-delay parameters
+    heuristic_simulator.simulate_parameter_list(parameter_list=get_parameters_load_delay())
+    random_simulator.simulate_parameter_list(parameter_list=get_parameters_load_delay())
 
     # Partitioning parameters
-    simulation.simulate(parameters=get_parameters_partitioning(),
-                        solver=heuristicsolver.HeuristicSolver(),
-                        directory='./results/', num_runs=1)
-
-    simulation.simulate(parameters=get_parameters_partitioning(),
-                        solver=randomsolver.RandomSolver(),
-                        directory='./results/', num_runs=100)
+    heuristic_simulator.simulate_parameter_list(parameter_list=get_parameters_partitioning())
+    random_simulator.simulate_parameter_list(parameter_list=get_parameters_partitioning())
 
     # Create the plots
     load_delay_plots(get_parameters_load_delay())

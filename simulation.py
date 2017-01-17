@@ -24,56 +24,112 @@ import math
 import sys
 import os
 import warnings
+from multiprocessing import Pool
+from multiprocessing import TimeoutError
 import pandas as pd
 import evaluation
 import model
 
-def simulate(parameters=None, solver=None, directory=None, num_runs=1,
-             num_samples=100, verbose=False):
-
-    """ Run simulations for the parameters returned by get_parameters()
+class Simulator(object):
+    """ Create a simulator.
 
     Writes the results to disk as .csv files. Will also write the best
     assignment matrix found to disk in the same directory.
-
-    Args:
-    parameters: List of SystemParameters for which to run simulations.
-    solver: The solver to use. A function pointer.
-    directory: The directory to store the results in.
-    num_runs: The number of simulations to run.
-    num_samples: The number of objective function samples.
-    verbose: Passed to the solver.
     """
 
-    assert solver is not None
-    assert isinstance(directory, str)
-    assert isinstance(num_runs, int)
-    assert isinstance(num_samples, int)
-    assert isinstance(verbose, bool)
+    def __init__(self, solver=None, directory=None, num_runs=1,
+                 num_samples=100, verbose=False):
 
-    # Add the solver identifier to the directory name
-    directory += solver.identifier + '/'
+        """ Create a simulator.
 
-    # Create the directory to store the results in if it doesn't exist
-    if not os.path.exists(directory):
-        os.makedirs(directory)
+        Writes the results to disk as .csv files. Will also write the best
+        assignment matrix found to disk in the same directory.
 
-    for par, i in zip(parameters, range(1, len(parameters) + 1)):
-        if not isinstance(par, model.SystemParameters):
-            warnings.warn('Attempted to run simulation for something not of type SystemParameters:', par)
+        Args:
+        solver: The solver to use.
+        directory: The directory to store the results in.
+        num_runs: The number of simulations to run.
+        num_samples: The number of objective function samples.
+        verbose: Run the solverin verbose mode if True.
+        """
+
+        assert solver is not None
+        assert isinstance(directory, str)
+        assert isinstance(num_runs, int)
+        assert isinstance(num_samples, int)
+        assert isinstance(verbose, bool)
+
+        # Create the directory to store the results in if it doesn't exist
+        if not os.path.exists(directory + solver.identifier + '/'):
+            os.makedirs(directory + solver.identifier + '/')
+
+        self.solver = solver
+        self.directory = directory
+        self.num_runs = num_runs
+        self.num_samples = num_samples
+        self.verbose = verbose
+
+        return
+
+    def simulate_parameter_list(self, parameter_list=None, processes=4):
+        """ Run simulations for a list of parameters.
+
+        Args:
+        parameter_list: List of SystemParameters for which to run simulations.
+        processes: The number of parellel processes to run.
+        """
+
+        assert isinstance(parameter_list, list)
+        print('Running simulations for', len(parameter_list), 'parameters.')
+
+        # Run the simulations
+        with Pool(processes=processes) as pool:
+            result = pool.map(self.simulate, parameter_list)
+
+        return
+
+    def simulate(self, parameters):
+        """ Run simulations for a single set of parameters.
+
+        Writes the results to disk as .csv files. Will also write the best
+        assignment matrix found to disk in the same directory.
+
+        Args:
+        parameters: SystemParameters for which to run simulations.
+        """
+
+        assert isinstance(parameters, model.SystemParameters)
+
+        solver = self.solver
+        directory = self.directory
+        num_runs = self.num_runs
+        num_samples = self.num_samples
+        verbose = self.verbose
+
+        # Add the solver identifier to the directory name
+        directory += solver.identifier + '/'
+
+        # Create the directory to store the results in if it doesn't exist
+        if not os.path.exists(directory):
+            warnings.warn('Results directory ' + directory + ' doesn\'t exist. Returning.')
+            return
+
+        #for par, i in zip(parameters, range(1, len(parameters) + 1)):
+        i = 0
+        par = parameters
 
         # Try to load the results from disk
         try:
             pd.read_csv(directory + par.identifier() + '.csv')
             print('Found results for', directory, par.identifier(),
-                  'on disk. Skipping.',
-                  '(' + str(i) + '/' + str(len(parameters)) + ')')
-            continue
+                  'on disk. Skipping.',)
+                  #'(' + str(i) + '/' + str(len(parameters)) + ')')
+            return
 
         # Run the simulations if we couldn't find any
         except FileNotFoundError:
-            print('Running simulations for', directory, par.identifier(),
-                  '(' + str(i) + '/' + str(len(parameters)) + ')')
+            print('Running simulations for', directory, par.identifier())
+                  #'(' + str(i) + '/' + str(len(parameters)) + ')')
 
             best_assignment = None
             best_avg_load = math.inf
@@ -102,12 +158,6 @@ def simulate(parameters=None, solver=None, directory=None, num_runs=1,
                     best_assignment = assignment
                     best_avg_load = avg_load
 
-                # Write a dot to show that progress is being made
-                sys.stdout.write('.')
-                sys.stdout.flush()
-
-            print('')
-
             # Create a pandas dataframe and write it to disk
             dataframe = pd.DataFrame(results)
             dataframe.to_csv(directory + par.identifier() + '.csv')
@@ -116,4 +166,4 @@ def simulate(parameters=None, solver=None, directory=None, num_runs=1,
             if isinstance(best_assignment, model.Assignment):
                 best_assignment.save(directory=directory)
 
-    return
+        return
