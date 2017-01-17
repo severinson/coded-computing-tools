@@ -55,7 +55,7 @@ class GreedySolver(object):
         # Assign symbols row by row
         for row in range(par.num_batches):
             if verbose:
-                print('Assigning row', row, 'Bound:', assignment.bound())
+                print('Assigning batch', row, 'Bound:', assignment.bound())
 
             # Assign rows_per_batch rows per batch
             for _ in range(par.rows_per_batch):
