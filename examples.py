@@ -24,85 +24,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import model
-import evaluation
+import simulation
 from solvers import randomsolver
 from solvers import heuristicsolver
-
-def simulate(parameters, solver, directory, num_runs, num_samples=100, verbose=False):
-    """ Run simulations for the parameters returned by get_parameters()
-
-    Writes the results to disk as .csv files. Will also write the best
-    assignment matrix found to disk in the same directory.
-
-    Args:
-    parameters: List of SystemParameters for which to run simulations.
-    solver: The solver to use. A function pointer.
-    directory: The directory to store the results in.
-    num_runs: The number of simulations to run.
-    num_samples: The number of objective function samples.
-    verbose: Passed to the solver.
-    """
-    directory += solver.identifier + '/'
-
-    # Create the directory to store the results in if it doesn't exist
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-    for par, i in zip(parameters, range(1, len(parameters) + 1)):
-
-        # Try to load the results from disk
-        try:
-            pd.read_csv(directory + par.identifier() + '.csv')
-            print('Found results for', directory, par.identifier(),
-                  'on disk. Skipping.',
-                  '(' + str(i) + '/' + str(len(parameters)) + ')')
-            continue
-
-        # Run the simulations if we couldn't find any
-        except FileNotFoundError:
-            print('Running simulations for', directory, par.identifier(),
-                  '(' + str(i) + '/' + str(len(parameters)) + ')')
-
-            best_assignment = None
-            best_avg_load = math.inf
-
-            results = list()
-            for _ in range(num_runs):
-
-                # Create an assignment
-                assignment = solver.solve(par, verbose=verbose)
-                assert model.is_valid(par, assignment.assignment_matrix, verbose=True)
-
-                # Evaluate it
-                avg_load, avg_delay = evaluation.objective_function_sampled(par,
-                                                                            assignment.assignment_matrix,
-                                                                            assignment.labels,
-                                                                            num_samples=num_samples)
-
-                # Store the results
-                result = dict()
-                result['load'] = avg_load
-                result['delay'] = avg_delay
-                results.append(result)
-
-                # Keep the best assignment
-                if avg_load < best_avg_load:
-                    best_assignment = assignment
-                    best_avg_load = avg_load
-
-                # Write a dot to show that progress is being made
-                sys.stdout.write('.')
-                sys.stdout.flush()
-
-            print('')
-
-            # Create a pandas dataframe and write it to disk
-            df = pd.DataFrame(results)
-            df.to_csv(directory + par.identifier() + '.csv')
-
-            # Write the best assignment to disk
-            assignment.save(directory=directory)
-    return
 
 def partitioning_plots(parameters):
     """ Plot load and delay against number of partitions.
@@ -114,7 +38,7 @@ def partitioning_plots(parameters):
     """
 
     # List of directories with results
-    directories = ['./results/random/', './results/heuristic/']
+    directories = ['./results/RandomSolver/', './results/HeuristicSolver/']
     colors = ['b', 'r']
     markers = ['o', 'd']
     #keys = ['random', 'hybrid', 'block']
@@ -230,7 +154,7 @@ def load_delay_plots(parameters):
 
     # List of directories with results
     #directories = ['./results/random/', './results/hybrid/', './results/block/']
-    directories = ['./results/random/', './results/heuristic/']
+    directories = ['./results/RandomSolver/', './results/HeuristicSolver/']
     #colors = ['b', 'r', 'k']
     colors = ['b', 'r']
     markers = ['o', 'd']
@@ -383,12 +307,17 @@ def main():
 
     ## Run simulations for various solvers and parameters
     # Load-delay parameters
-    simulate(get_parameters_load_delay(), heuristicsolver.HeuristicSolver(), './results/', 1)
-    simulate(get_parameters_load_delay(), randomsolver.RandomSolver(), './resultsm/', 100)
+    simulation.simulate(get_parameters_load_delay(),
+                        heuristicsolver.HeuristicSolver(), './results/', 1)
+
+    simulation.simulate(get_parameters_load_delay(),
+                        randomsolver.RandomSolver(), './results/', 100)
 
     # Partitioning parameters
-    simulate(get_parameters_partitioning(), heuristicsolver.HeuristicSolver(), './results/', 1)
-    simulate(get_parameters_partitioning(), randomsolver.RandomSolver(), './results/', 100)
+    simulation.simulate(get_parameters_partitioning(),
+                        heuristicsolver.HeuristicSolver(), './results/', 1)
+    simulation.simulate(get_parameters_partitioning(),
+                        randomsolver.RandomSolver(), './results/', 100)
 
     # Create the plots
     load_delay_plots(get_parameters_load_delay())
