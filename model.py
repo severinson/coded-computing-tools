@@ -499,6 +499,9 @@ class Assignment(object):
         Returns:
         The loaded assignment
         """
+        if directory is None:
+            raise FileNotFoundError()
+
         assignment_matrix = np.load(directory + par.identifier() + '.npy')
         return cls(par, assignment_matrix=assignment_matrix, score=False, index=False)
 
