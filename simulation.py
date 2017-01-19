@@ -38,7 +38,7 @@ class Simulator(object):
     """
 
     def __init__(self, solver=None, directory=None, num_runs=1,
-                 num_samples=100, verbose=False):
+                 num_samples=1000, verbose=False):
 
         """ Create a simulator.
 
@@ -88,6 +88,30 @@ class Simulator(object):
 
         return
 
+    def evaluate_assignment(self, par, assignment):
+        """ Evaluate an assignment.
+
+        Args:
+        par: System parameters
+        assignment: Assignment object to evaluate
+
+        Returns:
+        A dict with the entries ['load'] and ['delay'] storing the average load
+        and delay for the given assignment.
+        """
+
+        avg_load, avg_delay = evaluation.objective_function_sampled(par,
+                                                                    assignment.assignment_matrix,
+                                                                    assignment.labels,
+                                                                    num_samples=self.num_samples)
+
+        # Store the results
+        result = dict()
+        result['load'] = avg_load
+        result['delay'] = avg_delay
+
+        return result
+
     def simulate(self, parameters):
         """ Run simulations for a single set of parameters.
 
@@ -114,7 +138,6 @@ class Simulator(object):
             warnings.warn('Results directory ' + directory + ' doesn\'t exist. Returning.')
             return
 
-        #for par, i in zip(parameters, range(1, len(parameters) + 1)):
         i = 0
         par = parameters
 
@@ -123,13 +146,11 @@ class Simulator(object):
             pd.read_csv(directory + par.identifier() + '.csv')
             print('Found results for', directory, par.identifier(),
                   'on disk. Skipping.',)
-                  #'(' + str(i) + '/' + str(len(parameters)) + ')')
             return
 
         # Run the simulations if we couldn't find any
         except FileNotFoundError:
             print('Running simulations for', directory, par.identifier())
-                  #'(' + str(i) + '/' + str(len(parameters)) + ')')
 
             best_assignment = None
             best_avg_load = math.inf
@@ -142,21 +163,13 @@ class Simulator(object):
                 assert model.is_valid(par, assignment.assignment_matrix, verbose=True)
 
                 # Evaluate it
-                avg_load, avg_delay = evaluation.objective_function_sampled(par,
-                                                                            assignment.assignment_matrix,
-                                                                            assignment.labels,
-                                                                            num_samples=num_samples)
-
-                # Store the results
-                result = dict()
-                result['load'] = avg_load
-                result['delay'] = avg_delay
+                result = self.evaluate_assignment(par, assignment)
                 results.append(result)
 
                 # Keep the best assignment
-                if avg_load < best_avg_load:
+                if result['load'] < best_avg_load:
                     best_assignment = assignment
-                    best_avg_load = avg_load
+                    best_avg_load = result['load']
 
             # Create a pandas dataframe and write it to disk
             dataframe = pd.DataFrame(results)
