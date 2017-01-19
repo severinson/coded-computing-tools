@@ -56,49 +56,40 @@ class HybridSolver(object):
     branch-and-bound search.
     """
 
-    def __init__(self, initialsolver=None, clear=10, min_runs=200):
+    def __init__(self, initialsolver=None, directory=None, clear=10, min_runs=200):
+        """ Create a hybrid solver.
+
+        Args:
+        initialsolver: The solver to use when finding an initial assignment.
+        directory: If not none, store intermediate assignments in this directory.
+        clear: Max assignment matrix elements to decrement per iteration.
+        min_runs: The solver runs at least min_runs/c iterations, where c is the
+        number of dercemented elements.
+        """
+
         assert initialsolver is not None
+        assert directory is None or isinstance(directory, str)
+
         self.initialsolver = initialsolver
+        self.directory = directory
         self.clear = clear
         self.min_runs = min_runs
         return
 
-    def branch_and_bound(self, par, score=None, root=None, verbose=False):
-        """ Branch-and-bound assignment solver
-
-        Finds an assignment through branch-and-bound search.
+    def tree_search(self, par, score, remaining_nodes, verbose=False):
+        """ Perform the tree search.
 
         Args:
         par: System parameters
-        score: Score of the current node.
-        root: Node to start searching from.
+        score: Score of the initial assignment.
+        remaining_nodes: List of the remaining nodes to search.
         verbose: Print extra messages if True
 
         Returns:
         The resulting assignment
         """
 
-        assert score is not None
-
         best_assignment = None
-        score = score
-
-        if verbose:
-            print('Starting B&B with score:', score)
-
-        # Set of remaining nodes to explore
-        remaining_nodes = list()
-
-        # Separate symbols by partition
-        symbols_per_partition = par.num_coded_rows / par.num_partitions
-        symbols_separated = [symbols_per_partition for x in range(par.num_partitions)]
-
-        # Add the root of the tree
-        if root is None:
-            root = Node(par, model.Assignment(par), 0, symbols_separated)
-
-        remaining_nodes.append(root)
-
         searched = 0
         pruned = 0
 
@@ -115,9 +106,6 @@ class HybridSolver(object):
 
             # If there are no more assignments for this node, we've found
             # a solution.
-            if node.row == par.num_batches:
-                #print('Found a solution:', node.assignment)
-                #print('---------------------')
 
                 # If this solution is better than the previous best, store it
                 if node.assignment.score < score:
@@ -162,6 +150,43 @@ class HybridSolver(object):
 
         return best_assignment
 
+    def branch_and_bound(self, par, score=None, root=None, verbose=False):
+        """ Branch-and-bound assignment solver
+
+        Finds an assignment through branch-and-bound search.
+
+        Args:
+        par: System parameters
+        score: Score of the current node.
+        root: Node to start searching from.
+        verbose: Print extra messages if True
+
+        Returns:
+        The resulting assignment
+        """
+
+        assert score is not None
+
+        score = score
+
+        if verbose:
+            print('Starting B&B with score:', score)
+
+        # Set of remaining nodes to explore
+        remaining_nodes = list()
+
+        # Separate symbols by partition
+        symbols_per_partition = par.num_coded_rows / par.num_partitions
+        symbols_separated = [symbols_per_partition for x in range(par.num_partitions)]
+
+        # Add the root of the tree
+        if root is None:
+            root = Node(par, model.Assignment(par), 0, symbols_separated)
+
+        remaining_nodes.append(root)
+        best_assignment = self.tree_search(par, score, remaining_nodes, verbose=verbose)
+        return best_assignment
+
     def solve(self, par, verbose=False):
         """ Hybrid assignment solver.
 
@@ -169,9 +194,6 @@ class HybridSolver(object):
 
         Args:
         par: System parameters
-        clear: Max assignment matrix elements to decrement per iteration.
-        min_runs: The solver runs at least min_runs/c iterations, where c is the
-        number of dercemented elements.
         verbose: Print extra messages if True
 
         Returns:
@@ -180,11 +202,26 @@ class HybridSolver(object):
 
         assert isinstance(par, model.SystemParameters)
 
-        # Start off with a greedy assignment
-        if verbose:
-            print('Finding a candidate solution using the greedy solver.')
+        # If there already is a solution on disk, load it
+        try:
+            assignment = model.Assignment.load(par, directory=self.directory)
 
-        assignment = self.initialsolver.solve(par, verbose=verbose)
+            if verbose:
+                print('Loaded a candidate solution from disk.')
+
+        # Otherwise find one using a solver
+        except FileNotFoundError:
+            if verbose:
+                print('Finding a candidate solution using', self.initialsolver.identifier)
+
+            assignment = self.initialsolver.solve(par, verbose=verbose)
+
+        # Build the dynamic programming index if we didn't do so already.
+        if not assignment.index:
+            assignment = model.Assignment(par,
+                                          assignment_matrix=assignment.assignment_matrix,
+                                          labels=assignment.labels)
+
         best_assignment = assignment
 
         # Then iteratively try to improve it by de-assigning a random set
@@ -228,6 +265,13 @@ class HybridSolver(object):
                     if verbose:
                         print('Iteration finished with an improvement of',
                               score - best_assignment.score)
+
+                    # Save the best assignment so far.
+                    if self.directory is not None:
+                        if verbose:
+                            print('Saving assignment to disk.')
+
+                        best_assignment.save(directory=self.directory)
 
                 iterations = iterations + 1
 
