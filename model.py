@@ -95,7 +95,7 @@ class SystemParameters(object):
         while True:
             num_servers = num_servers + 1
             q = code_rate * num_servers
-            if q % 1 != 0:
+            if q % 1 != 0 or q == 0:
                 continue
             q = int(q)
 
