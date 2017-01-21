@@ -103,6 +103,8 @@ def computational_delay(par, assignment_matrix, labels, Q=None):
     Number of servers required averaged over all subsets.
     """
 
+    raise NotImplementedError('There is a bug in this function. When computing the delay, it will only add at most one additional server over q. Use the sampled version instead.')
+
     # Count the total and worst-case score
     total_score = 0
     worst_score = 0
