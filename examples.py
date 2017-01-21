@@ -17,9 +17,6 @@
 """ This is module contains coded used to run the simulations and generate the
 plots we present in our paper. """
 
-import math
-import os
-import sys
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -38,11 +35,12 @@ def partitioning_plots(parameters):
     """
 
     # List of directories with results
-    directories = ['./results/RandomSolver/', './results/HeuristicSolver/']
-    colors = ['b', 'r']
-    markers = ['o', 'd']
-    #keys = ['random', 'hybrid', 'block']
-    keys = ['Random', 'Heuristic']
+    directories = ['./results/HybridSolver/', './results/RandomSolver/', './results/HeuristicSolver/']
+    colors = ['k', 'b', 'r']
+    markers = ['s', 'o', 'd']
+    keys = ['Hybrid', 'Random', 'Heuristic']
+
+    print('Creating partitioning plots for results in', directories)
 
     # Setup somewhere to store the results we need
     results = dict()
@@ -153,13 +151,12 @@ def load_delay_plots(parameters):
     """
 
     # List of directories with results
-    #directories = ['./results/random/', './results/hybrid/', './results/block/']
     directories = ['./results/RandomSolver/', './results/HeuristicSolver/']
-    #colors = ['b', 'r', 'k']
     colors = ['b', 'r']
     markers = ['o', 'd']
-    #keys = ['random', 'hybrid', 'block']
     keys = ['Random', 'Heuristic']
+
+    print('Creating load-delay plots for results in', directories)
 
     # Setup somewhere to store the results we need
     results = dict()
@@ -307,10 +304,10 @@ def main():
 
     ## Run simulations for various solvers and parameters
     heuristic_simulator = simulation.Simulator(solver=heuristicsolver.HeuristicSolver(),
-                                               directory='./tmp/')
+                                               directory='./results/', verbose=True)
 
     random_simulator = simulation.Simulator(solver=randomsolver.RandomSolver(),
-                                            directory='./tmp/', num_runs=100)
+                                            directory='./results/', num_runs=100, verbose=True)
 
     # Load-delay parameters
     heuristic_simulator.simulate_parameter_list(parameter_list=get_parameters_load_delay())
