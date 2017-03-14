@@ -22,233 +22,167 @@ import matplotlib.pyplot as plt
 import numpy as np
 import model
 import simulation
+import evaluation
 from solvers import randomsolver
 from solvers import heuristicsolver
 
-def partitioning_plots(parameters):
-    """ Plot load and delay against number of partitions.
+def load_delay_plots(parameters, results,
+                     xdata_name='partitions', ydata_name='servers', xlabel=None,
+                     normalize=False, include_reduce=False):
+    '''Plot load and delay.
 
     Attempts to load results from disk and will skip any missing results.
 
     Args:
     parameters: The parameters for which to plot.
-    """
 
-    # List of directories with results
-    directories = ['./results/HybridSolver/', './results/RandomSolver/', './results/HeuristicSolver/']
-    colors = ['k', 'b', 'r']
-    markers = ['s', 'o', 'd']
-    keys = ['Hybrid', 'Random', 'Heuristic']
+    results: A dict containing info regarding the results to plot. The
+    dict must contain entries 'directory', 'color', 'marker', and
+    'name'.
 
-    print('Creating partitioning plots for results in', directories)
+    xdata_name: What data to plot on the x axis. Can be 'partitions'
+    or 'servers'.
 
-    # Setup somewhere to store the results we need
-    results = dict()
+    ydata_name: What data to plot on the y axis of the delay plot. Can
+    be 'batches' 'servers', or 'delay'.
+
+    xlabel: The label of the x axis.
+
+    normalize: The load and delay are normalized with the performance
+    of the unpartitioned (MDS code) performance if this argument is
+    True.
+
+    include_reduce: The reduce phase latency is included if this
+    argument is True.
+
+    '''
+
+    assert isinstance(xdata_name, str)
+    assert isinstance(ydata_name, str)
+
+    # Setup a dict for storing the data to plot
+    data = dict()
     for par in parameters:
-        for directory, key in zip(directories, keys):
-            results[key] = dict()
-            result = results[key]
+        for result in results:
+            # for directory, key in zip(directories, keys):
+            directory = result['directory']
+            name = result['name']
 
-            result['load'] = dict()
-            result['load']['mean'] = list()
-            result['load']['min'] = list()
-            result['load']['max'] = list()
+            data[name] = dict()
+            data[name]['load'] = dict()
+            data[name]['load']['mean'] = list()
+            data[name]['load']['min'] = list()
+            data[name]['load']['max'] = list()
 
-            result['delay'] = dict()
-            result['delay']['mean'] = list()
-            result['delay']['min'] = list()
-            result['delay']['max'] = list()
+            data[name]['delay'] = dict()
+            data[name]['delay']['mean'] = list()
+            data[name]['delay']['min'] = list()
+            data[name]['delay']['max'] = list()
 
-            result['partitions'] = list()
+            data[name]['partitions'] = list()
+            data[name]['servers'] = list()
 
-    # Load the results from disk
+    # Load the data from disk
     for par in parameters:
-        for directory, key in zip(directories, keys):
+        for result in results:
+            directory = result['directory']
+            name = result['name']
+
             try:
                 df = pd.read_csv(directory + par.identifier() + '.csv')
             except FileNotFoundError:
-                print('No data for', directory, par.identifier())
+                print('No data for', directory + '/' + par.identifier())
                 continue
 
-            result = results[key]
+            if ydata_name not in df:
+                print('No data with label', ydata_name, 'for', directory + '/' + par.identifier())
+                continue
 
             load = df['load'] + par.num_multicasts()
-            load /= par.num_source_rows * par.num_outputs * par.unpartitioned_load()
-            result['load']['mean'].append(load.mean())
-            result['load']['min'].append(load.min())
-            result['load']['max'].append(load.max())
+            load /= par.num_source_rows * par.num_outputs
+            if normalize:
+                load /= par.unpartitioned_load()
 
-            delay = df['delay'] / par.computational_delay()
-            result['delay']['mean'].append(delay.mean())
-            result['delay']['min'].append(delay.min())
-            result['delay']['max'].append(delay.max())
+            data[name]['load']['mean'].append(load.mean())
+            data[name]['load']['min'].append(load.min())
+            data[name]['load']['max'].append(load.max())
 
-            result['partitions'].append(par.num_partitions)
+            delay = df[ydata_name]
+            if include_reduce:
+                delay += par.reduce_delay()
+
+            if normalize and include_reduce:
+                delay /= par.computational_delay() + par.reduce_delay(num_partitions=1)
+            elif normalize and not include_reduce:
+                delay /= par.computational_delay()
+
+            data[name]['delay']['mean'].append(delay.mean())
+            data[name]['delay']['min'].append(delay.min())
+            data[name]['delay']['max'].append(delay.max())
+
+            data[name]['partitions'].append(par.num_partitions)
+            data[name]['servers'].append(par.num_servers)
 
     # Plot the load
+    # ----------------------------------------------
     fig = plt.figure()
     ax1 = plt.subplot(211)
     plt.grid(True, which='both')
-    plt.ylabel('Comm. Load Increase', fontsize=15)
+    plt.ylabel('Comm. Load Increase', fontsize=18)
     plt.autoscale()
 
-    for key, color, marker in zip(keys, colors, markers):
-        partitions = np.array(results[key]['partitions'])
-        load = results[key]['load']
+    for result in results:
+        name = result['name']
+        color = result['color']
+        marker = result['marker']
+
+        xdata = np.array(data[name][xdata_name])
+        load = data[name]['load']
         load_mean = np.array(load['mean'])
         load_min = np.array(load['min'])
         load_max = np.array(load['max'])
-        plt.semilogx(partitions, load_mean, color + marker, label=key)
+        plt.semilogx(xdata, load_mean, color + marker, label=name)
         yerr = np.array([load_mean - load_min, load_max - load_mean])
-        plt.errorbar(partitions, load_mean, yerr=yerr, fmt='none', ecolor=color)
+        plt.errorbar(xdata, load_mean, yerr=yerr, fmt='none', ecolor=color)
 
-    x1, x2, y1, y2 = plt.axis()
-    plt.axis([x1, x2, 0.95, 1.2])
-    plt.legend(loc='upper left', numpoints=1)
-    plt.setp(ax1.get_yticklabels(), fontsize=10)
+    plt.legend(numpoints=1, fontsize=20)
+    plt.setp(ax1.get_yticklabels(), fontsize=20)
     plt.setp(ax1.get_xticklabels(), visible=False)
 
     # Plot the delay
+    # ----------------------------------------------
     ax2 = plt.subplot(212, sharex=ax1)
     #plt.rc('text', usetex=True)
     #plt.rc('font', family='serif', weight='bold')
     #plt.rc('font', weight='bold')
     plt.grid(True, which='both')
-    plt.ylabel('Comp. Delay Increase', fontsize=15)
-    plt.xlabel('Partitions', fontsize=15)
+    plt.ylabel('Comp. Delay Increase', fontsize=18)
+    if xlabel is not None:
+        plt.xlabel(xlabel, fontsize=20)
+
     plt.autoscale()
 
-    for key, color, marker in zip(keys, colors, markers):
-        partitions = np.array(results[key]['partitions'])
-        delay = results[key]['delay']
+    for result in results:
+        name = result['name']
+        color = result['color']
+        marker = result['marker']
+
+        xdata = np.array(data[name][xdata_name])
+        delay = data[name]['delay']
         delay_mean = np.array(delay['mean'])
         delay_min = np.array(delay['min'])
         delay_max = np.array(delay['max'])
-        plt.semilogx(partitions, delay_mean, color + marker, label=key)
+        plt.semilogx(xdata, delay_mean, color + marker, label=name)
         yerr = np.array([delay_mean - delay_min, delay_max - delay_mean])
-        plt.errorbar(partitions, delay_mean, yerr=yerr, fmt='none', ecolor=color)
-
-    x1, x2, y1, y2 = plt.axis()
-    plt.axis([x1, x2, 0.95, 1.5])
-    plt.setp(ax2.get_xticklabels(), fontsize=12, weight='bold')
-    plt.setp(ax2.get_yticklabels(), fontsize=10)
-
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    plt.tight_layout()
-    plt.subplots_adjust(wspace=0, hspace=0.1)
-    plt.show()
-
-    return
-
-def load_delay_plots(parameters):
-    """ Plot load and delay against problem size.
-
-    Attempts to load results from disk and will skip any missing results.
-
-    Args:
-    parameters: The parameters for which to plot.
-    """
-
-    # List of directories with results
-    directories = ['./results/RandomSolver/', './results/HeuristicSolver/']
-    colors = ['b', 'r']
-    markers = ['o', 'd']
-    keys = ['Random', 'Heuristic']
-
-    print('Creating load-delay plots for results in', directories)
-
-    # Setup somewhere to store the results we need
-    results = dict()
-    for par in parameters:
-        for directory, key in zip(directories, keys):
-            results[key] = dict()
-            result = results[key]
-
-            result['load'] = dict()
-            result['load']['mean'] = list()
-            result['load']['min'] = list()
-            result['load']['max'] = list()
-
-            result['delay'] = dict()
-            result['delay']['mean'] = list()
-            result['delay']['min'] = list()
-            result['delay']['max'] = list()
-
-            result['servers'] = list()
-
-    # Load the results from disk
-    for par in parameters:
-        for directory, key in zip(directories, keys):
-            try:
-                df = pd.read_csv(directory + par.identifier() + '.csv')
-            except FileNotFoundError:
-                print('No data for', directory, par.identifier())
-                continue
-
-            result = results[key]
-
-            load = df['load'] + par.num_multicasts()
-            load /= par.num_source_rows * par.num_outputs * par.unpartitioned_load()
-            result['load']['mean'].append(load.mean())
-            result['load']['min'].append(load.min())
-            result['load']['max'].append(load.max())
-
-            delay = df['delay']
-            delay /= par.computational_delay()
-            result['delay']['mean'].append(delay.mean())
-            result['delay']['min'].append(delay.min())
-            result['delay']['max'].append(delay.max())
-
-            result['servers'].append(par.num_servers)
-
-    # Plot the load
-    fig = plt.figure()
-    ax1 = plt.subplot(211)
-    plt.grid(True, which='both')
-    plt.ylabel('Comm. Load Increase', fontsize=15)
-    #plt.xlabel('$K$', fontsize=15)
-    plt.autoscale()
-
-    for key, color, marker in zip(keys, colors, markers):
-        servers = np.array(results[key]['servers'])
-        load = results[key]['load']
-        load_mean = np.array(load['mean'])
-        load_min = np.array(load['min'])
-        load_max = np.array(load['max'])
-        plt.semilogx(servers, load_mean, color + marker, label=key)
-        yerr = np.array([load_mean - load_min, load_max - load_mean])
-        plt.errorbar(servers, load_mean, yerr=yerr, fmt='none', ecolor=color)
-
-    plt.legend(numpoints=1)
-    plt.setp(ax1.get_yticklabels(), fontsize=10)
-    plt.setp(ax1.get_xticklabels(), visible=False)
-
-    # Plot the delay
-    ax2 = plt.subplot(212, sharex=ax1)
-    #plt.rc('text', usetex=True)
-    #plt.rc('font', family='serif', weight='bold')
-    #plt.rc('font', weight='bold')
-    plt.grid(True, which='both')
-    plt.ylabel('Comp. Delay Increase', fontsize=15)
-    plt.xlabel('$K$', fontsize=15)
-    plt.autoscale()
-
-    for key, color, marker in zip(keys, colors, markers):
-        servers = np.array(results[key]['servers'])
-        delay = results[key]['delay']
-        delay_mean = np.array(delay['mean'])
-        delay_min = np.array(delay['min'])
-        delay_max = np.array(delay['max'])
-        plt.semilogx(servers, delay_mean, color + marker, label=key)
-        yerr = np.array([delay_mean - delay_min, delay_max - delay_mean])
-        plt.errorbar(servers, delay_mean, yerr=yerr, fmt='none', ecolor=color)
+        plt.errorbar(xdata, delay_mean, yerr=yerr, fmt='none', ecolor=color)
 
     #plt.legend()
     #plt.setp(ax2.get_xticklabels(), visible=False)
-    plt.setp(ax2.get_xticklabels(), fontsize=12, weight='bold')
-    plt.setp(ax2.get_yticklabels(), fontsize=10)
+    plt.setp(ax2.get_xticklabels(), fontsize=20, weight='bold')
+    plt.setp(ax2.get_yticklabels(), fontsize=20)
 
+    # Misc plot settings
+    # ----------------------------------------------
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
     plt.tight_layout()
@@ -283,17 +217,14 @@ def get_parameters_partitioning():
     q = 6
     num_outputs = q
     server_storage = 1/3
-    num_partitions = [2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 24, 25, 30, 40, 50, 60,
-                      75, 100, 120, 125, 150, 200, 250, 300, 375, 500, 600, 750,
-                      1000, 1500, 3000]
+    num_partitions = [2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 24, 25, 30,
+                      40, 50, 60, 75, 100, 120, 125, 150, 200, 250,
+                      300, 375, 500, 600, 750, 1000, 1500, 3000]
 
     parameters = list()
     for partitions in num_partitions:
-        par = model.SystemParameters(rows_per_batch,
-                                     num_servers,
-                                     q,
-                                     num_outputs,
-                                     server_storage,
+        par = model.SystemParameters(rows_per_batch, num_servers, q,
+                                     num_outputs, server_storage,
                                      partitions)
         parameters.append(par)
 
@@ -304,23 +235,70 @@ def main():
 
     ## Run simulations for various solvers and parameters
     heuristic_simulator = simulation.Simulator(solver=heuristicsolver.HeuristicSolver(),
-                                               directory='./results/', verbose=True)
+                                               directory='./results/HeuristicSolver/',
+                                               verbose=True)
 
     random_simulator = simulation.Simulator(solver=randomsolver.RandomSolver(),
-                                            directory='./results/', num_runs=100, verbose=True)
+                                            directory='./results/RandomSolver/',
+                                            num_assignments=100, verbose=True)
+
+    unsupervised_simulator = simulation.Simulator(solver=None,
+                                                  par_eval=evaluation.eval_unsupervised,
+                                                  directory='./results/Unsupervised/',
+                                                  num_samples=100)
+
+    heuristic_upper_bound = simulation.Simulator(solver=None, rerun=False,
+                                                 par_eval=evaluation.upper_bound_heuristic,
+                                                 directory='./results/HeuristicUpper/')
+
+    heuristic_avg = simulation.Simulator(solver=None, rerun=True,
+                                         par_eval=evaluation.average_heuristic,
+                                         directory='./results/HeuristicAverage/')
+
+    # Get parameter lists
+    load_delay_parameters = get_parameters_load_delay()
+    partitioning_parameters = get_parameters_partitioning()
 
     # Load-delay parameters
-    heuristic_simulator.simulate_parameter_list(parameter_list=get_parameters_load_delay())
-    random_simulator.simulate_parameter_list(parameter_list=get_parameters_load_delay())
+    heuristic_simulator.simulate_parameter_list(parameter_list=load_delay_parameters)
+    random_simulator.simulate_parameter_list(parameter_list=load_delay_parameters)
+    unsupervised_simulator.simulate_parameter_list(parameter_list=load_delay_parameters)
+    # heuristic_upper_bound.simulate_parameter_list(parameter_list=load_delay_parameters)
+
+    for par in partitioning_parameters:
+        heuristic_upper_bound.simulate(par)
+
+    for par in load_delay_parameters:
+        heuristic_avg.simulate(par)
 
     # Partitioning parameters
-    heuristic_simulator.simulate_parameter_list(parameter_list=get_parameters_partitioning())
-    random_simulator.simulate_parameter_list(parameter_list=get_parameters_partitioning())
+    heuristic_simulator.simulate_parameter_list(parameter_list=partitioning_parameters)
+    random_simulator.simulate_parameter_list(parameter_list=partitioning_parameters)
+    unsupervised_simulator.simulate_parameter_list(parameter_list=partitioning_parameters)
+    # heuristic_bound.simulate_parameter_list(parameter_list=partitioning_parameters)n
+    for par in partitioning_parameters:
+        heuristic_upper_bound.simulate(par)
 
-    # Create the plots
-    load_delay_plots(get_parameters_load_delay())
-    partitioning_plots(get_parameters_partitioning())
+    for par in partitioning_parameters:
+        heuristic_avg.simulate(par)
 
+    # Setup a list of dicts containing plotting parameters
+    plot_settings = list()
+    # plot_settings.append({'directory': './results/HybridSolver/',
+    #                       'color': 'k', 'marker': 's', 'name': 'Hybrid'})
+    plot_settings.append({'directory': './results/RandomSolver/',
+                          'color': 'b', 'marker': 'o', 'name': 'Random'})
+    plot_settings.append({'directory': './results/HeuristicSolver/',
+                          'color': 'r', 'marker': 'd', 'name': 'Heuristic'})
+    plot_settings.append({'directory': './results/Unsupervised/',
+                          'color': 'k', 'marker': 'x', 'name': 'Unsupervised'})
+    plot_settings.append({'directory': './results/HeuristicUpper/',
+                          'color': 'm', 'marker': 'H', 'name': 'Heuristic Upper Bound'})
+    plot_settings.append({'directory': './results/HeuristicAverage/',
+                          'color': 'b', 'marker': 'o', 'name': 'Heuristic Average'})
+
+    load_delay_plots(load_delay_parameters, plot_settings, xdata_name='servers', xlabel='$K$')
+    load_delay_plots(partitioning_parameters, plot_settings, xdata_name='partitions', xlabel='$T$')
     return
 
 if __name__ == '__main__':
