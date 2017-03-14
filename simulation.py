@@ -21,11 +21,9 @@ assignment matrix found to disk in the same directory.
 """
 
 import math
-import sys
 import os
 import warnings
 from multiprocessing import Pool
-from multiprocessing import TimeoutError
 import pandas as pd
 import evaluation
 import model
@@ -37,38 +35,70 @@ class Simulator(object):
     assignment matrix found to disk in the same directory.
     """
 
-    def __init__(self, solver=None, directory=None, num_runs=1,
-                 num_samples=1000, verbose=False):
-
-        """ Create a simulator.
+    def __init__(self, solver=None, par_eval=None, directory=None,
+                 num_assignments=1, num_samples=1000, rerun=False,
+                 verbose=False):
+        """Creates a assignment performance simulator.
 
         Writes the results to disk as .csv files. Will also write the best
         assignment matrix found to disk in the same directory.
 
         Args:
-        solver: The solver to use.
+
+        solver: The solver to use when creating assignments. A
+        par_eval method must be provided if set to None.
+
+        par_eval: A method that takes a parameter object as its single
+        argument and returns a dict with entries 'load' and 'delay'
+        (and possibly others). This argument must be None if a solver
+        is provided.
+
         directory: The directory to store the results in.
-        num_runs: The number of simulations to run.
-        num_samples: The number of objective function samples.
-        verbose: Run the solverin verbose mode if True.
+
+        num_assignments: The result is calculated over this number of
+        generated assignments. Set this to a large number if
+        assignments are generated randomly, and set it to 1 if
+        assignments are deterministic.
+
+        num_samples: If par_eval is set to None, assignment
+        performance is evaluated by sampling its performance
+        num_samples times and computing the average.
+
+        rerun: If True, any result stored on disk are overwritten.
+
+        verbose: Run the solver in verbose mode if True.
+
         """
 
-        assert solver is not None
+        if solver is None:
+            assert par_eval is not None
+        elif solver is not None:
+            assert par_eval is None
+
+        if par_eval is not None:
+            assert solver is None
+
         assert isinstance(directory, str)
-        assert isinstance(num_runs, int)
+        assert isinstance(num_assignments, int)
         assert isinstance(num_samples, int)
+        assert isinstance(rerun, bool)
         assert isinstance(verbose, bool)
 
-        # Create the directory to store the results in if it doesn't exist
-        if not os.path.exists(directory + solver.identifier + '/'):
-            os.makedirs(directory + solver.identifier + '/')
+        # Make sure the directory name ends with a /
+        if directory[-1] != '/':
+            directory += '/'
+
+        # Create the directory if it doesn't exist
+        if not os.path.exists(directory):
+            os.makedirs(directory)
 
         self.solver = solver
+        self.par_eval = par_eval
         self.directory = directory
-        self.num_runs = num_runs
+        self.num_assignments = num_assignments
         self.num_samples = num_samples
+        self.rerun = rerun
         self.verbose = verbose
-
         return
 
     def simulate_parameter_list(self, parameter_list=None, processes=4):
@@ -84,7 +114,7 @@ class Simulator(object):
 
         # Run the simulations
         with Pool(processes=processes) as pool:
-            result = pool.map(self.simulate, parameter_list)
+            _ = pool.map(self.simulate, parameter_list)
 
         return
 
@@ -100,83 +130,70 @@ class Simulator(object):
         and delay for the given assignment.
         """
 
-        avg_load, avg_delay = evaluation.objective_function_sampled(par,
-                                                                    assignment.assignment_matrix,
-                                                                    assignment.labels,
-                                                                    num_samples=self.num_samples)
-
-        # Store the results
-        result = dict()
-        result['load'] = avg_load
-        result['delay'] = avg_delay
-
+        result = evaluation.objective_function_sampled(par,
+                                                       assignment.assignment_matrix,
+                                                       assignment.labels,
+                                                       num_samples=self.num_samples)
         return result
 
     def simulate(self, parameters):
-        """ Run simulations for a single set of parameters.
+        """Run simulations for a single set of parameters.
 
         Writes the results to disk as .csv files. Will also write the best
         assignment matrix found to disk in the same directory.
 
         Args:
         parameters: SystemParameters for which to run simulations.
+
         """
 
         assert isinstance(parameters, model.SystemParameters)
-
-        solver = self.solver
-        directory = self.directory
-        num_runs = self.num_runs
-        num_samples = self.num_samples
-        verbose = self.verbose
-
-        # Add the solver identifier to the directory name
-        directory += solver.identifier + '/'
-
-        # Create the directory to store the results in if it doesn't exist
-        if not os.path.exists(directory):
-            warnings.warn('Results directory ' + directory + ' doesn\'t exist. Returning.')
-            return
-
-        i = 0
+        assert os.path.exists(self.directory)
         par = parameters
 
         # Try to load the results from disk
-        try:
-            pd.read_csv(directory + par.identifier() + '.csv')
-            print('Found results for', directory, par.identifier(),
+        filename = self.directory + par.identifier() + '.csv'
+        if os.path.isfile(filename) and not self.rerun:
+            print('Found results for', filename,
                   'on disk. Skipping.',)
             return
 
-        # Run the simulations if we couldn't find any
-        except FileNotFoundError:
-            print('Running simulations for', directory, par.identifier())
+        print('Running simulations for', filename)
 
-            best_assignment = None
-            best_avg_load = math.inf
+        best_assignment = None
+        best_avg_load = math.inf
 
-            results = list()
-            for _ in range(num_runs):
+        results = list()
+        for _ in range(self.num_assignments):
 
+            # If solver is None we should run the analysis provided by
+            # the par_eval function.
+            if self.solver is None:
+                result = self.par_eval(par, num_samples=self.num_samples)
+
+            # If a solver is provided we should find an assignment
+            # using the solver and analyze its performance.
+            else:
                 # Create an assignment
-                assignment = solver.solve(par, verbose=verbose)
-                assert model.is_valid(par, assignment.assignment_matrix, verbose=True)
+                assignment = self.solver.solve(par, verbose=self.verbose)
+                assert model.is_valid(par, assignment.assignment_matrix, verbose=self.verbose)
 
                 # Evaluate it
                 result = self.evaluate_assignment(par, assignment)
-                results.append(result)
 
                 # Keep the best assignment
                 if result['load'] < best_avg_load:
                     best_assignment = assignment
                     best_avg_load = result['load']
 
-            # Create a pandas dataframe and write it to disk
-            dataframe = pd.DataFrame(results)
-            dataframe.to_csv(directory + par.identifier() + '.csv')
+            results.append(result)
 
-            # Write the best assignment to disk
-            if isinstance(best_assignment, model.Assignment):
-                best_assignment.save(directory=directory)
+        # Create a pandas dataframe and write it to disk
+        dataframe = pd.DataFrame(results)
+        dataframe.to_csv(self.directory + par.identifier() + '.csv')
+
+        # Write the best assignment to disk
+        if isinstance(best_assignment, model.Assignment):
+            best_assignment.save(directory=self.directory)
 
         return
