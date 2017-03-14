@@ -30,6 +30,7 @@ import tempfile
 import unittest
 import numpy as np
 from scipy.misc import comb as nchoosek
+import complexity
 
 class SystemParameters(object):
     """ System parameters representation. This struct is used as an argument
@@ -83,6 +84,7 @@ class SystemParameters(object):
 
         # Setup a dict to cache delay computations in
         self.cached_delays = dict()
+        self.cached_reduce_delays = dict()
 
         return
 
@@ -248,22 +250,26 @@ class SystemParameters(object):
             return load_1
 
     def computational_delay(self, q=None):
-        """ Return the computational delay.
+        """Return the delay incurred in the map phase.
 
-        Calculates the computational delay assuming a shifted exponential distribution.
-        We avoid approximating the result through a logarithm as it is not
-        explained in the paper.
+        Calculates the computational delay assuming a shifted
+        exponential distribution.
 
         Args:
         q: The number of servers to wait for. If q is None, the value in self is used.
 
         Returns:
         The computational delay.
+
         """
 
         assert q is None or isinstance(q, int)
         if q is None:
             q = self.q
+
+        # Return infinity if waiting for more than num_servers servers
+        if q > self.num_servers:
+            return math.inf
 
         # Return a cached result if there is one
         if q in self.cached_delays:
@@ -277,6 +283,50 @@ class SystemParameters(object):
 
         # Cache the result
         self.cached_delays[q] = delay
+
+        return delay
+
+    def reduce_delay(self, num_partitions=None):
+        '''Return the delay incurred in the reduce step.
+
+        Calculates the reduce delay assuming a shifted exponential
+        distribution.
+
+        Args:
+        num_partitions: The number of partitions. If None, the value in self is used.
+
+        Returns:
+        The reduce delay.
+
+        '''
+
+        assert num_partitions is None or isinstance(num_partitions, int)
+        if num_partitions is None:
+            num_partitions = self.num_partitions
+
+        # Return a cached result if there is one
+        if num_partitions in self.cached_reduce_delays:
+            return self.cached_reduce_delays[num_partitions]
+
+        delay = 1
+        for j in range(1, self.q):
+            delay += 1 / j
+
+        # TODO: Is this the correct way to calculate the packet size?
+        # A given server does not necessarily experience the erasure
+        # of all symbols on a machine that failed to finish.
+        muq = round(self.server_storage * self.q)
+        delay *= complexity.block_diagonal_decoding_complexity(self.num_coded_rows,
+                                                               muq,
+                                                               1 - self.q / self.num_servers,
+                                                               num_partitions)
+        delay *= self.num_outputs / self.q
+
+        # TODO: We assume that the source matrix is square for now
+        delay /= complexity.matrix_vector_complexity(self.num_source_rows, self.num_source_rows)
+
+        # Cache the result
+        self.cached_reduce_delays[num_partitions] = delay
 
         return delay
 
