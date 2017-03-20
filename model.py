@@ -286,6 +286,42 @@ class SystemParameters(object):
 
         return delay
 
+    def computational_delay_ldpc(self, q=None, overhead=1.10):
+        '''Estimate the theoretical computational delay when using an LDPC
+        code.
+
+        Args:
+        q: The number of servers to wait for. If q is None, the value in self is used.
+
+        overhead: The overhead is the percentage increase in number of
+        servers required to decode. 1.10 means that an additional 10%
+        servers is required.
+
+        Returns: The estimated computational delay.
+
+        '''
+        assert isinstance(q, int) or q is None
+        assert isinstance(overhead, float) or isinstance(overhead, int)
+        if q is not None:
+            assert q >= 1
+
+        if q is None:
+            q = self.q
+
+        servers_to_wait_for = math.ceil(q * overhead)
+
+        # Return infinity if waiting for more than num_servers servers
+        if servers_to_wait_for > self.num_servers:
+            return math.inf
+
+        delay = 1
+        for j in range(self.num_servers - servers_to_wait_for + 1, self.num_servers):
+            delay += 1 / j
+
+        delay *= self.server_storage * self.num_outputs
+        return delay
+
+
     def reduce_delay(self, num_partitions=None):
         '''Return the delay incurred in the reduce step.
 
@@ -315,9 +351,8 @@ class SystemParameters(object):
         # TODO: Is this the correct way to calculate the packet size?
         # A given server does not necessarily experience the erasure
         # of all symbols on a machine that failed to finish.
-        muq = round(self.server_storage * self.q)
         delay *= complexity.block_diagonal_decoding_complexity(self.num_coded_rows,
-                                                               muq,
+                                                               1,
                                                                1 - self.q / self.num_servers,
                                                                num_partitions)
         delay *= self.num_outputs / self.q
@@ -327,6 +362,32 @@ class SystemParameters(object):
 
         # Cache the result
         self.cached_reduce_delays[num_partitions] = delay
+
+        return delay
+
+    def reduce_delay_ldpc_peeling(self):
+        '''Return the delay incurred in the reduce step when using an LDPC
+        code and a peeling decoder..
+
+        Calculates the reduce delay assuming a shifted exponential
+        distribution.
+
+        Returns:
+        The reduce delay.
+
+        '''
+        delay = 1
+        for j in range(1, self.q):
+            delay += 1 / j
+
+        code_rate = self.q / self.num_servers
+        delay *= complexity.peeling_decoding_complexity(self.num_coded_rows,
+                                                        code_rate,
+                                                        1 - self.q / self.num_servers)
+        delay *= self.num_outputs / self.q
+
+        # TODO: We assume that the source matrix is square for now
+        delay /= complexity.matrix_vector_complexity(self.num_source_rows, self.num_source_rows)
 
         return delay
 
