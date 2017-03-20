@@ -20,9 +20,9 @@ Writes the results to disk as .csv files. Will also write the best
 assignment matrix found to disk in the same directory.
 """
 
+import logging
 import math
 import os
-import warnings
 from multiprocessing import Pool
 import pandas as pd
 import evaluation
@@ -110,7 +110,7 @@ class Simulator(object):
         """
 
         assert isinstance(parameter_list, list)
-        print('Running simulations for', len(parameter_list), 'parameters.')
+        logging.info('Running simulations for %d parameters.', len(parameter_list))
 
         # Run the simulations
         with Pool(processes=processes) as pool:
@@ -154,11 +154,10 @@ class Simulator(object):
         # Try to load the results from disk
         filename = self.directory + par.identifier() + '.csv'
         if os.path.isfile(filename) and not self.rerun:
-            print('Found results for', filename,
-                  'on disk. Skipping.',)
+            logging.debug('Found results for %s on disk. Skipping.', filename)
             return
 
-        print('Running simulations for', filename)
+        logging.debug('Running simulations for %s', filename)
 
         best_assignment = None
         best_avg_load = math.inf
@@ -166,7 +165,7 @@ class Simulator(object):
         results = list()
         for i in range(self.num_assignments):
             if (i + 1) % 10 == 0:
-                print(filename, (i + 1) / self.num_assignments * 100, '% finished.')
+                logging.info('%s %d\% finished.', filename, (i + 1) / self.num_assignments * 100)
 
             # If solver is None we should run the analysis provided by
             # the par_eval function.
