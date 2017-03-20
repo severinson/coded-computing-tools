@@ -164,7 +164,9 @@ class Simulator(object):
         best_avg_load = math.inf
 
         results = list()
-        for _ in range(self.num_assignments):
+        for i in range(self.num_assignments):
+            if (i + 1) % 10 == 0:
+                print(filename, (i + 1) / self.num_assignments * 100, '% finished.')
 
             # If solver is None we should run the analysis provided by
             # the par_eval function.
