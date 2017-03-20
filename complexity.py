@@ -27,9 +27,7 @@ def rs_decoding_complexity(code_length, packet_size, erasure_prob):
     packet_size: The size of a packet in number of symbols.
     erasure_prob: The erasure probability of the packet erasure channel.
 
-    Returns:
-    The number of operations (additions and multiplications)
-    required to decode.
+    Returns: The total complexity of decoding.
 
     '''
     additions = code_length * (erasure_prob * code_length - 1) * packet_size
@@ -50,8 +48,7 @@ def rs_decoding_complexity_large_packets(code_length, erasure_prob):
     erasure_prob: The erasure probability of the packet erasure channel.
 
     Returns:
-    The number of operations (additions and multiplications)
-    required to decode.
+    The total complexity of decoding.
 
     '''
     raise NotImplemented('Use the rs_decoding_complexity() method instead.')
@@ -74,9 +71,7 @@ def block_diagonal_decoding_complexity(code_length, packet_size, erasure_prob, p
     erasure_prob: The erasure probability of the packet erasure channel.
     partitions: The number of block-diagonal code partitions.
 
-    Returns:
-    The number of operations (additions and multiplications)
-    required to decode.
+    Returns: The total complexity of decoding.
 
     '''
     assert isinstance(code_length, int)
@@ -90,6 +85,35 @@ def block_diagonal_decoding_complexity(code_length, packet_size, erasure_prob, p
     # problem in that a packet may contain symbols from various partitions.
     partition_complexity = rs_decoding_complexity(partition_length, packet_size, erasure_prob)
     return partition_complexity * partitions
+
+def peeling_decoding_complexity(code_length, code_rate, erasure_prob):
+    '''Compute the decoding complexity of decoding an erasure code using a
+    peeling decoder.
+
+    Args:
+
+    code_length: The length of the code in number of coded symbols.
+
+    code_rate: The rate of the code as given by
+    num_information_symbols / num_coded_symbols.
+
+    erasure_prob: The packet erasure probability.
+
+    Returns: The total complexity of decoding.
+
+    '''
+    information_symbols = round(code_length * code_rate)
+
+    # Compute the average degree for the ideal Soliton distribution
+    avg_check_degree = 1 / information_symbols
+    avg_check_degree += sum([k / (k * (k - 1)) for k in range(2, information_symbols + 1)])
+
+    num_iterations = round(code_length * erasure_prob)
+    additions_per_iteration = avg_check_degree - 1
+    multiplications_per_iteration = avg_check_degree
+    complexity_per_iteration = additions_per_iteration * ADDITION_COMPLEXITY
+    complexity_per_iteration += multiplications_per_iteration * MULTIPLICATION_COMPLEXITY
+    return num_iterations * complexity_per_iteration
 
 def matrix_vector_complexity(rows, cols):
     '''Compute the complexity of matrix-vector multiplication
@@ -106,7 +130,7 @@ def matrix_vector_complexity(rows, cols):
     The complexity of the multiplication.
 
     '''
-    additions = cols * rows
+    additions = cols * rows - 1
     multiplications = cols * rows
     return additions * ADDITION_COMPLEXITY + multiplications * MULTIPLICATION_COMPLEXITY
 
