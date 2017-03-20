@@ -322,6 +322,45 @@ def objective_function_sampled(par, assignment_matrix, labels, num_samples=1000)
     result.update(communication_load_sampled(par, assignment_matrix, labels, num_samples))
     return result
 
+def mds_performance(par, num_samples=1):
+    '''Compute load/delay for an MDS code.
+
+    Args:
+    par: A system parameters object.
+
+    num_samples: Unused
+
+    '''
+    load = par.unpartitioned_load()
+    delay = par.computational_delay()
+    coded_rows_per_server = round(par.num_source_rows * par.server_storage)
+    batches_per_server = coded_rows_per_server / par.rows_per_batch
+    batches_to_wait_for = par.q * batches_per_server
+    return {'load': load, 'delay': delay, 'servers': par.q, 'batches': batches_to_wait_for}
+
+def lt_performance(par, num_samples=1, overhead=1):
+    '''Estimate LDPC performance.
+
+    Args:
+    par: A system parameters object.
+
+    overhead: The overhead is the percentage increase in number of
+    servers required to decode. 1.10 means that an additional 10%
+    servers is required.
+
+    Returns: The estimated performance.
+
+    '''
+    servers_to_wait_for = math.ceil(par.q * overhead)
+    delay = par.computational_delay(q=servers_to_wait_for)
+    load = math.inf
+
+    coded_rows_per_server = round(par.num_source_rows * par.server_storage)
+    batches_per_server = coded_rows_per_server / par.rows_per_batch
+    batches_to_wait_for = servers_to_wait_for * batches_per_server
+    return {'load': load, 'batches': batches_to_wait_for,
+            'servers': servers_to_wait_for, 'delay': delay}
+
 def upper_bound_heuristic(par, num_samples=1):
     '''Evaluate the performance of the heuristic assignment.'''
 
