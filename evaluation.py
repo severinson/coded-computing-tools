@@ -491,28 +491,18 @@ def computational_delay_heuristic_average(par, num_samples=1):
 
     # If there are more coded rows than matrix elements, add that
     # number of rows to each element.
-    # rows_per_element = math.floor(par.num_coded_rows / (par.num_partitions * par.num_batches))
     rows_per_element = par.num_coded_rows / (par.num_partitions * par.num_batches)
     batches_waited_for = math.ceil(par.num_source_rows / (par.num_partitions * rows_per_element) * muq)
 
     # Assign the remaining rows in a block-diagonal fashion
     remaining_rows_per_batch = round(par.rows_per_batch - rows_per_element * par.num_partitions)
 
-    rows_per_batch = rows_per_element + remaining_rows_per_batch / par.num_partitions
-    # batches_waited_for = math.ceil(par.num_source_rows / (par.num_partitions * rows_per_batch) * muq)
-    #batches_waited_for *= muq
-    #batches_waited_for += 1
-
     coded_rows_per_server = par.num_source_rows * par.server_storage
     assert coded_rows_per_server % 1 == 0
     batches_per_server = coded_rows_per_server / par.rows_per_batch
     assert batches_per_server % 1 == 0
     servers_waited_for = batches_waited_for / batches_per_server
-
     delay = par.computational_delay(q=int(servers_waited_for))
-    print('SWF:', servers_waited_for, 'RPE:', rows_per_element, 'RRPB:', remaining_rows_per_batch, 'RPB:', rows_per_batch)
-    print()
-
     return {'servers': servers_waited_for, 'batches': batches_waited_for, 'delay': delay}
 
 def eval_unsupervised(par, num_samples=1000):
@@ -560,7 +550,6 @@ def computational_delay_unsupervised_average(par, num_samples=1000):
     The number of servers required to decode averaged over num_samples runs.
 
     '''
-    cum_delay = 0
     cum_result = {'batches': 0, 'servers': 0, 'delay': 0}
     for _ in range(num_samples):
         result = computational_delay_unsupervised(par)
@@ -589,10 +578,6 @@ def computational_delay_unsupervised(par):
     The number of servers required to decode.
 
     '''
-
-    # Round to avoid numerical problems as mu can be very small.
-    # The product is guaranteed to be integer.
-    rows_per_server = round(par.num_source_rows * par.server_storage)
 
     coded_rows_per_partition = par.num_servers / par.q * par.rows_per_partition
     assert coded_rows_per_partition % 1 == 0
