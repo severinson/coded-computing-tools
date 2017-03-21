@@ -26,6 +26,7 @@ import math
 import itertools as it
 import uuid
 import os
+import random
 import tempfile
 import unittest
 import numpy as np
@@ -660,14 +661,22 @@ class Assignment(object):
         for batch_result in self.index:
             batch_result.init_summary(self.par)
 
-    def label(self):
-        """ Label the batches with server subsets
+    def label(self, shuffle=True):
+        """Label the batches with server subsets
 
-        Label all batches with subsets in the order given by itertools.combinations
+        Label all batches with subsets.
+
+        Args:
+        shuffle: Shuffle the labeling if True. Otherwise label in the
+        order returned by itertools.combinations.
+
         """
         assert self.par.server_storage * self.par.q % 1 == 0, 'Must be integer'
-        labels = it.combinations(range(self.par.num_servers),
-                                 int(self.par.server_storage * self.par.q))
+        labels = list(it.combinations(range(self.par.num_servers),
+                                      int(self.par.server_storage * self.par.q)))
+        if shuffle:
+            random.shuffle(labels)
+
         row = 0
         for label in labels:
             for server in label:
