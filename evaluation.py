@@ -588,9 +588,12 @@ def computational_delay_unsupervised(par):
     for partition_index in range(par.num_partitions):
         partitions[partition_index] = set()
 
+    # Setup a set with the indices of all incomplete partitions
+    incomplete_partitions = {index for index in range(par.num_partitions)}
+
     # Add the rows stored at the first q servers to finish
     batches_waited_for = 0
-    while len(partitions) > 0:
+    while incomplete_partitions:
         batches_waited_for += 1
 
         # Generate a random set of partition-symbol index pairs
@@ -598,16 +601,12 @@ def computational_delay_unsupervised(par):
         symbol_indices = [random.choice(range(coded_rows_per_partition)) for _ in range(par.rows_per_batch)]
         for partition_index, symbol_index in zip(partition_indices, symbol_indices):
 
-            if partition_index not in partitions:
-                continue
-
             # Add the symbols to their partitions
             partitions[partition_index].add(symbol_index)
 
-            # Remove the partition when we've collected enough rows
+            # Mark as complete if we've collected enough rows
             if len(partitions[partition_index]) >= par.rows_per_partition:
-                del partitions[partition_index]
-
+                del incomplete_partitions[partition_index]
 
     coded_rows_per_server = par.num_source_rows * par.server_storage
     assert coded_rows_per_server % 1 == 0
