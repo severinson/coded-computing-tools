@@ -74,7 +74,7 @@ class SparseAssignment(Assignment):
 
         self.par = par
         self.gamma = gamma
-        self.assignment_matrix = sp.sparse.coo_matrix((par.num_batches, par.num_partitions))
+        self.assignment_matrix = sp.sparse.coo_matrix((par.num_batches, par.num_partitions), dtype=np.int8)
         self.assignment_matrix_csr = None
         if labels is None:
             self.labels = [set() for x in range(par.num_servers)]
@@ -104,9 +104,12 @@ class SparseAssignment(Assignment):
         stored in a union of batches.
 
         '''
+        assert isinstance(batch_indices, set)
+        if self.assignment_matrix_csr is None:
+            self.assignment_matrix_csr = self.assignment_matrix.tocsr()
         row_indices = list(batch_indices)
         sorted(row_indices)
-        symbols_slice = self.assignment_matrix.A[row_indices, :]
+        symbols_slice = self.assignment_matrix_csr.A[row_indices, :]
         symbols = symbols_slice.sum(axis=0)
         symbols += self.gamma * len(batch_indices)
         return symbols
@@ -217,9 +220,10 @@ class SparseAssignment(Assignment):
         assert isinstance(data, list)
         assert len(rows) == len(cols)
         assert len(cols) == len(data)
-        self.assignment_matrix += sp.sparse.coo_matrix((data, (rows, cols)),
+        self.assignment_matrix += sp.sparse.coo_matrix((data, (rows, cols)), dtype=np.int8,
                                                        shape=self.assignment_matrix.shape)
         self.assignment_matrix_csr = None
+
         # Eliminate duplicate entries
         self.assignment_matrix.sum_duplicates()
         return self
@@ -242,7 +246,7 @@ class SparseAssignment(Assignment):
         assert isinstance(data, list)
         assert len(rows) == len(cols)
         assert len(cols) == len(data)
-        self.assignment_matrix -= sp.sparse.coo_matrix((data, (rows, cols)),
+        self.assignment_matrix -= sp.sparse.coo_matrix((data, (rows, cols)), dtype=np.int8,
                                                        shape=self.assignment_matrix.shape)
 
         # Eliminate duplicate entries
