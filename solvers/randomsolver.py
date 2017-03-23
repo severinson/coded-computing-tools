@@ -14,10 +14,11 @@
 # limitations under the License.                                           #
 ############################################################################
 
-""" This solver creates a random assignment. """
+'''This solver creates a random assignment'''
 
 import random
 import model
+from assignments import SparseAssignment
 
 class RandomSolver(object):
     """ Create an assignment matrix randomly. """
@@ -25,36 +26,37 @@ class RandomSolver(object):
     def __init__(self):
         return
 
-    def solve(self, par, verbose=False):
-        """ Create an assignment matrix randomly.
+    def solve(self, par):
+        '''Create an assignment matrix randomly.
 
         Args:
         par: System parameters
-        verbose: Unused
 
-        Returns:
-        The resulting assignment object.
-        """
+        Returns: The resulting assignment object.
+
+        '''
 
         assert isinstance(par, model.SystemParameters)
-
-        assignment = model.Assignment(par, score=False, index=False)
-        assignment_matrix = assignment.assignment_matrix
-        rows_by_partition = [0 for x in range(par.num_partitions)]
-        self.assign_remaining_random(par, assignment_matrix, rows_by_partition)
+        rows_per_element = int(par.num_coded_rows / (par.num_partitions * par.num_batches))
+        assignment = SparseAssignment(par, gamma=rows_per_element)
+        count_by_partition = [rows_per_element * par.num_batches] * par.num_partitions
+        self.assign_remaining_random(par, assignment, count_by_partition)
         return assignment
 
-    def assign_remaining_random(self, par, assignment_matrix, rows_by_partition):
-        """ Assign any remaining rows randomly.
+    def assign_remaining_random(self, par, assignment, count_by_partition):
+        '''Assign any remaining rows randomly.
 
         Args:
         par: System parameters
-        assignment_matrix: Assignment matrix
-        rows_by_partition: A list of row counts by partition.
-        """
 
-        assert len(rows_by_partition) == par.num_partitions, \
-            'rows_by_partition must be of length equal to the number of partitions.'
+        assignment: Assignment object
+
+        count_by_partition: A list of row counts by partition.
+
+        '''
+
+        assert len(count_by_partition) == par.num_partitions, \
+            'count_by_partition must be of length equal to the number of partitions.'
 
         # Create a set containing the indices of the partially assigned
         # partitions
@@ -62,28 +64,33 @@ class RandomSolver(object):
         partial_partitions = set()
 
         for partition in range(par.num_partitions):
-            if rows_by_partition[partition] < coded_rows_per_partition:
+            if count_by_partition[partition] < coded_rows_per_partition:
                 partial_partitions.add(partition)
 
+        rows = list()
+        cols = list()
+        data = list()
         # Assign symbols randomly row-wise
         for row in range(par.num_batches):
-            row_sum = assignment_matrix[row].sum()
+            row_sum = assignment.batch_union({row}).sum()
             while row_sum < par.rows_per_batch:
-
-                # Get a random column index corresponding to a partial partition
                 col = random.sample(partial_partitions, 1)[0]
+                cols.append(col)
+                rows.append(row)
+                data.append(1)
 
                 # Increment the count
-                assignment_matrix[row, col] += 1
-                rows_by_partition[col] += 1
+                count_by_partition[col] += 1
                 row_sum += 1
 
                 # Remove the partition index if there are no more assignments
-                if rows_by_partition[col] == coded_rows_per_partition:
+                if count_by_partition[col] == coded_rows_per_partition:
                     partial_partitions.remove(col)
+
+        assignment.increment(rows, cols, data)
         return
 
     @property
     def identifier(self):
-        """ Return a string identifier for this object. """
+        '''Return a string identifier for this object.'''
         return self.__class__.__name__

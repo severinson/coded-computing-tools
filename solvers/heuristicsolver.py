@@ -14,78 +14,93 @@
 # limitations under the License.                                           #
 ############################################################################
 
-""" This solver creates an assignment using a heuristic block-diagonal structure. """
+'''This solver creates an assignment using a heuristic block-diagonal
+structure.
+
+'''
 
 import model
+from assignments import SparseAssignment
 
 class HeuristicSolver(object):
-    """ This solver creates an assignment using a heuristic block-diagonal structure. """
+    '''This solver creates an assignment using a heuristic block-diagonal
+    structure.
+
+    '''
 
     def __init__(self):
         return
 
-    def assign_block(self, par, assignment_matrix, row, min_col, max_col):
-        """ Assign rows to all slots between min_col and max_col.
-
-        This method won't work when max_col - min_col > par.rows_per_batch.
+    def assign_block(self, par, assignment, row, min_col, max_col, rows, cols, data):
+        '''Assign rows to all slots between min_col and max_col.
 
         Args:
         par: System parameters
-        assignment_matrix: The assignment matrix
+
+        assignment: An assignment object
+
         row: The assignment matrix rows to assign rows to
+
         min_col: Start of block
+
         max_col: End of block
 
-        Returns:
-        The wrapped column index. If there are 10 columns and max_col is 12, 2 is returned.
-        """
+        Returns: The wrapped column index. If there are 10 columns and
+        max_col is 12, 2 is returned.
+
+        '''
 
         assert (max_col - min_col) <= par.rows_per_batch
-
         if min_col == max_col:
             return max_col
 
         wrapped_col = max_col
         if max_col >= par.num_partitions:
             wrapped_col = max_col - par.num_partitions
-            assignment_matrix[row, 0:wrapped_col] += 1
+            for col in range(0, wrapped_col):
+                rows.append(row)
+                cols.append(col)
+                data.append(1)
 
         max_col = min(par.num_partitions, max_col)
-        assignment_matrix[row][min_col:max_col] += 1
+        for col in range(min_col, max_col):
+            rows.append(row)
+            cols.append(col)
+            data.append(1)
 
         return wrapped_col
 
-    def solve(self, par, verbose=False):
-        """ Create an assignment using a block-diagonal structure.
+    def solve(self, par):
+        '''Create an assignment using a block-diagonal structure.
 
         Args:
-        par: System parametetrs
+        par: System parameters
+
         verbose: Print extra messages if True.
 
         Returns: The resulting assignment
-        """
 
-        assignment = model.Assignment(par, score=False, index=False)
-        assignment_matrix = assignment.assignment_matrix
-
-        # If there are more coded rows than matrix elements, add that
-        # number of rows to each element.
+        '''
+        assert isinstance(par, model.SystemParameters)
         rows_per_element = int(par.num_coded_rows / (par.num_partitions * par.num_batches))
-        if rows_per_element > 0:
-            for row in range(par.num_batches):
-                for col in range(par.num_partitions):
-                    assignment_matrix[row, col] = rows_per_element
+        assignment = SparseAssignment(par, gamma=rows_per_element)
+
+        rows = list()
+        cols = list()
+        data= list()
 
         # Assign the remaining rows in a block-diagonal fashion
         remaining_rows_per_batch = par.rows_per_batch - rows_per_element * par.num_partitions
         min_col = 0
         for row in range(par.num_batches):
             max_col = min_col + remaining_rows_per_batch
-            min_col = self.assign_block(par, assignment_matrix, row, min_col, max_col)
+            min_col = self.assign_block(par, assignment, row, min_col, max_col,
+                                        rows, cols, data)
 
+        assignment.increment(rows, cols, data)
         return assignment
 
     @property
     def identifier(self):
-        """ Return a string identifier for this object. """
+        '''Return a string identifier for this object.'''
         return self.__class__.__name__
