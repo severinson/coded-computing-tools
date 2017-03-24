@@ -28,6 +28,7 @@ import logging
 import itertools
 import datetime
 import numpy as np
+from scipy.misc import comb as nchoosek
 import model
 import assignments
 
@@ -169,7 +170,7 @@ def computational_delay(parameters, assignment, num_samples=1000):
     result['delay'] /= num_samples
     return result
 
-def communication_load(parameters, assignment, num_samples):
+def communication_load(parameters, assignment, num_samples=1000):
     '''Sample the communication load of an assignment.
 
     Estimate the number of unicasts required for all servers to hold
@@ -191,31 +192,74 @@ def communication_load(parameters, assignment, num_samples):
     assert isinstance(assignment, assignments.Assignment)
     assert isinstance(num_samples, int)
 
-    result = {'load': 0}
-    server_list = list(range(parameters.num_servers))
+
+    result = {'unicasts_strat_1': 0, 'unicasts_strat_2': 0,
+              'multicasts_strat_1': 0, 'multicasts_strat_2': 0}
 
     for _ in range(num_samples):
 
-        # Generate a random set of finished servers and select one
-        finished_servers = random.sample(server_list, parameters.q)
-        finished_server = random.sample(finished_servers, 1)[0]
+        # Randomize completion order
+        server_order = list(range(parameters.num_servers))
+        random.shuffle(server_order)
+        server_order = server_order[0:parameters.q]
+
+        # Select 1 server and compute the load from its perspective
+        server = server_order[-1]
+
+        # Select the remaining q - 1 servers
+        servers_without_q = server_order[0:-1]
+        assert len(server_order) == parameters.q
 
         # Sum the corresponding rows of the assignment matrix
-        batches = set()
-        for batch in assignment.labels[finished_server]:
-            batches.add(batch)
+        batches = assignment.labels[server].copy()
 
-        # Add the rows sent in the shuffle phase
-        for j in range(parameters.sq, int(parameters.server_storage*parameters.q) + 1):
-            for multicast_subset in itertools.combinations([x for x in finished_servers
-                                                            if x != finished_server], j):
-                batches.update(set.intersection(*[assignment.labels[x] for x in multicast_subset]))
+        # Strategy 1 multicasts for all subsets of size from sq to muq
+        load_1_multicasts = 0
+        muq = int(parameters.server_storage * parameters.q)
+        for j in range(parameters.sq, muq + 1):
+            load_1_multicasts += parameters.B_j(j) / j
 
-        count_vector = np.zeros(parameters.num_partitions) - parameters.num_source_rows / parameters.num_partitions
-        count_multicasts = assignment.batch_union(batches)
-        count_vector = np.add(count_vector, count_multicasts)
-        result['load'] += model.remaining_unicasts(count_vector)
+        load_1_multicasts *= parameters.num_source_rows * parameters.num_outputs
 
-    result['load'] *= parameters.q
-    result['load'] /= num_samples
+        for j in range(parameters.sq, muq + 1):
+            for multicast_subset in itertools.combinations(servers_without_q, j):
+                # load_1_multicasts += j
+                batches.update(set.intersection(*[assignment.labels[x]
+                                                  for x in multicast_subset]))
+
+        # Negative values indicate remaining needed values
+        count_vector = np.zeros(parameters.num_partitions)
+        count_vector -= parameters.num_source_rows / parameters.num_partitions
+
+        # Add multicasted values
+        count_vector += assignment.batch_union(batches)
+
+        # Compute unicasts by summing the negative elements
+        load_1_unicasts = abs((count_vector * (count_vector < 0)).sum())
+
+        # Strategy 2 multicasts for subsets of size sq-1 to muq
+        load_2_multicasts = parameters.B_j(parameters.sq - 1) / (parameters.sq - 1)
+        load_2_multicasts *= parameters.num_source_rows * parameters.num_outputs
+        load_2_multicasts += load_1_multicasts
+
+        load_2_batches = set()
+        for multicast_subset in itertools.combinations(servers_without_q, parameters.sq - 1):
+            load_2_batches.update(set.intersection(*[assignment.labels[x]
+                                                     for x in multicast_subset]))
+
+        # Add the new unique batches
+        count_vector += assignment.batch_union(load_2_batches - batches)
+
+        # Compute unicasts
+        load_2_unicasts = abs((count_vector * (count_vector < 0)).sum())
+
+        result['unicasts_strat_1'] += load_1_unicasts
+        result['unicasts_strat_2'] += load_2_unicasts
+        result['multicasts_strat_1'] += load_1_multicasts
+        result['multicasts_strat_2'] += load_2_multicasts
+
+    result['unicasts_strat_1'] *= parameters.q / num_samples
+    result['unicasts_strat_2'] *= parameters.q / num_samples
+    result['multicasts_strat_1'] /= num_samples
+    result['multicasts_strat_2'] *= parameters.q / num_samples
     return result
