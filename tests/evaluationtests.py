@@ -38,9 +38,9 @@ class EvaluationTests(unittest.TestCase):
             solver = heuristicsolver.HeuristicSolver()
             simulator = simulation.Simulator(solver=heuristicsolver.HeuristicSolver(),
                                              directory=tmpdirname, num_samples=100)
-            correct_results = [{'servers': 6, 'batches': 48, 'load': 9000, 'delay': 3.78},
-                               {'servers': 6, 'batches': 48, 'load': 9000, 'delay': 3.78},
-                               {'servers': 6, 'batches': 48, 'load': 11535, 'delay': 3.9}]
+            correct_results = [{'servers': 6, 'batches': 48, 'unicasts_strat_1': 9000, 'delay': 3.78},
+                               {'servers': 6, 'batches': 48, 'unicasts_strat_1': 9000, 'delay': 3.78},
+                               {'servers': 6, 'batches': 48, 'unicasts_strat_1': 11535, 'delay': 3.9}]
 
             for par, correct_result in zip(self.get_parameters_partitioning(),
                                            correct_results):
@@ -50,35 +50,18 @@ class EvaluationTests(unittest.TestCase):
                 self.assertTrue(assignment.is_valid())
 
                 # Test the sampled evaluation
-                result = sampled.evaluate(par, assignment, num_samples=100)
-                self.assertAlmostEqual(result['servers'], correct_result['servers'],
-                                       places=None, delta=correct_result['servers'] * 0.1)
-                self.assertAlmostEqual(result['batches'], correct_result['batches'],
-                                       places=None, delta=correct_result['batches'] * 0.1)
-                self.assertAlmostEqual(result['delay'], correct_result['delay'],
-                                       places=None, delta=correct_result['delay'] * 0.1)
-                self.assertAlmostEqual(result['load'], correct_result['load'],
-                                       places=None, delta=correct_result['load'] * 0.1)
+                # TODO: Deprecated
+                # result = sampled.evaluate(par, assignment, num_samples=100)
+                # for key, value in correct_result.items():
+                #     self.assertAlmostEqual(result[key], value, places=None, delta=value * 0.1)
 
                 result = binsearch.evaluate(par, assignment, num_samples=100)
-                self.assertAlmostEqual(result['servers'], correct_result['servers'],
-                                       places=None, delta=correct_result['servers'] * 0.1)
-                self.assertAlmostEqual(result['batches'], correct_result['batches'],
-                                       places=None, delta=correct_result['batches'] * 0.1)
-                self.assertAlmostEqual(result['delay'], correct_result['delay'],
-                                       places=None, delta=correct_result['delay'] * 0.1)
-                # self.assertAlmostEqual(result['load'], correct_result['load'],
-                #                        places=None, delta=correct_result['load'] * 0.1)
+                for key, value in correct_result.items():
+                    self.assertAlmostEqual(result[key], value, places=None, delta=value * 0.1)
 
                 result = simulator.simulate(par)
-                self.assertAlmostEqual(result['servers'][0], correct_result['servers'],
-                                       places=None, delta=correct_result['servers'] * 0.1)
-                self.assertAlmostEqual(result['batches'][0], correct_result['batches'],
-                                       places=None, delta=correct_result['batches'] * 0.1)
-                self.assertAlmostEqual(result['delay'][0], correct_result['delay'],
-                                       places=None, delta=correct_result['delay'] * 0.1)
-                #self.assertAlmostEqual(result['load'][0], correct_result['load'],
-                #                       places=None, delta=correct_result['load'] * 0.1)
+                for key, value in correct_result.items():
+                    self.assertAlmostEqual(result[key][0], value, places=None, delta=value * 0.1)
 
         return
 
