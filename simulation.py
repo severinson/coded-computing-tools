@@ -162,6 +162,8 @@ class Simulator(object):
             # the par_eval function.
             if self.solver is None:
                 result = self.par_eval(parameters, num_samples=self.num_samples)
+                if isinstance(result, dict):
+                    result = pd.DataFrame(result)
 
             # If a solver is provided we should find an assignment
             # using the solver and analyze its performance.
@@ -172,16 +174,20 @@ class Simulator(object):
 
                 # Evaluate it
                 result = binsearch.evaluate(parameters, assignment, self.num_samples)
+                if isinstance(result, dict):
+                    result = pd.DataFrame(result)
 
                 # Keep the best assignment
-                if result['delay'] < best_avg_delay:
-                    best_assignment = assignment
-                    best_avg_delay = result['delay']
+                # if result['delay'].mean() < best_avg_delay:
+                #     best_assignment = assignment
+                #     best_avg_delay = result['delay']
 
             results.append(result)
 
-        # Create a pandas dataframe and write it to disk
-        dataframe = pd.DataFrame(results)
+        # Concatenate DataFrames and write to disk
+        # TODO: This doesn't align the sample values. Maybe add
+        # another field for the assignment index?
+        dataframe = pd.concat(results)
         dataframe.to_csv(filename)
 
         # Write the best assignment to disk
