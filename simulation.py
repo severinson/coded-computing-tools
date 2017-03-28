@@ -38,8 +38,9 @@ class Simulator(object):
     assignment matrix found to disk in the same directory.
     """
 
-    def __init__(self, solver=None, par_eval=None, directory=None,
-                 num_assignments=1, num_samples=1000, rerun=False):
+    def __init__(self, solver=None, eval_fun=None, par_eval=None,
+                 directory=None, num_assignments=1, num_samples=1000,
+                 rerun=False):
         '''Creates a assignment performance simulator.
 
         Writes the results to disk as .csv files. Will also write the
@@ -49,6 +50,10 @@ class Simulator(object):
 
         solver: The solver to use when creating assignments. A
         par_eval method must be provided if set to None.
+
+        eval_fun: Function to use when evaluating the performance of
+        an assigmnet. Will use binsearch if left as None. This method
+        is not used if a per_eval method is provided.
 
         par_eval: A method that takes a parameter object as its single
         argument and returns a dict with entries 'load' and 'delay'
@@ -69,6 +74,9 @@ class Simulator(object):
         rerun: If True, any result stored on disk are overwritten.
 
         '''
+
+        if eval_fun is None:
+            eval_fun = binsearch.evaluate
 
         if solver is None:
             assert par_eval is not None
@@ -92,6 +100,7 @@ class Simulator(object):
             os.makedirs(directory)
 
         self.solver = solver
+        self.eval_fun = eval_fun
         self.par_eval = par_eval
         self.directory = directory
         self.num_assignments = num_assignments
@@ -173,7 +182,7 @@ class Simulator(object):
                 assert assignment.is_valid()
 
                 # Evaluate it
-                result = binsearch.evaluate(parameters, assignment, self.num_samples)
+                result = self.eval_fun(parameters, assignment, self.num_samples)
                 if isinstance(result, dict):
                     result = pd.DataFrame(result)
 
