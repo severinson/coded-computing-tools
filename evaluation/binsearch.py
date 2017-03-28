@@ -28,6 +28,7 @@ import logging
 import itertools
 import datetime
 import numpy as np
+import pandas as pd
 from scipy.misc import comb as nchoosek
 import model
 import assignments
@@ -115,7 +116,7 @@ def computational_delay(parameters, assignment, num_samples=1000):
     assert isinstance(parameters, model.SystemParameters)
     assert isinstance(assignment, assignments.Assignment)
     assert isinstance(num_samples, int)
-    result = {'batches': 0, 'servers': 0, 'delay': 0}
+    results = list()
 
     printout_interval = datetime.timedelta(seconds=10)
     last_printout = datetime.datetime.utcnow()
@@ -161,14 +162,10 @@ def computational_delay(parameters, assignment, num_samples=1000):
                 permanent_count = tentative_count
                 permanently_added.update(tentatively_added)
 
-        result['servers'] += min_bound
-        result['batches'] += min_bound * batches_per_server
-        result['delay'] += parameters.computational_delay(q=min_bound)
+        results.append({'servers': min_bound, 'batches': min_bound * batches_per_server,
+                        'delay': parameters.computational_delay(q=min_bound)})
 
-    result['servers'] /= num_samples
-    result['batches'] /= num_samples
-    result['delay'] /= num_samples
-    return result
+    return pd.DataFrame(results)
 
 def communication_load(parameters, assignment, num_samples=1000):
     '''Sample the communication load of an assignment.
@@ -191,10 +188,7 @@ def communication_load(parameters, assignment, num_samples=1000):
     assert isinstance(parameters, model.SystemParameters)
     assert isinstance(assignment, assignments.Assignment)
     assert isinstance(num_samples, int)
-
-
-    result = {'unicasts_strat_1': 0, 'unicasts_strat_2': 0,
-              'multicasts_strat_1': 0, 'multicasts_strat_2': 0}
+    results = list()
 
     for _ in range(num_samples):
 
@@ -253,13 +247,11 @@ def communication_load(parameters, assignment, num_samples=1000):
         # Compute unicasts
         load_2_unicasts = abs((count_vector * (count_vector < 0)).sum())
 
-        result['unicasts_strat_1'] += load_1_unicasts
-        result['unicasts_strat_2'] += load_2_unicasts
-        result['multicasts_strat_1'] += load_1_multicasts
-        result['multicasts_strat_2'] += load_2_multicasts
+        # Store result. Unicasts are computed for 1 out of q servers
+        # so need to be multiplied by q.
+        results.append({'unicasts_strat_1': load_1_unicasts * parameters.q,
+                        'unicasts_strat_2': load_2_unicasts * parameters.q,
+                        'multicasts_strat_1': load_1_multicasts,
+                        'multicasts_strat_2': load_2_multicasts})
 
-    result['unicasts_strat_1'] *= parameters.q / num_samples
-    result['unicasts_strat_2'] *= parameters.q / num_samples
-    result['multicasts_strat_1'] /= num_samples
-    result['multicasts_strat_2'] *= parameters.q / num_samples
-    return result
+    return pd.DataFrame(results)
