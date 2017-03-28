@@ -217,7 +217,7 @@ class SystemParameters(object):
         """ Total number of multicast messages. """
         return self.multicast_load() * self.num_source_rows * self.num_outputs
 
-    def unpartitioned_load(self, enable_load_2=False):
+    def unpartitioned_load(self, enable_load_2=True):
         """ Calculate the total communication load per output vector for an
         unpartitioned storage design as defined in Li2016.
 
