@@ -57,11 +57,11 @@ class EvaluationTests(unittest.TestCase):
 
                 result = binsearch.evaluate(par, assignment, num_samples=100)
                 for key, value in correct_result.items():
-                    self.assertAlmostEqual(result[key], value, places=None, delta=value * 0.1)
+                    self.assertAlmostEqual(result[key].mean(), value, places=None, delta=value * 0.1)
 
                 result = simulator.simulate(par)
                 for key, value in correct_result.items():
-                    self.assertAlmostEqual(result[key][0], value, places=None, delta=value * 0.1)
+                    self.assertAlmostEqual(result[key].mean(), value, places=None, delta=value * 0.1)
 
         return
 
