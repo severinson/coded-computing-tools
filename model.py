@@ -34,19 +34,48 @@ from scipy.misc import comb as nchoosek
 import complexity
 
 class SystemParameters(object):
-    """ System parameters representation. This struct is used as an argument
-    for most functions, and creating one should be the first step in
-    simulating the system for some parameters. """
+    """System parameters representation. This struct is used as an
+    argument for most functions, and creating one should be the first
+    step in simulating the system for some parameters.
 
-    def __init__(self, rows_per_batch, num_servers, q, num_outputs, server_storage, num_partitions):
+    """
+
+    def __init__(self, rows_per_batch=None, num_servers=None, q=None, num_outputs=None,
+                 server_storage=None, num_partitions=None, num_columns=None):
+        '''Create a system parameters object.
+
+        Args:
+
+        rows_per_batch: Number of coded rows to store per batch.
+
+        num_servers: Number of servers used in the map phase.
+
+        q: Number of servers to wait for in the map step and the
+        number of servers used in the shuffle and reduce phases.
+
+        num_outputs: Number of input and output vectors.
+
+        server_storage: The number of coded rows stored by each server
+        in the map phase is given by server_storage*num_source_rows.
+
+        num_partitions: Number of partitions used by the
+        block-diagonal code.
+
+        num_columns: Number of columns of the source matrix. If set to
+        None the matrix is assumed to be square.
+
+        '''
 
         assert isinstance(rows_per_batch, int)
         assert isinstance(num_servers, int)
         assert isinstance(q, int)
         assert isinstance(num_outputs, int)
         assert isinstance(server_storage, float) or server_storage == 1
+        assert server_storage <= 1, 'Server storage must be >0 and <=1.'
         assert isinstance(num_partitions, int)
-        assert server_storage <= 1, 'Server storage can at most be 1'
+        assert isinstance(num_columns, int) or num_columns is None
+        if num_columns:
+            assert num_columns > 0
 
         self.num_servers = num_servers
         self.q = q
@@ -71,6 +100,12 @@ class SystemParameters(object):
         num_source_rows = int(num_source_rows)
         self.num_source_rows = num_source_rows
 
+        # Assume square matrix if num_columns is None
+        if num_columns:
+            self.num_columns = num_columns
+        else:
+            self.num_columns = self.num_source_rows
+
         assert num_source_rows / num_partitions % 1 == 0, \
             'There must be an integer number of source rows per partition.'
 
@@ -83,6 +118,9 @@ class SystemParameters(object):
 
         self.sq = self.s_q()
 
+        # Store some additional parameters for convenience
+        self.muq = round(self.server_storage * self.q)
+
         # Setup a dict to cache delay computations in
         self.cached_delays = dict()
         self.cached_reduce_delays = dict()
@@ -90,9 +128,15 @@ class SystemParameters(object):
         return
 
     @classmethod
-    def fixed_complexity_parameters(cls, rows_per_server, rows_per_partition, min_num_servers, code_rate, muq):
-        """ Attempt to find a set of servers with a fixed number of rows per
-        server and rows per partition. """
+    def fixed_complexity_parameters(cls, rows_per_server=None,
+                                    rows_per_partition=None,
+                                    min_num_servers=None,
+                                    code_rate=None, muq=None,
+                                    num_columns=None):
+        """Attempt to find a set of servers with a fixed number of rows per
+        server and rows per partition.
+
+        """
 
         num_servers = min_num_servers
         while True:
@@ -138,7 +182,11 @@ class SystemParameters(object):
             num_partitions = int(num_partitions)
             break
 
-        return cls(rows_per_batch, num_servers, q, q, server_storage, num_partitions)
+        return cls(rows_per_batch=rows_per_batch,
+                   num_servers=num_servers, q=q, num_outputs=q,
+                   server_storage=server_storage,
+                   num_partitions=num_partitions,
+                   num_columns=num_columns)
 
     def __str__(self):
         string = '------------------------------\n'
@@ -150,10 +198,11 @@ class SystemParameters(object):
         string += 'Number of outputs: ' + str(self.num_outputs) + '\n'
         string += 'Server storage: ' + str(self.server_storage) + '\n'
         string += 'Batches: ' + str(self.num_batches) + '\n'
-        string += '|T|: ' + str(self.server_storage * self.q) + '\n'
+        string += 'muq: ' + str(self.server_storage * self.q) + '\n'
         string += 'Code rate: ' + str(self.q / self.num_servers) + '\n'
         string += 'Source rows: ' + str(self.num_source_rows) + '\n'
         string += 'Coded rows: ' + str(self.num_coded_rows) + '\n'
+        string += 'Columns: ' + str(self.num_columns) + '\n'
         string += 'Partitions: ' + str(self.num_partitions) + '\n'
         string += 'Rows per partition: ' + str(self.rows_per_partition) + '\n'
         string += 'Multicast messages: ' + str(self.num_multicasts()) + '\n'
@@ -161,18 +210,8 @@ class SystemParameters(object):
         string += '------------------------------'
         return string
 
-    def old_identifier(self):
-        """ Return the old string identifier for these parameters. """
-        string = 'm_' + str(self.num_source_rows)
-        string += '_K_' + str(self.num_servers)
-        string += '_q_' + str(self.q)
-        string += '_N_' + str(self.num_outputs)
-        string += '_mu_' + str(self.server_storage)
-        string += '_T_' + str(self.num_partitions)
-        return string
-
     def identifier(self):
-        """ Return a string identifier for these parameters. """
+        """Return a string identifier for these parameters."""
         string = 'm_' + str(self.num_source_rows)
         string += '_K_' + str(self.num_servers)
         string += '_q_' + str(self.q)
@@ -182,7 +221,7 @@ class SystemParameters(object):
         return string
 
     def s_q(self):
-        """ Calculate S_q as defined in Li2016. """
+        """Calculate S_q as defined in Li2016."""
         muq = int(self.server_storage * self.q)
         s = 0
         for j in range(muq, 0, -1):
@@ -259,8 +298,11 @@ class SystemParameters(object):
         Args:
         q: The number of servers to wait for. If q is None, the value in self is used.
 
-        Returns:
-        The computational delay.
+        Returns: The normalized computational delay. Multiply the
+        result by
+        complexity.matrix_vector_complexity(self.server_storage *
+        self.num_source_rows, # self.num_columns) for the absolute
+        result.
 
         """
 
@@ -280,11 +322,11 @@ class SystemParameters(object):
         for j in range(self.num_servers - q + 1, self.num_servers):
             delay += 1 / j
 
-        delay *= self.server_storage * self.num_outputs
+        # Scale by number of output vectors
+        delay *= self.num_outputs
 
-        # Cache the result
+        # Cache the result and return
         self.cached_delays[q] = delay
-
         return delay
 
     def computational_delay_ldpc(self, q=None, overhead=1.10):
@@ -292,7 +334,9 @@ class SystemParameters(object):
         code.
 
         Args:
-        q: The number of servers to wait for. If q is None, the value in self is used.
+
+        q: The number of servers to wait for. If q is None, the value
+        in self is used.
 
         overhead: The overhead is the percentage increase in number of
         servers required to decode. 1.10 means that an additional 10%
@@ -322,7 +366,6 @@ class SystemParameters(object):
         delay *= self.server_storage * self.num_outputs
         return delay
 
-
     def reduce_delay(self, num_partitions=None):
         '''Return the delay incurred in the reduce step.
 
@@ -336,7 +379,6 @@ class SystemParameters(object):
         The reduce delay.
 
         '''
-
         assert num_partitions is None or isinstance(num_partitions, int)
         if num_partitions is None:
             num_partitions = self.num_partitions
@@ -349,21 +391,16 @@ class SystemParameters(object):
         for j in range(1, self.q):
             delay += 1 / j
 
-        # TODO: Is this the correct way to calculate the packet size?
-        # A given server does not necessarily experience the erasure
-        # of all symbols on a machine that failed to finish.
+        # Scale by decoding complexity
         delay *= complexity.block_diagonal_decoding_complexity(self.num_coded_rows,
                                                                1,
                                                                1 - self.q / self.num_servers,
                                                                num_partitions)
         delay *= self.num_outputs / self.q
+        delay /= self.num_source_rows# * self.num_outputs
 
-        # TODO: We assume that the source matrix is square for now
-        delay /= complexity.matrix_vector_complexity(self.num_source_rows, self.num_source_rows)
-
-        # Cache the result
+        # Cache the result and return
         self.cached_reduce_delays[num_partitions] = delay
-
         return delay
 
     def reduce_delay_ldpc_peeling(self):
@@ -386,10 +423,7 @@ class SystemParameters(object):
                                                         code_rate,
                                                         1 - self.q / self.num_servers)
         delay *= self.num_outputs / self.q
-
-        # TODO: We assume that the source matrix is square for now
-        delay /= complexity.matrix_vector_complexity(self.num_source_rows, self.num_source_rows)
-
+        delay /= self.num_source_rows# * self.num_outputs
         return delay
 
 class Perspective(object):
