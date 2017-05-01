@@ -31,37 +31,97 @@ from evaluation import analytic
 class EvaluationTests(unittest.TestCase):
     '''Tests for the evaluation'''
 
+    def test_lt(self):
+        '''Test the analytic LT code evaluation.'''
+        correct_results = [{'servers': 6, 'batches': 48, 'delay': 11.3},
+                           {'servers': 6, 'batches': 48, 'delay': 11.3},
+                           {'servers': 6, 'batches': 48, 'delay': 11.3}]
+
+        for par, correct_result in zip(self.get_parameters_partitioning(),
+                                       correct_results):
+            result = analytic.lt_performance(par)
+            self.verify_result(result, correct_result, delta=0.01)
+
+        return
+
+    def test_mds(self):
+        '''Test the analytic MDS code evaluation.'''
+        correct_results = [{'servers': 6, 'batches': 48, 'delay': 11.3},
+                           {'servers': 6, 'batches': 48, 'delay': 11.3},
+                           {'servers': 6, 'batches': 48, 'delay': 11.3}]
+
+        for par, correct_result in zip(self.get_parameters_partitioning(),
+                                       correct_results):
+            result = analytic.mds_performance(par)
+            self.verify_result(result, correct_result, delta=0.01)
+
+            # self.assertAlmostEqual(result['servers'], correct_result['servers'],
+            #                        places=None, delta=correct_result['servers'] * 0.1)
+            # self.assertAlmostEqual(result['batches'], correct_result['batches'],
+            #                        places=None, delta=correct_result['batches'] * 0.1)
+
+        return
+
+
+    def verify_result(self, result, correct_result, delta=0.2):
+        '''Check the results against known correct results.
+
+        Args:
+
+        result: Measured result.
+
+        correct_result: Dict with correct results.
+
+        delta: Correct result must be within a delta fraction of the
+        measured result.
+
+        '''
+        for key, value in correct_result.items():
+            self.assertAlmostEqual(result[key].mean(), value, places=None, delta=value * delta)
+
+    def verify_solver(self, solvefun, correct_results, delta=0.2):
+        '''Check the results from evaluating the assignment produced by some
+        solver against known correct results.
+
+        Args:
+
+        solvefun: Function called to create an assignment.
+
+        correct_results: List of dicts with correct results.
+
+        delta: Correct result must be within a delta fraction of the
+        measured result.
+
+        '''
+        for par, correct_result in zip(self.get_parameters_partitioning(), correct_results):
+            assignment = solvefun(par)
+            self.assertTrue(assignment.is_valid())
+
+            result = binsearch.evaluate(par, assignment, num_samples=100)
+            self.verify_result(result, correct_result)
+
+        return
+
     def test_heuristic(self):
         '''Test the heuristic solver'''
+        solver = heuristicsolver.HeuristicSolver()
+        correct_results = [{'servers': 6, 'batches': 48, 'unicasts_strat_1': 9000, 'delay': 11.3},
+                           {'servers': 6, 'batches': 48, 'unicasts_strat_1': 9000, 'delay': 11.3},
+                           {'servers': 6, 'batches': 48, 'unicasts_strat_1': 11535, 'delay': 12}]
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            solver = heuristicsolver.HeuristicSolver()
-            simulator = simulation.Simulator(solver=heuristicsolver.HeuristicSolver(),
-                                             directory=tmpdirname, num_samples=100)
-            correct_results = [{'servers': 6, 'batches': 48, 'unicasts_strat_1': 9000, 'delay': 3.78},
-                               {'servers': 6, 'batches': 48, 'unicasts_strat_1': 9000, 'delay': 3.78},
-                               {'servers': 6, 'batches': 48, 'unicasts_strat_1': 11535, 'delay': 3.9}]
+        self.verify_solver(solver.solve, correct_results)
+        return
 
-            for par, correct_result in zip(self.get_parameters_partitioning(),
-                                           correct_results):
+    def test_heuristic_analytic(self):
+        '''Test the analytic heuristic assignment evaluation.'''
+        correct_results = [{'servers': 6, 'batches': 48, 'delay': 11.3},
+                           {'servers': 6, 'batches': 48, 'delay': 11.3},
+                           {'servers': 6, 'batches': 48, 'delay': 11.3}]
 
-                # Test the solver
-                assignment = solver.solve(par)
-                self.assertTrue(assignment.is_valid())
-
-                # Test the sampled evaluation
-                # TODO: Deprecated
-                # result = sampled.evaluate(par, assignment, num_samples=100)
-                # for key, value in correct_result.items():
-                #     self.assertAlmostEqual(result[key], value, places=None, delta=value * 0.1)
-
-                result = binsearch.evaluate(par, assignment, num_samples=100)
-                for key, value in correct_result.items():
-                    self.assertAlmostEqual(result[key].mean(), value, places=None, delta=value * 0.1)
-
-                result = simulator.simulate(par)
-                for key, value in correct_result.items():
-                    self.assertAlmostEqual(result[key].mean(), value, places=None, delta=value * 0.1)
+        for par, correct_result in zip(self.get_parameters_partitioning(),
+                                        correct_results):
+             result = analytic.average_heuristic(par)
+             self.verify_result(result, correct_result, delta=0.1)
 
         return
 
