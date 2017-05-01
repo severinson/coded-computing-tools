@@ -26,18 +26,27 @@ class RandomSolver(object):
     def __init__(self):
         return
 
-    def solve(self, par):
+    def solve(self, par, optimized=False):
         '''Create an assignment matrix randomly.
 
         Args:
+
         par: System parameters
+
+        optimized: If True, the solver will first assign as many rows
+        as possible to all elements of the assignment matrix, and then
+        assign any remaining rows randomly. Defaults to False.
 
         Returns: The resulting assignment object.
 
         '''
 
         assert isinstance(par, model.SystemParameters)
-        rows_per_element = int(par.num_coded_rows / (par.num_partitions * par.num_batches))
+        if optimized:
+            rows_per_element = int(par.num_coded_rows / (par.num_partitions * par.num_batches))
+        else:
+            rows_per_element = 0
+
         assignment = SparseAssignment(par, gamma=rows_per_element)
         count_by_partition = [rows_per_element * par.num_batches] * par.num_partitions
         self.assign_remaining_random(par, assignment, count_by_partition)
@@ -67,17 +76,20 @@ class RandomSolver(object):
             if count_by_partition[partition] < coded_rows_per_partition:
                 partial_partitions.add(partition)
 
-        rows = list()
-        cols = list()
-        data = list()
+        rows = dict()
+        # rows = list()
+        # cols = list()
+        # data = list()
         # Assign symbols randomly row-wise
         for row in range(par.num_batches):
+            cols = dict()
             row_sum = assignment.batch_union({row}).sum()
             while row_sum < par.rows_per_batch:
                 col = random.sample(partial_partitions, 1)[0]
-                cols.append(col)
-                rows.append(row)
-                data.append(1)
+                if col in cols:
+                    cols[col] += 1
+                else:
+                    cols[col] = 1
 
                 # Increment the count
                 count_by_partition[col] += 1
@@ -87,7 +99,11 @@ class RandomSolver(object):
                 if count_by_partition[col] == coded_rows_per_partition:
                     partial_partitions.remove(col)
 
-        assignment.increment(rows, cols, data)
+            rows[row] = cols
+
+        for row, cols in rows.items():
+            assignment.increment([row]*len(cols), list(cols.keys()), list(cols.values()))
+
         return
 
     @property
