@@ -1,3 +1,8 @@
+'''This module contains code for computing the complexity of various
+operations.
+
+'''
+
 import math
 import random
 import matplotlib.pyplot as plt
@@ -8,12 +13,14 @@ LDPC_RATE = 1.0496
 LDPC_XOR_PER_WORD = 30 / 4
 RS_XOR_PER_WORD = 44.6
 
+# Finite field arithmetic complexity for fields of size 2^100
+# Source: Zhi, L., Higgins, J., & Clement, M. (2001).
+# Performance of finite field arithmetic in an elliptic curve cryptosystem.
 
-# Computational complexity of arithmetic operations
-# Source:
-# https://streamcomputing.eu/blog/2012-07-16/how-expensive-is-an-operation-on-a-cpu/
-ADDITION_COMPLEXITY = 1
-MULTIPLICATION_COMPLEXITY = 4
+# Ignore addition cost to simplify analysis
+# ADDITION_COMPLEXITY = 0.13e-6
+ADDITION_COMPLEXITY = 0
+MULTIPLICATION_COMPLEXITY = 87e-6
 
 def rs_decoding_complexity(code_length, packet_size, erasure_prob):
     '''Compute the decoding complexity of Reed-Solomon codes
@@ -80,9 +87,6 @@ def block_diagonal_decoding_complexity(code_length, packet_size, erasure_prob, p
     assert isinstance(partitions, int)
     assert code_length % partitions == 0, 'Partitions must divide code_length.'
     partition_length = code_length / partitions
-
-    # TODO: Will this compute the correct complexity? There might be a
-    # problem in that a packet may contain symbols from various partitions.
     partition_complexity = rs_decoding_complexity(partition_length, packet_size, erasure_prob)
     return partition_complexity * partitions
 
@@ -123,11 +127,12 @@ def matrix_vector_complexity(rows, cols):
     multiplication is done as A*x.
 
     Args:
+
     rows: The number of rows of the matrix.
+
     cols: The number of columns of the matrix.
 
-    Returns:
-    The complexity of the multiplication.
+    Returns: The complexity of the multiplication.
 
     '''
     additions = cols * rows - 1
