@@ -20,7 +20,7 @@ structure.
 '''
 
 import model
-from assignments import SparseAssignment
+from assignments.sparse import SparseAssignment
 
 class HeuristicSolver(object):
     '''This solver creates an assignment using a heuristic block-diagonal

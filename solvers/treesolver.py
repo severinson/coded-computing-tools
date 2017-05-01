@@ -24,7 +24,7 @@ import itertools
 import numpy as np
 from scipy.misc import comb as nchoosek
 import model
-from assignments import SparseAssignment
+from assignments.sparse import SparseAssignment
 
 def weight_distribution(n, k, normalization):
     '''Compute the distribution of weight over a set of subtrees

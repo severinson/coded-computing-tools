@@ -18,7 +18,7 @@
 
 import random
 import model
-from assignments import SparseAssignment
+from assignments.sparse import SparseAssignment
 
 class RandomSolver(object):
     """ Create an assignment matrix randomly. """
