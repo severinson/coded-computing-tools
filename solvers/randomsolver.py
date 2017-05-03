@@ -18,6 +18,7 @@
 
 import random
 import model
+from assignments import Assignment
 from assignments.sparse import SparseAssignment
 
 class RandomSolver(object):
@@ -26,12 +27,15 @@ class RandomSolver(object):
     def __init__(self):
         return
 
-    def solve(self, par, optimized=False):
+    def solve(self, par, assignment_type=None, optimized=True):
         '''Create an assignment matrix randomly.
 
         Args:
 
         par: System parameters
+
+        assignment_type: Assignment kind. Defaults to SparseAssignment
+        if set to None.
 
         optimized: If True, the solver will first assign as many rows
         as possible to all elements of the assignment matrix, and then
@@ -47,7 +51,11 @@ class RandomSolver(object):
         else:
             rows_per_element = 0
 
-        assignment = SparseAssignment(par, gamma=rows_per_element)
+        if assignment_type is None:
+            assignment = SparseAssignment(par, gamma=rows_per_element)
+        else:
+            assignment = assignment_type(par, gamma=rows_per_element)
+
         count_by_partition = [rows_per_element * par.num_batches] * par.num_partitions
         self.assign_remaining_random(par, assignment, count_by_partition)
         return assignment
@@ -76,11 +84,8 @@ class RandomSolver(object):
             if count_by_partition[partition] < coded_rows_per_partition:
                 partial_partitions.add(partition)
 
-        rows = dict()
-        # rows = list()
-        # cols = list()
-        # data = list()
         # Assign symbols randomly row-wise
+        rows = dict()
         for row in range(par.num_batches):
             cols = dict()
             row_sum = assignment.batch_union({row}).sum()
@@ -102,7 +107,9 @@ class RandomSolver(object):
             rows[row] = cols
 
         for row, cols in rows.items():
-            assignment.increment([row]*len(cols), list(cols.keys()), list(cols.values()))
+            assignment = assignment.increment([row]*len(cols),
+                                              list(cols.keys()),
+                                              list(cols.values()))
 
         return
 

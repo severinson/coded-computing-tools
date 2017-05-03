@@ -20,6 +20,7 @@ structure.
 '''
 
 import model
+from assignments import Assignment
 from assignments.sparse import SparseAssignment
 
 class HeuristicSolver(object):
@@ -28,7 +29,8 @@ class HeuristicSolver(object):
 
     '''
 
-    def __init__(self):
+    def __init__(self, assignment=None):
+
         return
 
     def assign_block(self, par, assignment, row, min_col, max_col, rows, cols, data):
@@ -70,20 +72,27 @@ class HeuristicSolver(object):
 
         return wrapped_col
 
-    def solve(self, par):
+    def solve(self, par, assignment_type=None):
         '''Create an assignment using a block-diagonal structure.
 
         Args:
         par: System parameters
 
-        verbose: Print extra messages if True.
+        assignment_type: Assignment kind. Defaults to SparseAssignment
+        if set to None.
 
         Returns: The resulting assignment
 
         '''
         assert isinstance(par, model.SystemParameters)
+        # assert isinstance(assignment_type, Assignment) or assignment_type is None, \
+        #     type(assignment_type)
+
         rows_per_element = int(par.num_coded_rows / (par.num_partitions * par.num_batches))
-        assignment = SparseAssignment(par, gamma=rows_per_element)
+        if assignment_type is None:
+            assignment = SparseAssignment(par, gamma=rows_per_element)
+        else:
+            assignment = assignment_type(par, gamma=rows_per_element)
 
         rows = list()
         cols = list()
@@ -97,7 +106,7 @@ class HeuristicSolver(object):
             min_col = self.assign_block(par, assignment, row, min_col, max_col,
                                         rows, cols, data)
 
-        assignment.increment(rows, cols, data)
+        assignment = assignment.increment(rows, cols, data)
         return assignment
 
     @property

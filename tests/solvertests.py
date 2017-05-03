@@ -22,12 +22,17 @@ simulation.
 import math
 import unittest
 import tempfile
+import logging
 import model
+import examples
 import simulation
 from solvers import heuristicsolver
 from solvers import randomsolver
 from solvers import treesolver
+from solvers.hybrid import HybridSolver
 from evaluation import sampled
+from assignments.sparse import SparseAssignment
+from assignments.cached import CachedAssignment
 
 class TreeSolverTests(unittest.TestCase):
     '''Tests for the tree solver.'''
@@ -413,14 +418,67 @@ class TreeSolverTests(unittest.TestCase):
         self.assertEqual(num_batches, parameters.num_batches)
         return
 
+class HybridSolverTests(unittest.TestCase):
+    '''Tests of the hybrid solver.'''
+
+    def test_hybrid(self):
+        '''Test the hybrid solver.'''
+        logging.basicConfig(level=logging.DEBUG)
+        solver = HybridSolver(initialsolver=heuristicsolver.HeuristicSolver())
+        parameters = examples.get_parameters_partitioning()[1]
+        parameters = self.get_parameters()
+        assignment = solver.solve(parameters)
+        print(assignment)
+        self.assertTrue(assignment.is_valid())
+        return
+
+    def test_deassign_branch_and_bound(self):
+        '''Test the solver de-assignment and branch-and-bound.'''
+        hybrid = HybridSolver(initialsolver=heuristicsolver.HeuristicSolver())
+        parameters = examples.get_parameters_partitioning()[1]
+        assignment = heuristicsolver.HeuristicSolver().solve(parameters,
+                                                             assignment_type=CachedAssignment)
+        partition_count = [0] * parameters.num_partitions
+
+        decrement = 3
+        new_assignment = assignment
+        for _ in range(decrement):
+            new_assignment = hybrid.deassign(parameters, new_assignment, partition_count)
+
+        self.assertFalse(new_assignment.is_valid())
+        self.assertEqual(sum(partition_count), decrement)
+        difference = assignment.assignment_matrix - new_assignment.assignment_matrix
+        self.assertEqual(difference.sum(), decrement)
+
+        best_assignment = assignment.copy()
+        hybrid.branch_and_bound(parameters, new_assignment, partition_count, best_assignment)
+        self.assertTrue(assignment.is_valid())
+        return
+
+    def get_parameters(self):
+        '''Get some test parameters.'''
+        return model.SystemParameters(6, # Rows per batch
+                                      6, # Number of servers (K)
+                                      4, # Servers to wait for (q)
+                                      4, # Outputs (N)
+                                      1/2, # Server storage (\mu)
+                                      5) # Partitions (T)
+
 class SolverTests(unittest.TestCase):
-    '''Tests for the other solvers'''
+    '''Tests of the other solvers.'''
 
     def test_heuristic(self):
         '''Test the heuristic solver'''
         solver = heuristicsolver.HeuristicSolver()
+
+        # Using sparse assignments
         for par in self.get_parameters_partitioning():
-            assignment = solver.solve(par)
+            assignment = solver.solve(par, assignment_type=SparseAssignment)
+            self.assertTrue(assignment.is_valid())
+
+        # Using cached assignments
+        for par in self.get_parameters_partitioning()[:1]:
+            assignment = solver.solve(par, assignment_type=CachedAssignment)
             self.assertTrue(assignment.is_valid())
 
         return
@@ -428,8 +486,15 @@ class SolverTests(unittest.TestCase):
     def test_random(self):
         '''Test the randomized solver'''
         solver = randomsolver.RandomSolver()
+
+        # Using sparse assignments
         for par in self.get_parameters_partitioning():
             assignment = solver.solve(par)
+            self.assertTrue(assignment.is_valid())
+
+        # Using cached assignments
+        for par in self.get_parameters_partitioning()[:1]:
+            assignment = solver.solve(par, assignment_type=CachedAssignment)
             self.assertTrue(assignment.is_valid())
         return
 
