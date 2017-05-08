@@ -18,11 +18,12 @@
 
 '''
 
+import math
 import unittest
 import tempfile
 import model
 import simulation
-from solvers import heuristicsolver
+from solvers.heuristicsolver import HeuristicSolver
 from solvers import randomsolver
 from evaluation import sampled
 from evaluation import binsearch
@@ -63,7 +64,7 @@ class EvaluationTests(unittest.TestCase):
         return
 
 
-    def verify_result(self, result, correct_result, delta=0.2):
+    def verify_result(self, result, correct_result, delta=0.1):
         '''Check the results against known correct results.
 
         Args:
@@ -77,15 +78,22 @@ class EvaluationTests(unittest.TestCase):
 
         '''
         for key, value in correct_result.items():
-            self.assertAlmostEqual(result[key].mean(), value, places=None, delta=value * delta)
+            if value == math.inf:
+                self.assertAlmostEqual(result[key].mean(), value, places=1,
+                                       msg='key={}, value={}'.format(str(key), str(value)))
+            else:
+                self.assertAlmostEqual(result[key].mean(), value, delta=value*delta,
+                                       msg='key={}, value={}'.format(str(key), str(value)))
 
-    def verify_solver(self, solvefun, correct_results, delta=0.2):
+    def verify_solver(self, solver, parameters, correct_results, delta=0.2):
         '''Check the results from evaluating the assignment produced by some
         solver against known correct results.
 
         Args:
 
-        solvefun: Function called to create an assignment.
+        solver: Assignment solver.
+
+        parameters: System parameters.
 
         correct_results: List of dicts with correct results.
 
@@ -93,24 +101,48 @@ class EvaluationTests(unittest.TestCase):
         measured result.
 
         '''
-        for par, correct_result in zip(self.get_parameters_partitioning(), correct_results):
-            assignment = solvefun(par)
+        for par, correct_result in zip(parameters, correct_results):
+            assignment = solver.solve(par)
             self.assertTrue(assignment.is_valid())
 
-            result = binsearch.evaluate(par, assignment, num_samples=100)
+            result = binsearch.evaluate(par, assignment, num_samples=1000)
             self.verify_result(result, correct_result)
 
         return
 
     def test_heuristic(self):
         '''Test the heuristic solver'''
-        solver = heuristicsolver.HeuristicSolver()
-        correct_results = [{'servers': 6, 'batches': 48, 'unicasts_strat_1': 9000, 'delay': 11.3},
-                           {'servers': 6, 'batches': 48, 'unicasts_strat_1': 9000, 'delay': 11.3},
-                           {'servers': 6, 'batches': 48, 'unicasts_strat_1': 11535, 'delay': 12}]
+        solver = HeuristicSolver()
+        correct_results = [{'servers': 6, 'batches': 48, 'unicast_load_1': 1.5, 'delay': 11.3},
+                           {'servers': 6, 'batches': 48, 'unicast_load_1': 1.5, 'delay': 11.3},
+                           {'servers': 6, 'batches': 49.512, 'unicast_load_1': 1.836, 'delay': 11.56}]
 
-        self.verify_solver(solver.solve, correct_results)
+        parameters = self.get_parameters_partitioning()
+        self.verify_solver(solver, parameters, correct_results)
         return
+
+    def test_evaluation_1(self):
+        '''Test the evaluation.'''
+        parameters = model.SystemParameters(rows_per_batch=2, num_servers=6, q=4, num_outputs=4,
+                                            server_storage=1/2, num_partitions=1)
+        correct = {'servers': 4, 'batches': 20, 'delay': 7.1333333333333293,
+                   'unicast_load_1': 0.8, 'multicast_load_1': 0.6,
+                   'unicast_load_2': 0.8, 'multicast_load_2': math.inf}
+        solver = HeuristicSolver()
+        self.verify_solver(solver, [parameters], [correct])
+        return
+
+    def test_evaluation_2(self):
+        '''Test the evaluation.'''
+        parameters = model.SystemParameters(rows_per_batch=5, num_servers=10, q=9, num_outputs=9,
+                                            server_storage=1/3, num_partitions=5)
+        correct = {'servers': 9, 'batches': 324, 'delay': 25.460714285714285,
+                   'unicast_load_1': 720 / 540, 'multicast_load_1': 840 / 540,
+                   'unicast_load_2': 0, 'multicast_load_2': 2100 / 540}
+        solver = HeuristicSolver()
+        self.verify_solver(solver, [parameters], [correct])
+        return
+
 
     def test_heuristic_analytic(self):
         '''Test the analytic heuristic assignment evaluation.'''

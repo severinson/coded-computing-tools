@@ -189,7 +189,6 @@ def communication_load(parameters, assignment, num_samples=1000):
     assert isinstance(assignment, assignments.Assignment)
     assert isinstance(num_samples, int)
     results = list()
-
     for _ in range(num_samples):
 
         # Randomize completion order
@@ -205,53 +204,55 @@ def communication_load(parameters, assignment, num_samples=1000):
         assert len(server_order) == parameters.q
 
         # Sum the corresponding rows of the assignment matrix
-        batches = assignment.labels[server].copy()
+        batches_1 = assignment.labels[server].copy()
 
-        # Strategy 1 multicasts for all subsets of size from sq to muq
-        load_1_multicasts = 0
-        muq = int(parameters.server_storage * parameters.q)
-        for j in range(parameters.sq, muq + 1):
-            load_1_multicasts += parameters.B_j(j) / j
+        # Multicasting load
+        multicast_load_1, multicast_load_2 = parameters.multicast_load()
 
-        load_1_multicasts *= parameters.num_source_rows * parameters.num_outputs
-
-        for j in range(parameters.sq, muq + 1):
-            for multicast_subset in itertools.combinations(servers_without_q, j):
-                # load_1_multicasts += j
-                batches.update(set.intersection(*[assignment.labels[x]
-                                                  for x in multicast_subset]))
+        # Strategy 1 multicasts for all subsets of size from sq to muq.
+        try:
+            for j in range(parameters.multicast_set_size_1(), parameters.muq + 1):
+                for multicast_subset in itertools.combinations(servers_without_q, j):
+                    batches_1.update(set.intersection(*[assignment.labels[x]
+                                                      for x in multicast_subset]))
+        except model.ModelError:
+            pass
 
         # Negative values indicate remaining needed values
         count_vector = np.zeros(parameters.num_partitions)
         count_vector -= parameters.num_source_rows / parameters.num_partitions
 
         # Add multicasted values
-        count_vector += assignment.batch_union(batches)
+        count_vector += assignment.batch_union(batches_1)
 
         # Compute unicasts by summing the negative elements
-        load_1_unicasts = abs((count_vector * (count_vector < 0)).sum())
+        unicast_load_1 = abs(count_vector[count_vector < 0].sum())
+        unicast_load_1 /= parameters.num_source_rows
 
         # Strategy 2 multicasts for subsets of size sq-1 to muq
-        load_2_multicasts = parameters.B_j(parameters.sq - 1) / (parameters.sq - 1)
-        load_2_multicasts *= parameters.num_source_rows * parameters.num_outputs
-        load_2_multicasts += load_1_multicasts
+        batches_2 = set()
+        try:
+            for multicast_subset in itertools.combinations(servers_without_q,
+                                                           parameters.multicast_set_size_2()):
+                batches_2.update(set.intersection(*[assignment.labels[x]
+                                                    for x in multicast_subset]))
+        except model.ModelError:
+            pass
 
-        load_2_batches = set()
-        for multicast_subset in itertools.combinations(servers_without_q, parameters.sq - 1):
-            load_2_batches.update(set.intersection(*[assignment.labels[x]
-                                                     for x in multicast_subset]))
+        # Add the new unique batches and compute the strategy 2 unicasts.
+        count_vector += assignment.batch_union(batches_2 - batches_1)
+        unicast_load_2 = abs(count_vector[count_vector < 0].sum())
+        unicast_load_2 /= parameters.num_source_rows
 
-        # Add the new unique batches
-        count_vector += assignment.batch_union(load_2_batches - batches)
+        # Scale unicasts by number of outputs.
+        unicast_load_1 *= parameters.num_outputs
+        unicast_load_2 *= parameters.num_outputs
 
-        # Compute unicasts
-        load_2_unicasts = abs((count_vector * (count_vector < 0)).sum())
-
-        # Store result. Unicasts are computed for 1 out of q servers
-        # so need to be multiplied by q.
-        results.append({'unicasts_strat_1': load_1_unicasts * parameters.q,
-                        'unicasts_strat_2': load_2_unicasts * parameters.q,
-                        'multicasts_strat_1': load_1_multicasts,
-                        'multicasts_strat_2': load_2_multicasts})
+        # Append the results.
+        result = {'unicast_load_1': unicast_load_1,
+                  'unicast_load_2': unicast_load_2,
+                  'multicast_load_1': multicast_load_1,
+                  'multicast_load_2': multicast_load_2}
+        results.append(result)
 
     return pd.DataFrame(results)

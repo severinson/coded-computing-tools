@@ -324,7 +324,7 @@ class CachedAssignment(Assignment):
                 for batch in self.labels[k]:
                     rows.add(batch)
 
-                for j in range(self.par.sq, int(self.par.server_storage*self.par.q) + 1):
+                for j in range(self.par.multicast_set_size_1(), int(self.par.server_storage*self.par.q) + 1):
                     for subset in itertools.combinations([x for x in Q if x != k], j):
                         rows = rows | set.intersection(*[self.labels[x] for x in subset])
 
@@ -461,7 +461,7 @@ class CachedAssignment(Assignment):
 
         # Copy the assignment matrix and the objective value
         assignment_matrix = np.array(self.assignment_matrix)
-        assignment_matrix[row, col] = assignment_matrix[row, col] + 1
+        assignment_matrix[row, col] += 1
         objective_value = self.score
 
         # Select the perspectives linked to the row
@@ -520,7 +520,7 @@ class CachedAssignment(Assignment):
 
         # Copy the assignment matrix and the objective value
         assignment_matrix = np.array(self.assignment_matrix)
-        assignment_matrix[row, col] = assignment_matrix[row, col] - 1
+        assignment_matrix[row, col] -= 1
         objective_value = self.score
 
         # Select the perspectives linked to the row
