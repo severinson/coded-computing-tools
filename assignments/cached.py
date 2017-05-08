@@ -12,7 +12,10 @@ import itertools
 import numpy as np
 from scipy.misc import comb as nchoosek
 import model
-from assignments import Assignment
+from assignments import Assignment, AssignmentError
+
+class SparseAssignmentError(AssignmentError):
+    '''Base class for exceptions thrown by this module.'''
 
 class Perspective(object):
     '''Representation of the count vectors from the perspective of a
@@ -286,16 +289,17 @@ class CachedAssignment(Assignment):
         if not os.path.exists(directory):
             os.makedirs(directory)
 
-        np.save(directory + self.par.identifier() + '.npy', self.assignment_matrix)
+        filename = os.path.join(directory, self.par.identifier() + '.npy')
+        np.save(filename, self.assignment_matrix)
         return
 
     @classmethod
-    def load(cls, par, directory='./saved_assignments/'):
+    def load(cls, parameters, directory='./saved_assignments/'):
         '''Load assignment from disk
 
         Args:
 
-        par: System parameters
+        parameters: System parameters
 
         directory: Directory to load from
 
@@ -305,8 +309,18 @@ class CachedAssignment(Assignment):
         if directory is None:
             raise FileNotFoundError()
 
-        assignment_matrix = np.load(directory + par.identifier() + '.npy')
-        return cls(par, assignment_matrix=assignment_matrix, score=False, index=False)
+        filename = os.path.join(directory, parameters.identifier() + '.npy')
+        assignment_matrix = np.load(filename)
+
+        # Infer gamma
+        gamma = parameters.rows_per_batch
+        gamma -= assignment_matrix[0].sum()
+        gamma /= parameters.num_partitions
+        if gamma % 1 != 0:
+            raise CachedAssignmentError('Could not infer the value of gamma.')
+
+        return cls(parameters, gamma=int(gamma), assignment_matrix=assignment_matrix,
+                   score=False, index=False)
 
     def build_index(self):
         '''Build the dynamic programming index
