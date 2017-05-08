@@ -26,12 +26,6 @@ system under simulation.
 '''
 
 import math
-import itertools as it
-import os
-import random
-import tempfile
-import unittest
-import numpy as np
 from scipy.misc import comb as nchoosek
 import complexity
 
@@ -141,7 +135,7 @@ class SystemParameters(object):
         server and rows per partition.
 
         '''
-        raise NotImplemented('Not implemented yet.')
+        raise NotImplementedError('Not implemented yet.')
         assert isinstance(rows_per_server, int) and rows_per_server > 0
         assert isinstance(rows_per_partition, int) and rows_per_partition > 0
         assert isinstance(num_servers, int) and num_servers > 0
