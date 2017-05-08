@@ -101,7 +101,6 @@ class HybridSolver(object):
         pruned = 0
         while stack:
             node = stack.pop()
-            print(node)
 
             # Store completed nodes with a better score
             if node.complete and node.assignment.score >= best_assignment.score:
@@ -178,8 +177,6 @@ class HybridSolver(object):
             logging.debug('Finding a candidate solution using solver %s.', self.initialsolver.identifier)
             assignment = self.initialsolver.solve(parameters, assignment_type=CachedAssignment)
 
-        print(assignment)
-
         # Ensure there is room for optimization.
         counts = np.zeros(parameters.num_partitions)
         for row in assignment.rows_iterator():
@@ -189,13 +186,12 @@ class HybridSolver(object):
             logging.debug('Initial solution leaves no room for optimization. Returning.')
             return assignment
 
-        # TODO: Index is not re-build properly.
-        # Make sure dynamic programming index is built
-        # assignment = CachedAssignment(parameters,
-        #                               assignment_matrix=assignment.assignment_matrix,
-        #                               labels=assignment.labels)
+        # Make sure the dynamic programming index is built
+        if not assignment.index or not assignment.score:
+            assignment = CachedAssignment(parameters, gamma=assignment.gamma,
+                                          assignment_matrix=assignment.assignment_matrix,
+                                          labels=assignment.labels)
 
-        print(assignment)
         best_assignment = assignment.copy()
 
         # Iteratively improve the assignment
@@ -217,7 +213,6 @@ class HybridSolver(object):
             improvement += best_assignment.score - assignment.score
             best_assignment = assignment.copy()
             logging.debug('Improved %d over %d iterations.', improvement, iterations)
-            print(best_assignment)
 
         return best_assignment
 
