@@ -34,7 +34,7 @@ from evaluation import sampled
 from assignments.sparse import SparseAssignment
 from assignments.cached import CachedAssignment
 
-class TreeSolverTests(unittest.TestCase):
+class TreeSolverTests(object):
     '''Tests for the tree solver.'''
     def get_parameters_partitioning(self):
         '''Get a list of parameters.'''
@@ -380,7 +380,7 @@ class TreeSolverTests(unittest.TestCase):
                                                                remaining_rows_per_batch,
                                                                parameters.num_batches)
 
-            print(distribution)
+            # print(distribution)
             assignments = [x[1] for x in distribution]
             self.assertEqual(sum(assignments), parameters.num_batches)
             self.assertTrue(max(assignments) <= remaining_rows_per_partition,
@@ -428,7 +428,6 @@ class HybridSolverTests(unittest.TestCase):
         parameters = examples.get_parameters_partitioning()[1]
         parameters = self.get_parameters()
         assignment = solver.solve(parameters)
-        print(assignment)
         self.assertTrue(assignment.is_valid())
         return
 
@@ -470,7 +469,6 @@ class SolverTests(unittest.TestCase):
     def test_heuristic(self):
         '''Test the heuristic solver'''
         solver = heuristicsolver.HeuristicSolver()
-
         # Using sparse assignments
         for par in self.get_parameters_partitioning():
             assignment = solver.solve(par, assignment_type=SparseAssignment)
@@ -496,6 +494,7 @@ class SolverTests(unittest.TestCase):
         for par in self.get_parameters_partitioning()[:1]:
             assignment = solver.solve(par, assignment_type=CachedAssignment)
             self.assertTrue(assignment.is_valid())
+
         return
 
     def get_parameters_partitioning(self):
