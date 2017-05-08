@@ -15,11 +15,11 @@ class Assignment(ABC):
 
     '''
     @abstractmethod
-    def increment(self, row, col):
+    def increment(self, rows, cols, values):
         pass
 
     @abstractmethod
-    def decrement(self, row, col):
+    def decrement(self, rows, cols, values):
         pass
 
     @abstractmethod
