@@ -8,6 +8,78 @@ import model
 from assignments.cached import CachedAssignment
 from assignments.sparse import SparseAssignment
 
+class SparseTests(unittest.TestCase):
+    '''Tests fort he sparse assignment module.'''
+
+    def test_labels(self):
+        '''Verify that the labeling is valid.'''
+        par = self.get_parameters()
+        assignment = SparseAssignment(par)
+        batches_per_server = par.server_storage * par.num_source_rows / par.rows_per_batch
+        for batches in assignment.labels:
+            self.assertEqual(len(batches), batches_per_server)
+        return
+
+    def test_save_load(self):
+        '''Verify that saving and loading works.'''
+        par = self.get_parameters_2()
+        assignment = SparseAssignment(par)
+
+        # Complete the assignment
+        rows = list(range(par.num_batches))
+        cols = list(range(par.num_partitions)) * int(par.num_batches / par.num_partitions)
+        data = [par.rows_per_batch] * par.num_batches
+        assignment = assignment.increment(rows, cols, data)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            assignment.save(directory=tmpdirname)
+            assignment_loaded = SparseAssignment.load(par, directory=tmpdirname)
+            self.assertTrue(assignment.is_valid())
+
+        return
+
+    def test_load(self):
+        '''Verify that loading non-existent files throws the correct
+        exception.
+
+        '''
+        par = self.get_parameters()
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            with self.assertRaises(FileNotFoundError):
+                assignment_loaded = SparseAssignment.load(par, directory=tmpdirname)
+        return
+
+    def test_valid(self):
+        '''Test the dynamic programming index.'''
+        par = self.get_parameters_2()
+        assignment = CachedAssignment(par)
+
+        # Complete the assignment
+        rows = list(range(par.num_batches))
+        cols = list(range(par.num_partitions)) * int(par.num_batches / par.num_partitions)
+        data = [par.rows_per_batch] * par.num_batches
+        assignment = assignment.increment(rows, cols, data)
+        self.assertTrue(assignment.is_valid())
+        return
+
+    def get_parameters(self):
+        '''Get some test parameters.'''
+        return model.SystemParameters(2, # Rows per batch
+                                      6, # Number of servers (K)
+                                      4, # Servers to wait for (q)
+                                      4, # Outputs (N)
+                                      1/2, # Server storage (\mu)
+                                      5) # Partitions (T)
+
+    def get_parameters_2(self):
+        '''Get some test parameters.'''
+        return model.SystemParameters(6, # Rows per batch
+                                      6, # Number of servers (K)
+                                      4, # Servers to wait for (q)
+                                      4, # Outputs (N)
+                                      1/2, # Server storage (\mu)
+                                      5) # Partitions (T)
+
 class CachedTests(unittest.TestCase):
     '''Tests for the cached assignment module.'''
 

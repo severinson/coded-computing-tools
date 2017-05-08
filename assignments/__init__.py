@@ -6,6 +6,9 @@ base class.
 
 from abc import ABC, abstractmethod
 
+class AssignmentError(Exception):
+    '''Base class for exceptions thrown by this package.'''
+
 class Assignment(ABC):
     '''Abstract superclass representing an assignment of encoded rows into
     batches.

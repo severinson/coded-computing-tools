@@ -10,7 +10,10 @@ import itertools
 import scipy as sp
 import numpy as np
 import model
-from assignments import Assignment
+from assignments import Assignment, AssignmentError
+
+class SparseAssignmentError(AssignmentError):
+    '''Base class for exceptions thrown by this module.'''
 
 class SparseAssignment(Assignment):
     '''Sparse storage design representation
@@ -30,10 +33,11 @@ class SparseAssignment(Assignment):
 
     '''
 
-    def __init__(self, par, gamma=0, labels=None):
+    def __init__(self, par, gamma=0, labels=None, assignment_matrix=None):
         '''Initialize a sparse assignment.
 
         Args:
+
         par: A parameters object.
 
         gamma: Number of coded rows for each partition stored in all
@@ -43,6 +47,9 @@ class SparseAssignment(Assignment):
         are the rows of the assignment_matrix stored at server i. A
         new one is generated in this is None.
 
+        assignment_marix: A sparse assignment matrix. This argument is
+        used when loading an assignment from disk.
+
         '''
         assert isinstance(par, model.SystemParameters)
         assert isinstance(gamma, int)
@@ -50,7 +57,13 @@ class SparseAssignment(Assignment):
 
         self.par = par
         self.gamma = gamma
-        self.assignment_matrix = sp.sparse.coo_matrix((par.num_batches, par.num_partitions), dtype=np.int8)
+        if assignment_matrix is None:
+            self.assignment_matrix = sp.sparse.coo_matrix((par.num_batches,
+                                                           par.num_partitions),
+                                                          dtype=np.int16)
+        else:
+            self.assignment_matrix = assignment_matrix
+
         self.assignment_matrix_csr = None
         if labels is None:
             self.labels = [set() for x in range(par.num_servers)]
@@ -156,36 +169,49 @@ class SparseAssignment(Assignment):
         return symbols[0]
 
     def save(self, directory='./saved_assignments/'):
-        """ Save the assignment to disk
+        '''Save the assignment to disk.
 
         Args:
-        directory: Directory to save to
-        """
-        raise NotImplemented
 
+        directory: Directory to save to.
+
+        '''
+        assert isinstance(directory, str)
         if not os.path.exists(directory):
             os.makedirs(directory)
 
-        np.save(directory + self.par.identifier() + '.npy', self.assignment_matrix)
+        # Save the assignment matrix
+        filename = os.path.join(directory, self.par.identifier() + '.npz')
+        sp.sparse.save_npz(filename, self.assignment_matrix)
         return
 
     @classmethod
-    def load(cls, par, directory='./saved_assignments/'):
-        """ Load assignment from disk
+    def load(cls, parameters, directory='./saved_assignments/'):
+        '''Load assignment from disk.
 
         Args:
-        par: System parameters
-        directory: Directory to load from
 
-        Returns:
-        The loaded assignment
-        """
-        raise NotImplemented
-        if directory is None:
-            raise FileNotFoundError()
+        parameters: System parameters.
 
-        assignment_matrix = np.load(directory + par.identifier() + '.npy')
-        return cls(par, assignment_matrix=assignment_matrix, score=False, index=False)
+        directory: Directory to load from.
+
+        Returns: The loaded assignment.
+
+        '''
+        assert isinstance(directory, str)
+
+        # Load the assignment matrix
+        filename = os.path.join(directory, parameters.identifier() + '.npz')
+        assignment_matrix = sp.sparse.load_npz(filename)
+
+        # Infer the value of gamma from its first row
+        gamma = parameters.rows_per_batch
+        gamma -= assignment_matrix.getrow(0).sum()
+        gamma /= parameters.num_partitions
+        if gamma % 1 != 0:
+            raise SparseAssignmentError('Could not infer the value of gamma.')
+
+        return cls(parameters, gamma=int(gamma), assignment_matrix=assignment_matrix)
 
     def label(self, shuffle=False):
         '''Label the batches with server subsets
