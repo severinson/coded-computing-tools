@@ -86,7 +86,7 @@ class SparseAssignment(Assignment):
                 if col == 0:
                     string += ' '
                 else:
-                    string += str(col)
+                    string += '.'
 
             string += ']\n'
 
@@ -116,9 +116,6 @@ class SparseAssignment(Assignment):
         '''Iterate over the rows of the assignment matrix.'''
         if self.assignment_matrix_csr is None:
             self.assignment_matrix_csr = self.assignment_matrix.tocsr()
-
-        # for row_index in range(self.assignment_matrix_csr.shape[0]):
-        #    yield self.assignment_matrix_csr
 
         for row in self.assignment_matrix_csr.A:
             yield row
@@ -190,7 +187,7 @@ class SparseAssignment(Assignment):
         assignment_matrix = np.load(directory + par.identifier() + '.npy')
         return cls(par, assignment_matrix=assignment_matrix, score=False, index=False)
 
-    def label(self, shuffle=True):
+    def label(self, shuffle=False):
         '''Label the batches with server subsets
 
         Label all batches with subsets.
