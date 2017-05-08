@@ -29,6 +29,3 @@ If you have Make installed you can run the tests by typing ```make test``` in th
 
 # Datasets
 The data from our simulations is available [here](https://www.dropbox.com/sh/4w0rv9r04eynu2f/AAC6RhLETeokEkxHThQgquyQa?dl=0). Download and extract the folder to the same directory as the source code to use it when running the example code.
-
-# References
-[1]: https://arxiv.org/abs/1701.06631
