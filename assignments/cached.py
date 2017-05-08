@@ -69,12 +69,14 @@ class Perspective(object):
     def __hash__(self):
         return hash(self.perspective_id)
 
-    def increment(self, col):
+    def increment(self, cols, values):
         '''Increment the column and update the indices.
 
         Args:
 
-        col: The column of the assignment matrix to increment.
+        cols: List of columns indices to increment.
+
+        values: Values to increment by.
 
         Returns: A new Perspective instance with the updated values.
 
@@ -83,32 +85,36 @@ class Perspective(object):
         # Copy the count array
         count = np.array(self.count)
 
-        # Increment the indicated column and calculate the updated score
-        count[col] = count[col] + 1
+        # Increment the indicated column and update the score
+        count[cols] += values
         score = remaining_unicasts(count)
 
         # Return a new instance with the updated values
         return Perspective(score, count, self.rows, perspective_id=self.perspective_id)
 
-    def decrement(self, col):
+    def decrement(self, cols, values):
         '''Decrement the column and update the indices.
 
         Args:
 
-        col: The column of the assignment matrix to decrement.
+        cols: List of columns indices to decrement.
+
+        values: Values to decrement by.
 
         Returns: A new Perspective instance with the updated values.
 
         '''
-        # Copy the count array
-        count = np.array(self.count)
+        return self.increment(cols, [-value for value in values])
 
-        # Increment the indicated column and calculate the updated score
-        count[col] -= 1
-        score = remaining_unicasts(count)
+        # # Copy the count array
+        # count = np.array(self.count)
 
-        # Return a new instance with the updated values
-        return Perspective(score, count, self.rows, perspective_id=self.perspective_id)
+        # # Increment the indicated column and calculate the updated score
+        # count[col] -= 1
+        # score = remaining_unicasts(count)
+
+        # # Return a new instance with the updated values
+        # return Perspective(score, count, self.rows, perspective_id=self.perspective_id)
 
 class BatchResult(object):
     '''The results index from the perspective of a row of the assignment
@@ -384,109 +390,87 @@ class CachedAssignment(Assignment):
         # Bound can't be less than 0
         return max(self.score - decreased_unicasts, 0)
 
-    def increment(self, rows, cols, data):
-        '''Increment assignment_matrix[rows[i], cols[i]] by data[i] for all i.
-        TODO: This can be made more efficient by not copying the index
-        for each element etc.
+    def increment(self, row_indices, col_indices, values):
+        '''Increment assignment_matrix[row_indices[i], col_indices[i]] by
+        values[i] for all i.
 
         Args:
-        row: List of row indices
 
-        col: List of column indices
+        row_indices: List of row indices
 
-        data: List of values to increment by
+        col_indices: List of column indices
+
+        values: List of values to increment by
 
         Returns: A new assignment object.
 
         '''
-        assert isinstance(rows, list)
-        assert isinstance(cols, list)
-        assert isinstance(data, list)
-        assert len(rows) == len(cols)
-        assert len(cols) == len(data)
-        assignment = self
-        for row, col, value in zip(rows, cols, data):
-            for _ in range(value):
-                assignment = assignment.increment_element(row, col)
+        assert isinstance(row_indices, list)
+        assert isinstance(col_indices, list)
+        assert isinstance(values, list)
+        assert len(row_indices) == len(col_indices)
+        assert len(col_indices) == len(values)
 
-        return assignment
-
-    def decrement(self, rows, cols, data):
-        '''Decrement assignment_matrix[rows[i], cols[i]] by data[i] for all i.
-        TODO: This can be made more efficient by not copying the index
-        for each element etc.
-
-        Args:
-        row: List of row indices
-
-        col: List of column indices
-
-        data: List of values to increment by
-
-        Returns: A new assignment object.
-
-        '''
-        assert isinstance(rows, list)
-        assert isinstance(cols, list)
-        assert isinstance(data, list)
-        assert len(rows) == len(cols)
-        assert len(cols) == len(data)
-        assignment = self
-        for row, col, value in zip(rows, cols, data):
-            for _ in range(value):
-                assignment = assignment.decrement_element(row, col)
-
-        return assignment
-
-    def increment_element(self, row, col):
-        '''Increment assignment_matrix[row, col]
-
-        Increment the element at [row, col] and update the objective
-        value. Returns a new assignment object. Does not change the
-        current assignment object.
-
-        Args:
-
-        row: The row index
-
-        col: The column index
-
-        Returns: A new assignment object.
-
-        '''
-        assert self.index and self.score, 'Cannot increment if there is no index.'
-
-        # Make a copy of the index
+        # Copy dynamic programming index
         index = [x.copy() for x in self.index]
 
-        # Copy the assignment matrix and the objective value
+        # Copy assignment matrix and objective value
         assignment_matrix = np.array(self.assignment_matrix)
-        assignment_matrix[row, col] += 1
         objective_value = self.score
 
-        # Select the perspectives linked to the row
-        perspectives = index[row]
+        # Preprocess indices to eliminate duplicates
+        rows = dict()
+        for row, col, value in zip(row_indices, col_indices, values):
+            if row in rows:
+                cols = rows[row]
+            else:
+                cols = dict()
+                rows[row] = cols
 
-        # Iterate over all perspectives linked to that row
-        for perspective_key in perspectives.keys():
-            perspective = perspectives[perspective_key]
+            if col in cols:
+                cols[col] += value
+            else:
+                cols[col] = value
 
-            # Create a new perspective from the updated values
-            new_perspective = perspective.increment(col)
+        # Increment
+        for row, cols in rows.items():
+            for col, value in cols.items():
+                assignment_matrix[row, col] += value
 
-            # Update the objective function
-            objective_value = objective_value - (perspective.score - new_perspective.score)
+        # Update the index
+        for row in rows:
 
-            # Update the index for all rows which include this perspective
-            for perspective_row in perspective.rows:
-                assert hash(new_perspective) == hash(index[perspective_row][perspective])
-                index[perspective_row][perspective] = new_perspective
+            # Select the perspectives linked to each row
+            perspectives = index[row]
 
-            # Update the summaries if the count reached zero for the
-            # indicated column
-            if new_perspective.count[col] == 0:
-                for perspective_row in new_perspective.rows:
-                    index[perspective_row].summary[col] = index[perspective_row].summary[col] - 1
+            # Iterate over all perspectives linked to that row
+            for perspective_key in perspectives.keys():
+                perspective = perspectives[perspective_key]
+
+                # Create a new perspective from the updated values
+                # cols, values = rows[row].items()
+                cols = list(rows[row].keys())
+                values = list(rows[row].values())
+                new_perspective = perspective.increment(cols, values)
+
+                # Update the objective function
+                objective_value = objective_value - (perspective.score - new_perspective.score)
+
+                # Update the index for all rows which include this perspective
+                for perspective_row in perspective.rows:
+                    assert hash(new_perspective) == hash(index[perspective_row][perspective])
+                    index[perspective_row][perspective] = new_perspective
+
+                # Find partitions that have saturated by checking the sign
+                changed = np.zeros(self.par.num_partitions)
+                changed -= (perspective.count < 0) * (new_perspective.count >= 0)
+                changed += (perspective.count >= 0) * (new_perspective.count < 0)
+
+                # Update summaries if count reached zero for the
+                # indicated column
+                for col in cols:
+                    for perspective_row in new_perspective.rows:
+                        index[perspective_row].summary[col] += changed[col]
 
         # Return a new assignment object
         return CachedAssignment(self.par, gamma=self.gamma,
@@ -495,64 +479,26 @@ class CachedAssignment(Assignment):
                                 score=objective_value,
                                 index=index)
 
-    def decrement_element(self, row, col):
-        '''Decrement assignment_matrix [row, col]
-
-        Decrement the element at [row, col] and update the objective
-        value. Returns a new assignment object. Does not change the
-        current assignment object.
+    def decrement(self, rows, cols, values):
+        '''Decrement assignment_matrix[rows[i], cols[i]] by values[i] for all i.
 
         Args:
 
-        row: The row index
+        row: List of row indices
 
-        col: The column index
+        col: List of column indices
+
+        values: List of values to increment by
 
         Returns: A new assignment object.
 
         '''
-
-        assert self.index and self.score, 'Cannot decrement if there is no index.'
-        assert self.assignment_matrix[row, col] >= 1, 'Can\'t decrement a value less than 1.'
-
-        # Make a copy of the index
-        index = [x.copy() for x in self.index]
-
-        # Copy the assignment matrix and the objective value
-        assignment_matrix = np.array(self.assignment_matrix)
-        assignment_matrix[row, col] -= 1
-        objective_value = self.score
-
-        # Select the perspectives linked to the row
-        perspectives = index[row]
-
-        # Iterate over all perspectives linked to that row
-        for perspective_key in perspectives.keys():
-            perspective = perspectives[perspective_key]
-
-            # Create a new perspective from the updated values
-            new_perspective = perspective.decrement(col)
-
-            # Update the objective function
-            objective_value = objective_value - (perspective.score - new_perspective.score)
-
-            # Update the index for all rows which include this perspective
-            for perspective_row in perspective.rows:
-                assert hash(new_perspective) == hash(index[perspective_row][perspective])
-                index[perspective_row][perspective] = new_perspective
-
-            # Update the summaries if the count reached zero for the
-            # indicated column
-            if new_perspective.count[col] == -1:
-                for perspective_row in new_perspective.rows:
-                    index[perspective_row].summary[col] += 1
-
-        # Return a new assignment object
-        return CachedAssignment(self.par, gamma=self.gamma,
-                                assignment_matrix=assignment_matrix,
-                                labels=self.labels,
-                                score=objective_value,
-                                index=index)
+        assert isinstance(rows, list)
+        assert isinstance(cols, list)
+        assert isinstance(values, list)
+        assert len(rows) == len(cols)
+        assert len(cols) == len(values)
+        return self.increment(rows, cols, [-value for value in values])
 
     def evaluate(self, row, col):
         '''Return the performance change that incrementing (row, col) would
@@ -616,7 +562,6 @@ def remaining_unicasts(rows_by_partition):
     Returns: The number of unicasts required to decode all partitions.
 
     '''
-    # TODO: Perhaps have this function as an argument instead?
 
     unicasts = 0
     for num_rows in rows_by_partition:
