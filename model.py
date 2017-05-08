@@ -26,6 +26,7 @@ system under simulation.
 '''
 
 import math
+import functools
 from scipy.misc import comb as nchoosek
 import complexity
 
@@ -118,11 +119,6 @@ class SystemParameters(object):
 
         # Store some additional parameters for convenience
         self.muq = round(self.server_storage * self.q)
-
-        # Cache delay computations
-        self.cached_delays = dict()
-        self.cached_reduce_delays = dict()
-
         return
 
     @classmethod
@@ -267,6 +263,7 @@ class SystemParameters(object):
         string += '_T_' + str(self.num_partitions)
         return string
 
+    @functools.lru_cache(maxsize=128)
     def alphaj(self, j):
         '''Compute alpha_j as defined in the paper.
 
@@ -282,6 +279,7 @@ class SystemParameters(object):
         result /= nchoosek(self.num_servers, self.muq, exact=True)
         return result
 
+    @functools.lru_cache(maxsize=8)
     def multicast_set_size_1(self):
         '''Compute the size of the smallest multicast set using strategy 1.
         Denoted by s_q in the paper.
@@ -321,6 +319,7 @@ class SystemParameters(object):
             raise ModelError('Shuffling strategy 2 requires multicast_set_size_1 to be at least 3.')
         return self.multicast_set_size_1() - 1
 
+    @functools.lru_cache(maxsize=8)
     def multicast_load(self):
         '''Compute the multicast load for strategy 1 and 2.
 
@@ -350,6 +349,7 @@ class SystemParameters(object):
         load_2 *= self.num_outputs
         return load_1, load_2
 
+    @functools.lru_cache(maxsize=8)
     def unpartitioned_load(self, strategy='best', multicast_cost=1):
         '''Compute the communication load of the unpartitioned scheme.
 
@@ -398,6 +398,7 @@ class SystemParameters(object):
         elif strategy == '2':
             return load_2
 
+    @functools.lru_cache(maxsize=8)
     def computational_delay(self, q=None):
         '''Return the delay incurred in the map phase.
 
@@ -422,19 +423,12 @@ class SystemParameters(object):
         if q > self.num_servers:
             return math.inf
 
-        # Return a cached result if there is one
-        if q in self.cached_delays:
-            return self.cached_delays[q]
-
         delay = 1
         for j in range(self.num_servers - q + 1, self.num_servers):
             delay += 1 / j
 
         # Scale by number of output vectors
         delay *= self.num_outputs
-
-        # Cache the result and return
-        self.cached_delays[q] = delay
         return delay
 
     def computational_delay_ldpc(self, q=None, overhead=1.10):
@@ -474,6 +468,7 @@ class SystemParameters(object):
         delay *= self.server_storage * self.num_outputs
         return delay
 
+    @functools.lru_cache(maxsize=8)
     def reduce_delay(self, num_partitions=None):
         '''Return the delay incurred in the reduce step.
 
@@ -491,10 +486,6 @@ class SystemParameters(object):
         if num_partitions is None:
             num_partitions = self.num_partitions
 
-        # Return a cached result if there is one
-        if num_partitions in self.cached_reduce_delays:
-            return self.cached_reduce_delays[num_partitions]
-
         delay = 1
         for j in range(1, self.q):
             delay += 1 / j
@@ -506,9 +497,6 @@ class SystemParameters(object):
                                                                num_partitions)
         delay *= self.num_outputs / self.q
         delay /= self.num_source_rows
-
-        # Cache the result and return
-        self.cached_reduce_delays[num_partitions] = delay
         return delay
 
     def reduce_delay_ldpc_peeling(self):
