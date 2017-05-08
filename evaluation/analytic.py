@@ -24,19 +24,19 @@ import math
 import model
 import assignments
 
-def uncoded_performance(par, num_samples=1):
+def uncoded_performance(parameters, num_samples=1):
     '''Compute load and delay for an uncoded scheme.
 
     Args:
-    par: A system parameters object.
+    parameters: A system parameters object.
 
     num_samples: Unused
     '''
-    load = par.num_source_rows * (1 - par.server_storage)
-    load *= par.num_outputs / par.q
-    load /= par.num_source_rows
-    return pd.DataFrame({'delay': [par.computational_delay(q=par.num_servers)],
-                         'load': [load]})
+    uncoded_storage = 1 / parameters.num_servers
+    load = 1 - uncoded_storage
+    load *= parameters.num_outputs
+    delay = parameters.computational_delay(q=parameters.num_servers)
+    return pd.DataFrame({'load': [load], 'delay': [delay]})
 
 def mds_performance(par, num_samples=1):
     '''Compute load/delay for an MDS code.
