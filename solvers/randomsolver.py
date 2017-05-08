@@ -27,7 +27,7 @@ class RandomSolver(object):
     def __init__(self):
         return
 
-    def solve(self, par, assignment_type=None, optimized=True):
+    def solve(self, par, assignment_type=None, optimized=False):
         '''Create an assignment matrix randomly.
 
         Args:
@@ -57,7 +57,7 @@ class RandomSolver(object):
             assignment = assignment_type(par, gamma=rows_per_element)
 
         count_by_partition = [rows_per_element * par.num_batches] * par.num_partitions
-        self.assign_remaining_random(par, assignment, count_by_partition)
+        assignment = self.assign_remaining_random(par, assignment, count_by_partition)
         return assignment
 
     def assign_remaining_random(self, par, assignment, count_by_partition):
@@ -110,8 +110,7 @@ class RandomSolver(object):
             assignment = assignment.increment([row]*len(cols),
                                               list(cols.keys()),
                                               list(cols.values()))
-
-        return
+        return assignment
 
     @property
     def identifier(self):
