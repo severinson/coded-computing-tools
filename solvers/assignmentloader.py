@@ -14,40 +14,46 @@
 # limitations under the License.                                           #
 ############################################################################
 
-""" This module emulates an assignment solver, but actually loades an
-assignment matrix from disk and hands it back. """
+'''This module emulates an assignment solver, but actually loades an
+assignment matrix from disk and hands it back.
 
+'''
+
+import logging
 import model
+from assignments.cached import CachedAssignment
 
 class AssignmentLoader(object):
-    """ This module emulates an assignment solver, but actually loades an
-    assignment matrix from disk and hands it back. """
+    '''This module emulates an assignment solver, but actually loades an
+    assignment matrix from disk and hands it back.
+
+    '''
     def __init__(self, directory):
-        """ Create an assignment loader.
+        '''Create an assignment loader.
 
         Args:
+
         directory: Directory to load the assignment from.
-        """
+
+        '''
 
         assert isinstance(directory, str)
         self.directory = directory
         return
 
-    def solve(self, par, verbose=False):
-        """ Load assignment from disk.
+    def solve(self, parameters):
+        '''Load assignment from disk.
 
         Args:
+
         par: System parameters
-        verbose: Print extra messages if True
 
-        Returns:
-        The loaded assignment
-        """
+        Returns: The loaded assignment
 
-        if verbose:
-            print('Loading assignment from', self.directory)
-
-        return model.Assignment.load(par, directory=self.directory)
+        '''
+        assert isinstance(parameters, model.SystemParameters)
+        logging.debug('Loading assignment from %s.', self.directory)
+        return CachedAssignment.load(parameters, directory=self.directory)
 
     @property
     def identifier(self):
