@@ -21,11 +21,12 @@ saving/loading results and assignments to disk.
 
 '''
 
+import os
+import math
 import logging
 import datetime
-import math
-import os
 from multiprocessing import Pool
+import numpy as np
 import pandas as pd
 from solvers import Solver
 from model import SystemParameters
@@ -191,11 +192,11 @@ class Simulator(object):
                 #     best_assignment = assignment
                 #     best_avg_delay = result['delay']
 
+            # Add the assignment index and append
+            result['assignment'] = i * np.ones(len(result))
             results.append(result)
 
         # Concatenate DataFrames and write to disk
-        # TODO: This doesn't align the sample values. Maybe add
-        # another field for the assignment index?
         dataframe = pd.concat(results)
         dataframe.to_csv(filename)
 
