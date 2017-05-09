@@ -14,10 +14,10 @@
 # limitations under the License.                                           #
 ############################################################################
 
-'''Run Monte Carlo simulations for a set of parameters.
-
-Writes the results to disk as .csv files. Will also write the best
-assignment matrix found to disk in the same directory.
+'''A simulator is created by providing it with an assignment type, a
+solver, and an evaluation function. Once created it allows for running
+simulations for sets of parameters. The module automatically handles
+saving/loading results and assignments to disk.
 
 '''
 
@@ -27,84 +27,84 @@ import math
 import os
 from multiprocessing import Pool
 import pandas as pd
-from evaluation import sampled
-from evaluation import binsearch
-import model
+from solvers import Solver
+from model import SystemParameters
+from assignments.sparse import SparseAssignment
+from evaluation import AssignmentEvaluator, ParameterEvaluator
 
 class Simulator(object):
-    """ Create a simulator.
+    '''This object connects the assignments, solvers, and evaluation
+    packages.
 
-    Writes the results to disk as .csv files. Will also write the best
-    assignment matrix found to disk in the same directory.
-    """
+    '''
 
-    def __init__(self, solver=None, eval_fun=None, par_eval=None,
-                 directory=None, num_assignments=1, num_samples=1000,
-                 rerun=False):
-        '''Creates a assignment performance simulator.
+    def __init__(self, solver=None, assignment_eval=None,
+                 parameter_eval=None, assignment_type=None,
+                 directory='./results/', assignments=1, rerun=False):
+        '''Create a simulator.
 
-        Writes the results to disk as .csv files. Will also write the
-        best assignment matrix found to disk in the same directory.
+        The simulator allows for running two kinds of simulations:
+        - assigments: Create assignments using a solver and evaluate it.
+        - parameters: Evaluate the performance of a parameters object
+          without creating an assignment.
 
         Args:
 
-        solver: The solver to use when creating assignments. A
-        par_eval method must be provided if set to None.
+        solver: An assignment solver. Must be None if a parameter_eval
+        method is provided.
 
-        eval_fun: Function to use when evaluating the performance of
-        an assigmnet. Will use binsearch if left as None. This method
-        is not used if a per_eval method is provided.
+        assignment_eval: AssignmentEvaluator object. Must be provided
+        if a solver is.
 
-        par_eval: A method that takes a parameter object as its single
-        argument and returns a dict with entries 'load' and 'delay'
-        (and possibly others). This argument must be None if a solver
-        is provided.
+        parameter_eval: ParameterEvaluator object. Must be None if
+        solver or assignment_eval is provided.
 
-        directory: The directory to store the results in.
+        assignment_type: Type of assignment matrix to return. Defaults
+        to SparseAssignment.
 
-        num_assignments: The result is calculated over this number of
-        generated assignments. Set this to a large number if
-        assignments are generated randomly, and set it to 1 if
-        assignments are deterministic.
+        directory: Store results in this folder.
 
-        num_samples: If par_eval is set to None, assignment
-        performance is evaluated by sampling its performance
-        num_samples times and computing the average.
+        assignments: Number of assignments to simulate when running
+        assignment simulations.
 
-        rerun: If True, any result stored on disk are overwritten.
+        rerun: Simulations are re-run even if there are results disk
+        if this is True.
 
         '''
-
-        if eval_fun is None:
-            eval_fun = binsearch.evaluate
-
-        if solver is None:
-            assert par_eval is not None
-        elif solver is not None:
-            assert par_eval is None
-
-        if par_eval is not None:
+        if parameter_eval is None:
+            assert isinstance(solver, Solver)
+            assert isinstance(assignment_eval, AssignmentEvaluator)
+        else:
+            assert isinstance(parameter_eval, ParameterEvaluator)
             assert solver is None
+            assert assignment_eval is None
+
+        if assignment_eval is None:
+            assert isinstance(parameter_eval, ParameterEvaluator)
+        else:
+            assert isinstance(solver, Solver)
+            assert isinstance(assignment_eval, AssignmentEvaluator)
+            assert parameter_eval is None
 
         assert isinstance(directory, str)
-        assert isinstance(num_assignments, int)
-        assert isinstance(num_samples, int)
+        assert isinstance(assignments, int) and assignments > 0
         assert isinstance(rerun, bool)
-
-        # Make sure the directory name ends with a /
-        if directory[-1] != '/':
-            directory += '/'
 
         # Create the directory if it doesn't exist
         if not os.path.exists(directory):
             os.makedirs(directory)
 
         self.solver = solver
-        self.eval_fun = eval_fun
-        self.par_eval = par_eval
+        self.assignment_eval = assignment_eval
+        self.parameter_eval = parameter_eval
+
+        if assignment_type is None:
+            self.assignment_type = SparseAssignment
+        else:
+            self.assignment_type = assignment_type
+
         self.directory = directory
-        self.num_assignments = num_assignments
-        self.num_samples = num_samples
+        self.assignments = assignments
         self.rerun = rerun
         return
 
@@ -141,11 +141,11 @@ class Simulator(object):
 
         '''
 
-        assert isinstance(parameters, model.SystemParameters)
+        assert isinstance(parameters, SystemParameters)
         assert os.path.exists(self.directory)
 
         # Try to load the results from disk
-        filename = self.directory + parameters.identifier() + '.csv'
+        filename = os.path.join(self.directory, parameters.identifier() + '.csv')
         if os.path.isfile(filename) and not self.rerun:
             logging.debug('Found results for %s on disk. Skipping.', filename)
             return
@@ -160,29 +160,29 @@ class Simulator(object):
         last_printout = datetime.datetime.utcnow()
 
         results = list()
-        for i in range(self.num_assignments):
+        for i in range(self.assignments):
 
             # Print progress periodically
             if datetime.datetime.utcnow() - last_printout > printout_interval:
                 last_printout = datetime.datetime.utcnow()
-                logging.info('%s %f percent finished.', filename, i / self.num_assignments * 100)
+                logging.info('%s %f percent finished.', filename, i / self.assignments * 100)
 
-            # If solver is None we should run the analysis provided by
-            # the par_eval function.
+            # Use parameter_eval if there is no solver.
             if self.solver is None:
-                result = self.par_eval(parameters, num_samples=self.num_samples)
+                result = self.parameter_eval.evaluate(parameters)
                 if isinstance(result, dict):
                     result = pd.DataFrame(result)
 
-            # If a solver is provided we should find an assignment
-            # using the solver and analyze its performance.
+            # Otherwise find an assignment and evaluate it.
             else:
                 # Create an assignment
-                assignment = self.solver.solve(parameters)
-                assert assignment.is_valid()
+                assignment = self.solver.solve(parameters, assignment_type=self.assignment_type)
+                if not assignment.is_valid():
+                    logging.error('Assignment invalid for parameters: %s.', str(parameters))
+                    return pd.DataFrame()
 
                 # Evaluate it
-                result = self.eval_fun(parameters, assignment, self.num_samples)
+                result = self.assignment_eval.evaluate(parameters, assignment)
                 if isinstance(result, dict):
                     result = pd.DataFrame(result)
 
@@ -200,8 +200,7 @@ class Simulator(object):
         dataframe.to_csv(filename)
 
         # Write the best assignment to disk
-        # TODO: This feature is not yed added to the new assignment framework
-        # if best_assignment is not None:
-        #     best_assignment.save(directory=self.directory)
+        if best_assignment is not None:
+            best_assignment.save(directory=self.directory)
 
         return dataframe
