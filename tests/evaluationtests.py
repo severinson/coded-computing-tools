@@ -101,11 +101,12 @@ class EvaluationTests(unittest.TestCase):
         measured result.
 
         '''
+        evaluator = binsearch.SampleEvaluator(num_samples=1000)
         for par, correct_result in zip(parameters, correct_results):
             assignment = solver.solve(par)
             self.assertTrue(assignment.is_valid())
 
-            result = binsearch.evaluate(par, assignment, num_samples=1000)
+            result = evaluator.evaluate(par, assignment)
             self.verify_result(result, correct_result)
 
         return
@@ -142,7 +143,6 @@ class EvaluationTests(unittest.TestCase):
         solver = HeuristicSolver()
         self.verify_solver(solver, [parameters], [correct])
         return
-
 
     def test_heuristic_analytic(self):
         '''Test the analytic heuristic assignment evaluation.'''
