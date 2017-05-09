@@ -25,10 +25,22 @@ from solvers import Solver
 class RandomSolver(Solver):
     '''Create an assignment matrix randomly.'''
 
-    def __init__(self):
+
+    def __init__(self, optimized=False):
+        '''Create a randomized solver.
+
+        Args:
+
+        optimized: If True, the solver will first assign as many rows
+        as possible to all elements of the assignment matrix, and then
+        assign any remaining rows randomly. Defaults to False.
+
+        '''
+        assert isinstance(optimized, bool)
+        self.optimized = optimized
         return
 
-    def solve(self, par, assignment_type=None, optimized=False):
+    def solve(self, par, assignment_type=None):
         '''Create an assignment matrix randomly.
 
         Args:
@@ -38,16 +50,12 @@ class RandomSolver(Solver):
         assignment_type: Assignment kind. Defaults to SparseAssignment
         if set to None.
 
-        optimized: If True, the solver will first assign as many rows
-        as possible to all elements of the assignment matrix, and then
-        assign any remaining rows randomly. Defaults to False.
-
         Returns: The resulting assignment object.
 
         '''
 
         assert isinstance(par, model.SystemParameters)
-        if optimized:
+        if self.optimized:
             rows_per_element = int(par.num_coded_rows / (par.num_partitions * par.num_batches))
         else:
             rows_per_element = 0
