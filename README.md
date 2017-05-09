@@ -1,4 +1,4 @@
-# Coded Shuffling Solvers and Simulator
+# Coded Computing Tools
 This project is a Python toolbox for research on coding theory for distributed computing. It was first developed as part of the research for [1][1], but is meant to provide general useful tools for the area. Specifically it implements
 
 ## Modules
