@@ -31,7 +31,7 @@ class AssignmentEvaluator(ABC):
     '''
 
     @abstractmethod
-    def evaluate(parameters, assignment, num_samples=1000):
+    def evaluate(self, parameters, assignment):
         '''Evaluate the communication load and computational delay of an
         assignment.
 
@@ -40,8 +40,6 @@ class AssignmentEvaluator(ABC):
         parameters: System parameters.
 
         assignment: Assignment object.
-
-        num_samples: Number of samples to take.
 
         Returns: A Pandas dataframe of length num_samples with
         performance samples.
@@ -54,7 +52,7 @@ class ParameterEvaluator(ABC):
     '''
 
     @abstractmethod
-    def evaluate(parameters):
+    def evaluate(self, parameters):
         '''Evaluate the communication load and computational delay of a set of
         a set of parameters.
 
