@@ -130,7 +130,7 @@ class BatchResult(object):
             self.perspectives = dict()
         else:
             assert isinstance(perspectives, dict)
-            assert isinstance(summary, list)
+            assert isinstance(summary, np.ndarray)
             self.perspectives = perspectives
             self.summary = summary
 
@@ -160,7 +160,6 @@ class BatchResult(object):
 
         return key in self.perspectives
 
-
     def init_summary(self, par):
         '''Build a summary of the number of perspectives that need symbols
         from a certain partition.
@@ -171,16 +170,16 @@ class BatchResult(object):
 
         # Build a simple summary that keeps track of how many symbols
         # that need a certain partition.
-        self.summary = [num_perspectives for x in range(par.num_partitions)]
+        self.summary = np.asarray([num_perspectives] * par.num_partitions, dtype=np.int16)
 
     def keys(self):
         '''Return the keys of the perspectives dict.'''
         return self.perspectives.keys()
 
     def copy(self):
-        '''Returns a shallow copy of itself'''
+        '''Returns a copy of itself'''
         perspectives = dict(self.perspectives)
-        summary = list(self.summary)
+        summary = np.array(self.summary)
         return BatchResult(perspectives, summary)
 
 class CachedAssignment(Assignment):
@@ -399,7 +398,7 @@ class CachedAssignment(Assignment):
             row = self.assignment_matrix[row_index] + self.gamma
             remaining_assignments = self.par.rows_per_batch - sum(row)
             assert remaining_assignments >= 0, remaining_assignments
-            decreased_unicasts += max(self.index[row_index].summary) * remaining_assignments
+            decreased_unicasts += self.index[row_index].summary.max() * remaining_assignments
 
         # Bound can't be less than 0
         return max(self.score - decreased_unicasts, 0)
@@ -472,19 +471,17 @@ class CachedAssignment(Assignment):
 
                 # Update the index for all rows which include this perspective
                 for perspective_row in perspective.rows:
-                    assert hash(new_perspective) == hash(index[perspective_row][perspective])
                     index[perspective_row][perspective] = new_perspective
 
                 # Find partitions that have saturated by checking the sign
-                changed = np.zeros(self.par.num_partitions)
+                changed = np.zeros(self.par.num_partitions, dtype=np.int16)
                 changed -= (perspective.count < 0) * (new_perspective.count >= 0)
                 changed += (perspective.count >= 0) * (new_perspective.count < 0)
 
                 # Update summaries if count reached zero for the
                 # indicated column
-                for col in cols:
-                    for perspective_row in new_perspective.rows:
-                        index[perspective_row].summary[col] += changed[col]
+                for perspective_row in new_perspective.rows:
+                    index[perspective_row].summary += changed
 
         # Return a new assignment object
         return CachedAssignment(self.par, gamma=self.gamma,

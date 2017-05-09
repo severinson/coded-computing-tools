@@ -440,9 +440,7 @@ class HybridSolverTests(unittest.TestCase):
         partition_count = [0] * parameters.num_partitions
 
         decrement = 3
-        new_assignment = assignment
-        for _ in range(decrement):
-            new_assignment = hybrid.deassign(parameters, new_assignment, partition_count)
+        new_assignment = hybrid.deassign(parameters, assignment, partition_count, decrement)
 
         self.assertFalse(new_assignment.is_valid())
         self.assertEqual(sum(partition_count), decrement)
