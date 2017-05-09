@@ -133,7 +133,7 @@ class HybridSolver(object):
 
         return best_assignment
 
-    def deassign(self, parameters, assignment, partition_count):
+    def deassign(self, parameters, assignment, partition_count, deassignments):
         '''De-assign an element randomly.
 
         Args:
@@ -145,17 +145,42 @@ class HybridSolver(object):
         partition_count: Vector of length num_partitions with symbols
         counts by partition.
 
+        deassignments: Number of deassignments to make.
+
         Returns: The updated assignment.
 
         '''
-        row = random.randint(0, parameters.num_batches - 1)
-        col = random.randint(0, parameters.num_partitions - 1)
-        while assignment.assignment_matrix[row, col] <= 0:
+        assert isinstance(deassignments, int) and deassignments > 0
+
+        # Cache the row and col indices to decrement.
+        indices = dict()
+
+        # Select row, col pairs.
+        while deassignments > 0:
             row = random.randint(0, parameters.num_batches - 1)
             col = random.randint(0, parameters.num_partitions - 1)
 
-        partition_count[col] += 1
-        return assignment.decrement([row], [col], [1])
+            # Ensure that there are remaining values to decrement.
+            remaining = assignment.assignment_matrix[row, col] - 1
+            if (row, col) in indices:
+                remaining -= indices[(row, col)]
+
+            if remaining < 0:
+                continue
+
+            # Update the count
+            deassignments -= 1
+            partition_count[col] += 1
+            if (row, col) in indices:
+                indices[(row, col)] += 1
+            else:
+                indices[(row, col)] = 1
+
+        keys = indices.keys()
+        values = [indices[key] for key in keys]
+        rows = [index[0] for index in keys]
+        cols = [index[1] for index in keys]
+        return assignment.decrement(rows, cols, values)
 
     def solve(self, parameters, clear=3):
         '''Find an assignment using this solver.
@@ -202,8 +227,7 @@ class HybridSolver(object):
             partition_count = [0] * parameters.num_partitions
 
             # De-assign elements
-            for _ in range(clear):
-                assignment = self.deassign(parameters, assignment, partition_count)
+            assignment = self.deassign(parameters, assignment, partition_count, clear)
 
             # Re-assign optimally
             assignment = self.branch_and_bound(parameters, assignment,
