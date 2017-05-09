@@ -20,9 +20,10 @@ import random
 import model
 from assignments import Assignment
 from assignments.sparse import SparseAssignment
+from solvers import Solver
 
-class RandomSolver(object):
-    """ Create an assignment matrix randomly. """
+class RandomSolver(Solver):
+    '''Create an assignment matrix randomly.'''
 
     def __init__(self):
         return

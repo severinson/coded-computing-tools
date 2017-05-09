@@ -22,24 +22,23 @@ structure.
 import model
 from assignments import Assignment
 from assignments.sparse import SparseAssignment
+from solvers import Solver
 
-class HeuristicSolver(object):
+class HeuristicSolver(Solver):
     '''This solver creates an assignment using a heuristic block-diagonal
     structure.
 
     '''
 
-    def __init__(self, assignment=None):
-
+    def __init__(self):
         return
 
-    def assign_block(self, par, assignment, row, min_col, max_col, rows, cols, data):
+    def assign_block(self, par, row, min_col, max_col, rows, cols, data):
         '''Assign rows to all slots between min_col and max_col.
 
         Args:
-        par: System parameters
 
-        assignment: An assignment object
+        par: System parameters
 
         row: The assignment matrix rows to assign rows to
 
@@ -76,14 +75,16 @@ class HeuristicSolver(object):
         '''Create an assignment using a block-diagonal structure.
 
         Args:
-        par: System parameters
 
-        assignment_type: Assignment kind. Defaults to SparseAssignment
-        if set to None.
+        parameters: System parameters.
 
-        Returns: The resulting assignment
+        assignment_type: Type of assignment matrix to return. Defaults
+        to SparseAssignment.
+
+        Returns: The resulting assignment.
 
         '''
+
         assert isinstance(par, model.SystemParameters)
         # assert isinstance(assignment_type, Assignment) or assignment_type is None, \
         #     type(assignment_type)
@@ -96,20 +97,15 @@ class HeuristicSolver(object):
 
         rows = list()
         cols = list()
-        data= list()
+        data = list()
 
         # Assign the remaining rows in a block-diagonal fashion
         remaining_rows_per_batch = par.rows_per_batch - rows_per_element * par.num_partitions
         min_col = 0
         for row in range(par.num_batches):
             max_col = min_col + remaining_rows_per_batch
-            min_col = self.assign_block(par, assignment, row, min_col, max_col,
+            min_col = self.assign_block(par, row, min_col, max_col,
                                         rows, cols, data)
 
         assignment = assignment.increment(rows, cols, data)
         return assignment
-
-    @property
-    def identifier(self):
-        '''Return a string identifier for this object.'''
-        return self.__class__.__name__

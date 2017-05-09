@@ -21,11 +21,11 @@ assignment matrix from disk and hands it back.
 
 import logging
 import model
-from assignments.cached import CachedAssignment
+from solvers import Solver
 
-class AssignmentLoader(object):
-    '''This module emulates an assignment solver, but actually loades an
-    assignment matrix from disk and hands it back.
+class AssignmentLoader(Solver):
+    '''This module emulates an assignment solver, by loading an assignment
+    matrix from disk and handing it back.
 
     '''
     def __init__(self, directory):
@@ -41,19 +41,22 @@ class AssignmentLoader(object):
         self.directory = directory
         return
 
-    def solve(self, parameters):
+    def solve(self, parameters, assignment_type=None):
         '''Load assignment from disk.
 
         Args:
 
         par: System parameters
 
+        assignment_type: Assignment kind.
+
         Returns: The loaded assignment
 
         '''
         assert isinstance(parameters, model.SystemParameters)
+        assert assignment_type is not None, 'Must provide an assignment type.'
         logging.debug('Loading assignment from %s.', self.directory)
-        return CachedAssignment.load(parameters, directory=self.directory)
+        return assignment_type.load(parameters, directory=self.directory)
 
     @property
     def identifier(self):
