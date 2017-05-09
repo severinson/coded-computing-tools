@@ -115,17 +115,11 @@ def decodeable(parameters, assignment, batches,
     assert isinstance(incomplete_partitions, set)
 
     tentative_count = permanent_count + assignment.batch_union(batches)
-    if tentative_count.sum() < parameters.num_partitions * parameters.rows_per_partition:
+    remaining = (tentative_count < parameters.rows_per_partition).sum()
+    if remaining > 0:
         return False, tentative_count
-
-    complete_partitions = {partition for partition in incomplete_partitions
-                           if tentative_count[partition] >= parameters.rows_per_partition}
-
-    if len(incomplete_partitions) == len(complete_partitions):
-        return True, tentative_count
     else:
-        incomplete_partitions -= complete_partitions
-        return False, tentative_count
+        return True, tentative_count
 
 def computational_delay_sample(parameters, assignment, completion_order):
     '''Compute the computational delay of one realization of the server
