@@ -29,6 +29,7 @@ import itertools
 import datetime
 import numpy as np
 import pandas as pd
+from scipy.misc import comb as nchoosek
 from model import SystemParameters, ModelError
 from assignments import Assignment
 from evaluation import AssignmentEvaluator
@@ -44,12 +45,45 @@ class SampleEvaluator(AssignmentEvaluator):
 
         Args:
 
-        num_samples: Number of performance samples to take.
+        num_samples: Max number of times to sample the performance.
+        The performance is evaluated exhaustively if it's faster than
+        taking this many samples.
 
         '''
         assert isinstance(num_samples, int) and num_samples > 0
         self.num_samples = num_samples
         return
+
+    def random_completion_orders(self, parameters):
+        '''Generates random server completion orders.
+
+        Args:
+
+        parameters: System parameters
+
+        '''
+        for _ in range(self.num_samples):
+            yield random.sample(range(parameters.num_servers), parameters.num_servers)
+
+        return
+
+    def exhaustive_completion_orders(self, parameters):
+        '''Generates all possible server completion orders.
+
+        Args:
+
+        parameters: System parameters
+
+        '''
+        servers = set(range(parameters.num_servers))
+
+        # Order of the first q servers is irrelevant.
+        for order in itertools.combinations(range(parameters.num_servers), parameters.q):
+            remaining_servers = servers - set(order)
+
+            # Evaluate all permutations of the remaining servers.
+            for remaining_order in itertools.permutations(remaining_servers):
+                yield list(order) + list(remaining_order)
 
     def evaluate(self, parameters, assignment):
         '''Sample the communication load and computational delay of an
@@ -71,7 +105,17 @@ class SampleEvaluator(AssignmentEvaluator):
         printout_interval = datetime.timedelta(seconds=10)
         last_printout = datetime.datetime.utcnow()
 
-        for i in range(self.num_samples):
+        # Check all or num_samples samples. Whichever is smaller.
+        exhaustive_samples = nchoosek(parameters.num_servers, parameters.q)
+        exhaustive_samples *= math.factorial(parameters.num_servers - parameters.q)
+        if exhaustive_samples < self.num_samples:
+            completion_orders = self.exhaustive_completion_orders(parameters)
+        else:
+            completion_orders = self.random_completion_orders(parameters)
+
+        i = 0
+        for completion_order in completion_orders:
+            i += 1
 
             # Print progress periodically
             if datetime.datetime.utcnow() - last_printout > printout_interval:
@@ -79,10 +123,7 @@ class SampleEvaluator(AssignmentEvaluator):
                 logging.info('%s %f percent finished.',
                              parameters.identifier(), i / self.num_samples * 100)
 
-            # Randomly generate a server completion order
-            completion_order = random.sample(range(parameters.num_servers), parameters.num_servers)
-
-            # Evaluate it
+            # Evaluate the order
             result = dict()
             result.update(computational_delay_sample(parameters, assignment, completion_order))
             result.update(communication_load_sample(parameters, assignment, completion_order))
