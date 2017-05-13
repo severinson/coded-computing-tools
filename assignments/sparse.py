@@ -296,20 +296,24 @@ class SparseAssignment(Assignment):
 
         '''
 
-        correct_row_sum = round(self.par.rows_per_batch - self.par.num_partitions * self.gamma)
+        correct_row_sum = self.par.rows_per_batch
+        correct_row_sum -= self.par.num_partitions * self.gamma
+        correct_row_sum = round(correct_row_sum)
         for i in range(self.par.num_batches):
             row = self.assignment_matrix.getrow(i)
             if row.sum() != correct_row_sum:
-                logging.warning('Sum of row %d\n%s \nis %d, but should be %d.',
-                                i, str(row), row.sum(), correct_row_sum)
+                logging.debug('Sum of row %d\n%s \nis %d, but should be %d.',
+                              i, str(row), row.sum(), correct_row_sum)
                 return False
 
-        correct_col_sum = round(self.par.num_coded_rows / self.par.num_partitions - self.par.num_batches * self.gamma)
+        correct_col_sum = self.par.num_coded_rows / self.par.num_partitions
+        correct_col_sum -= self.par.num_batches * self.gamma
+        correct_col_sum = round(correct_col_sum)
         for i in range(self.par.num_partitions):
             col = self.assignment_matrix.getcol(i)
             if col.sum() != correct_col_sum:
-                logging.warning('Sum of column %d\n%s \nis %d, but should be %d.',
-                                i, str(col), col.sum(), correct_col_sum)
+                logging.debug('Sum of column %d\n%s \nis %d, but should be %d.',
+                              i, str(col), col.sum(), correct_col_sum)
                 return False
 
         return True
