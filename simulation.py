@@ -28,10 +28,197 @@ import datetime
 from multiprocessing import Pool
 import numpy as np
 import pandas as pd
+import complexity
 from solvers import Solver
 from model import SystemParameters
 from assignments.sparse import SparseAssignment
-from evaluation import AssignmentEvaluator, ParameterEvaluator
+from evaluation import AssignmentEvaluator
+
+class SimulatorError(Exception):
+    '''Base class for exceptions thrown by this module.'''
+
+class SimulatorResult(object):
+    '''This object represents the result of a simulation. It transparently
+    handles saving/loading results to/from disk.
+
+    '''
+
+    def __init__(self, simulator, parameter_list, directory):
+        '''Create a simulator result.
+
+        Args:
+
+        simulator: The simulator creating the result.
+
+        parameter_list: List of system paramaters the result applies
+        to.
+
+        directory: Results directory name.
+
+        '''
+        assert isinstance(simulator, Simulator)
+        assert isinstance(parameter_list, list)
+        assert isinstance(directory, str)
+        self.simulator = simulator
+        self.parameter_list = parameter_list
+        self.directory = directory
+
+        # Try to load results from disk
+        self.dataframes = list()
+        for parameters in parameter_list:
+            filename = os.path.join(directory, parameters.identifier() + '.csv')
+            try:
+                self.dataframes.append(pd.read_csv(filename))
+            except FileNotFoundError:
+                self.dataframes.append(None)
+
+        # Set default parameters
+        self.set_uncoded(enable=False)
+        self.set_reduce_delay()
+        self.set_shuffling_strategy()
+        return
+
+    def __getitem__(self, key):
+        '''Get data arrays from the simulated results.'''
+        if key == 'load':
+            return self.load()
+
+        if key == 'delay':
+            return self.delay()
+
+        if key == 'partitions':
+            return np.asarray([parameters.num_partitions
+                               for parameters in self.parameter_list])
+
+        if key == 'servers':
+            return np.asarray([parameters.num_servers
+                               for parameters in self.parameter_list])
+
+        raise SimulatorError('No data for key {}.'.format(key))
+
+    def append_results(self, index, dataframe):
+        '''Append performance samples.
+
+        Args:
+
+        index: Prameter index of the result.
+
+        dataframe: Pandas DataFrame with results to append. Must
+        contain the same columns as any already stored results.
+
+        '''
+        assert isinstance(index, int) and 0 <= index < len(self.dataframes)
+        if self.dataframes[index] is None:
+            self.dataframes[index] = dataframe
+        else:
+            pass
+        # self.dataframes[index].append(dataframe)
+
+        # Write results to disk
+        filename = os.path.join(self.directory,
+                                self.parameter_list[index].identifier() + '.csv')
+        self.dataframes[index].to_csv(filename)
+        return
+
+    def set_uncoded(self, enable=True):
+        '''Compute load and delay for these parameters as if it's uncoded.'''
+        self.uncoded = enable
+        return
+
+    def set_reduce_delay(self, function=None):
+        '''Include the reduce (decoding) delay in the total computational
+        delay.
+
+        Args:
+
+        function: A function that takes a parameters object and
+        returns its reduce delay.
+
+        '''
+        logging.debug('Set reduce function %s.', str(function))
+        self.reduce_function = function
+        return
+
+    def set_shuffling_strategy(self, strategy='best'):
+        '''Set the data shuffling strategy.
+
+        Args:
+
+        strategy: Can be L1, L2, or 'best.
+
+        '''
+        assert strategy == 'L1' or strategy == 'L2' or strategy == 'best'
+        self.shuffling_strategy = strategy
+        return
+
+    def load(self):
+        '''Collect the communication load of all parameters in this result
+        into a single array.
+
+        '''
+        loads = np.zeros([3, len(self.dataframes)])
+        for i in range(len(self.dataframes)):
+            dataframe = self.dataframes[i]
+            if dataframe is None:
+                loads.append(math.inf)
+                continue
+
+            if 'load' in dataframe:
+                frame_load = dataframe['load']
+            elif self.shuffling_strategy == 'L1':
+                frame_load = dataframe['unicast_load_1'] + dataframe['multicast_load_1']
+            elif self.shuffling_strategy == 'L2':
+                frame_load = dataframe['unicast_load_2'] + dataframe['multicast_load_2']
+            elif (dataframe['unicast_load_1'].mean() + dataframe['multicast_load_1'].mean() <
+                  dataframe['unicast_load_2'].mean() + dataframe['multicast_load_2'].mean()):
+                frame_load = dataframe['unicast_load_1'] + dataframe['multicast_load_1']
+            else:
+                frame_load = dataframe['unicast_load_2'] + dataframe['multicast_load_2']
+
+            loads[0, i] = frame_load.mean()
+            loads[1, i] = frame_load.min()
+            loads[2, i] = frame_load.max()
+
+        return loads
+
+    def delay(self):
+        '''Collect the computational delay of all parameters in this result
+        into a single array.
+
+        '''
+
+        delays = np.zeros([3, len(self.dataframes)])
+        for i in range(len(self.dataframes)):
+            parameters = self.parameter_list[i]
+            dataframe = self.dataframes[i]
+            if dataframe is None:
+                delays.append(math.inf)
+                continue
+
+            frame_delay = dataframe['delay'].copy()
+
+            # Uncoded systems are handled separately
+            if self.uncoded:
+                uncoded_storage = 1 / parameters.num_servers
+                rows_per_server = uncoded_storage * parameters.num_source_rows
+                frame_delay *= complexity.matrix_vector_complexity(rows_per_server,
+                                                                   parameters.num_columns)
+            else:
+                rows_per_server = parameters.server_storage * parameters.num_source_rows
+                frame_delay *= complexity.matrix_vector_complexity(rows_per_server,
+                                                                   parameters.num_columns)
+
+            # Include reduce time if enabled
+            if self.reduce_function is not None:
+                frame_delay += self.reduce_function(parameters)
+
+            # Normalize and append
+            frame_delay /= parameters.num_source_rows
+            delays[0, i] = frame_delay.mean()
+            delays[1, i] = frame_delay.min()
+            delays[2, i] = frame_delay.max()
+
+        return delays
 
 class Simulator(object):
     '''This object connects the assignments, solvers, and evaluation
@@ -57,8 +244,9 @@ class Simulator(object):
         assignment_eval: AssignmentEvaluator object. Must be provided
         if a solver is.
 
-        parameter_eval: ParameterEvaluator object. Must be None if
-        solver or assignment_eval is provided.
+        parameter_eval: A function that takes a SystemParameters
+        object and returns a DataFrame with its performance. Must be
+        None if a solver or assignment_eval is provided.
 
         assignment_type: Type of assignment matrix to return. Defaults
         to SparseAssignment.
@@ -76,12 +264,11 @@ class Simulator(object):
             assert isinstance(solver, Solver)
             assert isinstance(assignment_eval, AssignmentEvaluator)
         else:
-            assert isinstance(parameter_eval, ParameterEvaluator)
             assert solver is None
             assert assignment_eval is None
 
         if assignment_eval is None:
-            assert isinstance(parameter_eval, ParameterEvaluator)
+            pass
         else:
             assert isinstance(solver, Solver)
             assert isinstance(assignment_eval, AssignmentEvaluator)
@@ -121,14 +308,25 @@ class Simulator(object):
         '''
 
         assert isinstance(parameter_list, list)
-        logging.info('Running simulations for %d parameters in directory %s..',
+        logging.info('Running simulations for %d parameters in directory %s.',
                      len(parameter_list), self.directory)
 
-        # Run the simulations
-        with Pool(processes=processes) as pool:
-            _ = pool.map(self.simulate, parameter_list)
+        result = SimulatorResult(self, parameter_list, self.directory)
+        if self.rerun:
+            indices = list(range(len(parameter_list)))
+        else:
+            indices = [i for i in range(len(parameter_list))
+                       if result.dataframes[i] is None]
 
-        return
+        # Run simulations for any parameters without results.
+        with Pool(processes=processes) as pool:
+            dataframes = pool.map(self.simulate, [parameter_list[i] for i in indices])
+
+        # Add the dataframes to the result
+        for i, dataframe in zip(indices, dataframes):
+            result.append_results(i, dataframe)
+
+        return result
 
     def simulate(self, parameters):
         '''Run simulations for a single set of parameters.
@@ -144,14 +342,8 @@ class Simulator(object):
 
         assert isinstance(parameters, SystemParameters)
         assert os.path.exists(self.directory)
-
-        # Try to load the results from disk
-        filename = os.path.join(self.directory, parameters.identifier() + '.csv')
-        if os.path.isfile(filename) and not self.rerun:
-            logging.debug('Found results for %s on disk. Skipping.', filename)
-            return
-
-        logging.debug('Running simulations for %s', filename)
+        logging.debug('Running simulations for %s: %s',
+                      self.directory, parameters.identifier())
 
         best_assignment = None
         best_avg_load = math.inf
@@ -166,11 +358,12 @@ class Simulator(object):
             # Print progress periodically
             if datetime.datetime.utcnow() - last_printout > printout_interval:
                 last_printout = datetime.datetime.utcnow()
-                logging.info('%s %f percent finished.', filename, i / self.assignments * 100)
+                logging.info('%s in %s %f percent finished.', self.directory,
+                             parameters.identifier(), i / self.assignments * 100)
 
             # Use parameter_eval if there is no solver.
             if self.solver is None:
-                result = self.parameter_eval.evaluate(parameters)
+                result = self.parameter_eval(parameters)
                 if isinstance(result, dict):
                     result = pd.DataFrame(result)
 
@@ -198,7 +391,6 @@ class Simulator(object):
 
         # Concatenate DataFrames and write to disk
         dataframe = pd.concat(results)
-        dataframe.to_csv(filename)
 
         # Write the best assignment to disk
         if best_assignment is not None:
