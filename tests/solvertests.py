@@ -14,8 +14,7 @@
 # limitations under the License.                                           #
 ############################################################################
 
-'''This module contains tests for the solvers, the evaluation, and the
-simulation.
+'''This module contains tests for the solvers.
 
 '''
 
@@ -25,9 +24,8 @@ import tempfile
 import logging
 import model
 import examples
-import simulation
 from solvers import heuristicsolver
-from solvers import randomsolver
+from solvers.randomsolver import RandomSolver
 from solvers import treesolver
 from solvers.hybrid import HybridSolver
 from evaluation import sampled
@@ -433,23 +431,27 @@ class HybridSolverTests(unittest.TestCase):
 
     def test_deassign_branch_and_bound(self):
         '''Test the solver de-assignment and branch-and-bound.'''
-        hybrid = HybridSolver(initialsolver=heuristicsolver.HeuristicSolver())
-        parameters = examples.get_parameters_partitioning()[1]
-        assignment = heuristicsolver.HeuristicSolver().solve(parameters,
-                                                             assignment_type=CachedAssignment)
-        partition_count = [0] * parameters.num_partitions
+        initialsolver = RandomSolver()
+        hybrid = HybridSolver(initialsolver=initialsolver)
+        parameters = self.get_parameters()
+        assignment = initialsolver.solve(parameters,
+                                         assignment_type=CachedAssignment)
 
+        # De-assign a few elements
+        partition_count = [0] * parameters.num_partitions
         decrement = 3
         new_assignment = hybrid.deassign(parameters, assignment, partition_count, decrement)
 
+        # Verify that de-assignment worked
         self.assertFalse(new_assignment.is_valid())
         self.assertEqual(sum(partition_count), decrement)
         difference = assignment.assignment_matrix - new_assignment.assignment_matrix
         self.assertEqual(difference.sum(), decrement)
 
-        best_assignment = assignment.copy()
-        hybrid.branch_and_bound(parameters, new_assignment, partition_count, best_assignment)
-        self.assertTrue(assignment.is_valid())
+        # Re-assign optimally
+        bb_assignment = hybrid.branch_and_bound(parameters, new_assignment, partition_count, assignment)
+        self.assertTrue(bb_assignment.is_valid())
+        self.assertLessEqual(bb_assignment.score, assignment.score)
         return
 
     def get_parameters(self):
@@ -459,7 +461,7 @@ class HybridSolverTests(unittest.TestCase):
                                       4, # Servers to wait for (q)
                                       4, # Outputs (N)
                                       1/2, # Server storage (\mu)
-                                      5) # Partitions (T)
+                                      10) # Partitions (T)
 
 class SolverTests(unittest.TestCase):
     '''Tests of the other solvers.'''
@@ -481,7 +483,7 @@ class SolverTests(unittest.TestCase):
 
     def test_random(self):
         '''Test the randomized solver'''
-        solver = randomsolver.RandomSolver()
+        solver = RandomSolver()
 
         # Using sparse assignments
         for par in self.get_parameters_partitioning():

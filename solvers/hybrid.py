@@ -24,6 +24,7 @@ import random
 import logging
 import numpy as np
 import model
+from solvers import Solver
 from assignments.cached import CachedAssignment
 
 class Node(object):
@@ -55,28 +56,31 @@ class Node(object):
         self.parameters = parameters
         self.assignment = assignment
         self.complete = False
+        self.row = row
 
         # Find the next partially assigned row
-        while assignment.batch_union({row}).sum() == parameters.rows_per_batch:
-            row += 1
-            if row >= parameters.num_batches:
-                complete = True
-                break
+        while (self.row < parameters.num_batches and
+               assignment.batch_union({self.row}).sum() == parameters.rows_per_batch):
+            self.row += 1
 
-        self.row = row
+        # Mark assignment as completed if no partial rows
+        if self.row == parameters.num_batches:
+            self.complete = True
+            self.row = None
+
         self.partition_count = partition_count
         return
 
     def __str__(self):
         return 'Row: {} Complete: {} Score: {}'.format(self.row, self.complete, self.assignment.score)
 
-class HybridSolver(object):
+class HybridSolver(Solver):
     '''Hybrid assignment solver. Quickly finds a candidate solution and
     then improves on it iteratively through branch-and-bound search.
 
     '''
 
-    def __init__(self, initialsolver=None, directory=None):
+    def __init__(self, initialsolver=None, directory=None, clear=3):
         '''Create a hybrid solver.
 
         Args:
@@ -86,11 +90,15 @@ class HybridSolver(object):
         directory: Store intermediate assignments in this directory.
         Set to None to not store intermediate assignments.
 
+        clear: Number of elements of the assignment matrix to
+        re-assign per iteration.
+
         '''
         assert initialsolver is not None
         assert isinstance(directory, str) or directory is None
         self.initialsolver = initialsolver
         self.directory = directory
+        self.clear = clear
         return
 
     def branch_and_bound(self, parameters, assignment, partition_count, best_assignment):
@@ -99,30 +107,30 @@ class HybridSolver(object):
         stack.append(Node(parameters, assignment, 0, partition_count))
         completed = 0
         pruned = 0
+        best_assignment = best_assignment
         while stack:
             node = stack.pop()
 
             # Store completed nodes with a better score
-            if node.complete and node.assignment.score >= best_assignment.score:
+            if node.complete and node.assignment.score <= best_assignment.score:
                 logging.debug('Completed assignment with improvement %d.',
                               best_assignment.score - node.assignment.score)
                 best_assignment = node.assignment
                 completed += 1
-                continue
 
             for partition in range(parameters.num_partitions):
                 if not node.partition_count[partition]:
                     continue
 
                 # Only consider zero-valued elements
-                if node.assignment.assignment_matrix[node.row, partition]:
-                    continue
+                # if node.assignment.assignment_matrix[node.row, partition]:
+                #     continue
 
-                logging.debug('Completed %d, Pruned %d, Stack size %d:', completed, pruned, len(stack))
-
+                # logging.debug('Completed %d, Pruned %d, Stack size %d: row/col: [%d, %d]',
+                #               completed, pruned, len(stack), node.row, partition)
 
                 assignment = node.assignment.increment([node.row], [partition], [1])
-                logging.debug('Best: %d. Bound: %d.', best_assignment.score, assignment.bound())
+                # logging.debug('Best: %d. Bound: %d.', best_assignment.score, assignment.bound())
                 if assignment.bound() >= best_assignment.score:
                     pruned += 1
                     continue
@@ -182,7 +190,7 @@ class HybridSolver(object):
         cols = [index[1] for index in keys]
         return assignment.decrement(rows, cols, values)
 
-    def solve(self, parameters, clear=3):
+    def solve(self, parameters, assignment_type=None):
         '''Find an assignment using this solver.
 
         Args:
@@ -193,6 +201,8 @@ class HybridSolver(object):
 
         '''
         assert isinstance(parameters, model.SystemParameters)
+        assert assignment_type is None or assignment_type is CachedAssignment, \
+            'Solver must be used with CachedAssignment.'
 
         # Load solution or find one using the initial solver.
         try:
@@ -201,13 +211,15 @@ class HybridSolver(object):
         except FileNotFoundError:
             logging.debug('Finding a candidate solution using solver %s.', self.initialsolver.identifier)
             assignment = self.initialsolver.solve(parameters, assignment_type=CachedAssignment)
+            if self.directory:
+                assignment.save(directory=self.directory)
 
         # Ensure there is room for optimization.
         counts = np.zeros(parameters.num_partitions)
         for row in assignment.rows_iterator():
             counts += row
 
-        if counts.sum() < clear:
+        if counts.sum() < self.clear:
             logging.debug('Initial solution leaves no room for optimization. Returning.')
             return assignment
 
@@ -217,26 +229,37 @@ class HybridSolver(object):
                                           assignment_matrix=assignment.assignment_matrix,
                                           labels=assignment.labels)
 
+        original_score = max(assignment.score, 1)
         best_assignment = assignment.copy()
 
         # Iteratively improve the assignment
-        improvement = 1
-        iterations = 1
-        while improvement / iterations > 0.1:
+        iterations = 0
+        total_improvement = 0
+        moving_average = 1
+        stop_threshold = 0.0001
+        while moving_average > stop_threshold:
             # Count symbols by partition
             partition_count = [0] * parameters.num_partitions
 
             # De-assign elements
-            assignment = self.deassign(parameters, assignment, partition_count, clear)
+            decremented_assignment = self.deassign(parameters, best_assignment,
+                                                   partition_count, self.clear)
 
             # Re-assign optimally
-            assignment = self.branch_and_bound(parameters, assignment,
-                                               partition_count, best_assignment)
+            improved_assignment = self.branch_and_bound(parameters, decremented_assignment,
+                                                        partition_count, best_assignment)
 
             iterations += 1
-            improvement += best_assignment.score - assignment.score
-            best_assignment = assignment.copy()
-            logging.debug('Improved %d over %d iterations.', improvement, iterations)
+            improvement = (best_assignment.score - improved_assignment.score) / original_score
+            total_improvement += improvement
+            moving_average *= 0.9
+            moving_average += improvement
+            best_assignment = improved_assignment.copy()
+            logging.info('Improved %f%% over %d iterations. Moving average: %f%%. Stop threshold: %f%%.',
+                         total_improvement * 100, iterations, moving_average * 100, stop_threshold * 100)
+
+            if self.directory and improvement > 0:
+                best_assignment.save(directory=self.directory)
 
         return best_assignment
 
