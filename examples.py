@@ -23,37 +23,42 @@ import pandas as pd
 
 from matplotlib import rc
 rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
-## for Palatino and other serif fonts use:
-# rc('font',**{'family':'serif','serif':['Palatino']})
 rc('text', usetex=True)
 
 import matplotlib.pyplot as plt
 import numpy as np
 import model
-import simulation
+from simulation import Simulator, SimulatorResult
 from evaluation import analytic
 from evaluation import independent
+from evaluation.binsearch import SampleEvaluator
 import mathtools
 import complexity
-from solvers import randomsolver
-from solvers import heuristicsolver
-from solvers import treesolver
+from solvers.randomsolver import RandomSolver
+from solvers.heuristicsolver import HeuristicSolver
+from solvers.treesolver import TreeSolver
+from solvers.hybrid import HybridSolver
+from solvers.assignmentloader import AssignmentLoader
+from assignments.cached import CachedAssignment
 
-def load_delay_plot(parameters, results, xlabel=''):
+def load_delay_plot(results, plot_settings, xlabel='', normalize=None):
     '''Create a plot with two subplots for load and delay respectively.
 
     Args:
-    parameters: An array-like of parameters objects.
 
-    result: An array-like of dicts with plot parameter. Example:
-    {'directory': './results/RandomSolver/', 'color': 'c', 'marker': 'v', 'name': 'Random'}
+    results: SimulatorResult to plot.
+
+    plot_settings: List of dicts with plot settings.
 
     xlabel: X axis label
 
+    normalize: If a SimulatorResult is provided, all ploted results
+    are normalized by this one.
+
     '''
-    assert isinstance(parameters, list)
     assert isinstance(results, list)
-    assert isinstance(xlabel, str)
+    assert isinstance(plot_settings, list)
+    assert isinstance(normalize, SimulatorResult) or normalize is None
 
     _ = plt.figure(figsize=(8,5))
 
@@ -61,149 +66,67 @@ def load_delay_plot(parameters, results, xlabel=''):
     ax1 = plt.subplot(211)
     plt.setp(ax1.get_xticklabels(), fontsize=20, weight='bold', visible=False)
     plt.setp(ax1.get_yticklabels(), fontsize=20)
-    communication_load_plot(parameters, results, ylabel='Load', subplot=True)
-    # plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
-    #            ncol=3, mode="expand", borderaxespad=0., numpoints=1)
+    for result, plot_setting in zip(results, plot_settings):
+        plot_result(result, plot_setting, 'partitions', 'load',
+                    ylabel='Load', subplot=True, normalize=normalize)
 
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
     plt.legend(numpoints=1, fontsize=18, loc='best')
 
     # Plot delay
     ax2 = plt.subplot(212, sharex=ax1)
     plt.setp(ax2.get_xticklabels(), fontsize=20, weight='bold')
     plt.setp(ax2.get_yticklabels(), fontsize=20)
-    computational_delay_plot(parameters, results, yindex='delay',
-                             xlabel=xlabel, ylabel='Delay', subplot=True,
-                             include_reduce=True)
+    for result, plot_setting in zip(results, plot_settings):
+        plot_result(result, plot_setting, 'partitions', 'delay', xlabel=xlabel,
+                    ylabel='Delay', subplot=True, normalize=normalize)
 
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
-    plt.autoscale(enable=True, axis='x', tight=True)
+    plt.autoscale(enable=True)
     plt.tight_layout()
     plt.subplots_adjust(wspace=0, hspace=0.2)
     plt.show()
     return
 
-def delay_delay_plot(parameters1, parameters2, results):
-    '''Create a figure with two subplots for the delay of two parameter
-    lists.
+def plot_result(result, plot_settings, xdata, ydata, xlabel='',
+                ylabel='', subplot=False, normalize=None,
+                errorbars=False):
+    '''Plot simulated results.
 
     Args:
-    parameters: An array-like of parameters objects.
 
-    result: An array-like of dicts with plot parameter. Example:
-    {'directory': './results/RandomSolver/', 'color': 'c', 'marker': 'v', 'name': 'Random'}
+    result: A SimulationResult.
 
-    xlabel: X axis label
+    plot_settings: A dict with plot settings.
 
-    '''
-    assert isinstance(parameters1, list)
-    assert isinstance(parameters2, list)
-    assert isinstance(results, list)
+    xdata: Label of the X axis data ('partitions' or 'servers').
 
-    _ = plt.figure()
-
-    # Plot delay for parameters1
-    ax1 = plt.subplot(211)
-    plt.setp(ax1.get_xticklabels(), fontsize=20, weight='bold')
-    plt.setp(ax1.get_yticklabels(), fontsize=20)
-    computational_delay_plot(parameters1, results, yindex='delay',
-                             xlabel='$K$', ylabel='Delay', subplot=True,
-                             include_reduce=True)
-
-    plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
-               ncol=3, mode="expand", borderaxespad=0., numpoints=1)
-
-    # Plot delay for parameters2
-    ax2 = plt.subplot(212)
-    plt.setp(ax2.get_xticklabels(), fontsize=20, weight='bold')
-    plt.setp(ax2.get_yticklabels(), fontsize=20)
-    computational_delay_plot(parameters2, results, yindex='delay',
-                             xlabel='$T$', ylabel='Delay',
-                             subplot=True, include_reduce=True)
-    # plt.legend(numpoints=1, fontsize=20, loc='best')
-
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    # plt.tight_layout()
-    plt.subplots_adjust(wspace=0, hspace=0.3)
-    plt.show()
-    return
-
-def load_load_plot(parameters1, parameters2, results):
-    '''Create a figure with two subplots for the delay of two parameter
-    lists.
-
-    Args:
-    parameters: An array-like of parameters objects.
-
-    result: An array-like of dicts with plot parameter. Example:
-    {'directory': './results/RandomSolver/', 'color': 'c', 'marker': 'v', 'name': 'Random'}
-
-    xlabel: X axis label
-
-    '''
-    assert isinstance(parameters1, list)
-    assert isinstance(parameters2, list)
-    assert isinstance(results, list)
-
-    _ = plt.figure()
-
-    # Plot delay for parameters1
-    ax1 = plt.subplot(211)
-    plt.setp(ax1.get_xticklabels(), fontsize=20, weight='bold')
-    plt.setp(ax1.get_yticklabels(), fontsize=20)
-    communication_load_plot(parameters1, results, xlabel='$K$',
-                            ylabel='Load', subplot=True)
-
-    plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
-               ncol=3, mode="expand", borderaxespad=0., numpoints=1)
-
-    # Plot delay for parameters2
-    ax2 = plt.subplot(212)
-    plt.setp(ax2.get_xticklabels(), fontsize=20, weight='bold')
-    plt.setp(ax2.get_yticklabels(), fontsize=20)
-    communication_load_plot(parameters2, results, xlabel='$T$',
-                            ylabel='Load', subplot=True)
-    # plt.legend(numpoints=1, fontsize=20, loc='best')
-
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    # plt.tight_layout()
-    plt.subplots_adjust(wspace=0, hspace=0.3)
-    plt.show()
-    return
-
-def computational_delay_plot(parameters, results, yindex=None,
-                             xlabel='', ylabel='',
-                             include_reduce=False, normalize=True, subplot=False):
-    '''Create a computational delay plot from an array-like of parameters
-    and results.
-
-    Args:
-    parameters: An array-like of parameters objects.
-
-    result: An array-like of dicts with plot parameter. Example:
-    {'directory': './results/RandomSolver/', 'color': 'c', 'marker': 'v', 'name': 'Random'}
-
-    yindex: The index of the Y axis data. For example 'batches', or 'delay'.
+    ydata: Label of the Y axis data ('load' or 'delay').
 
     xlabel: X axis label.
 
     ylabel: Y axis label.
 
-    include_reduce: Include the reduce time if True. yindex must be
-    set to 'delay' if this is True.
+    subplot: Set to True if the plot q is intended to be a subplot.
+    This will keep it from creating a new plot window, creating a
+    legend, and automatically showing the plot.
 
-    subplot: Set to True if the plot is intended to be a subplot. This
-    will keep it from creating a new plot window, creating a legend,
-    and automatically showing the plot.
+    normalize: Normalize the plotted data by that of these results.
+    Must be a list of SimulationResults of length equal to results.
+
+    errorbars: Plot error bars.
 
     '''
-    assert isinstance(yindex, str)
+    assert isinstance(result, SimulatorResult)
+    assert isinstance(plot_settings, dict)
+    assert xdata == 'partitions' or xdata == 'servers'
+    assert ydata == 'load' or ydata == 'delay'
     assert isinstance(xlabel, str)
     assert isinstance(ylabel, str)
-    if include_reduce:
-        assert yindex == 'delay', 'Reduce delay can only be included with the delay yindex.'
+    assert isinstance(subplot, bool)
+    assert isinstance(normalize, SimulatorResult) or normalize is None
 
     if not subplot:
         _ = plt.figure()
@@ -213,91 +136,31 @@ def computational_delay_plot(parameters, results, yindex=None,
     plt.xlabel(xlabel, fontsize=18)
     plt.autoscale()
 
-    for result in results:
-        labels = [par.num_partitions for par in parameters]
-        panel = load_data(parameters, labels, result)
-        if yindex not in panel:
-            continue
+    label = plot_settings['label']
+    color = plot_settings['color']
+    style = color + plot_settings['marker']
+    linewidth = plot_settings['linewidth']
+    size = plot_settings['size']
 
-        if include_reduce and result['reduce_label'] not in panel:
-            continue
+    xarray = result[xdata]
+    ymean = result[ydata][0, :]
+    ymin = result[ydata][1, :]
+    ymax = result[ydata][2, :]
+    yerr = np.zeros([2, len(ymean)])
+    yerr[0, :] = ymean - ymin
+    yerr[1, :] = ymax - ymean
+    if normalize is not None:
+        ymean /= normalize[ydata][0, :]
+        yerr[0, :] /= normalize[ydata][0, :]
+        yerr[1, :] /= normalize[ydata][0, :]
 
-        xdata = panel.minor_axis
-        ydata = panel[yindex]
+    plt.semilogx(xarray, ymean, style, label=label,
+                 linewidth=linewidth, markersize=size)
+    if errorbars:
+        plt.errorbar(xarray, ymean, yerr=yerr, fmt='none', ecolor=color)
 
-        if include_reduce:
-            ydata += panel[result['reduce_label']]
-
-        if normalize:
-            ydata /= panel['uncoded_delay']
-
-        ydata_mean = ydata.mean()
-        ydata_min = ydata.min() #quantile(0.05)
-        ydata_max = ydata.max() #quantile(0.95)
-        yerr = np.array([np.array(ydata_mean - ydata_min), np.array(ydata_max - ydata_mean)])
-
-        plt.semilogx(xdata, ydata_mean, result['color'] + result['marker'], label=result['name'], linewidth=2)
-        plt.errorbar(xdata, ydata_mean, yerr=yerr, fmt='none', ecolor=result['color'])
-
-    if not subplot:
-        plt.legend(numpoints=1, fontsize=20, loc='best')
-        plt.show()
-
-    return
-
-def communication_load_plot(parameters, results, xlabel='', ylabel='',
-                            subplot=False, normalize=True):
-    '''Create a communication load plot from an array-like of parameters
-    and results.
-
-    Args:
-    parameters: An array-like of parameters objects.
-
-    result: An array-like of dicts with plot parameter. Example:
-    {'directory': './results/RandomSolver/', 'color': 'c', 'marker': 'v', 'name': 'Random'}
-
-    xlabel: X axis label.
-
-    ylabel: Y axis label.
-
-    subplot: Set to True if the plot q is intended to be a subplot. This
-    will keep it from creating a new plot window, creating a legend,
-    and automatically showing the plot.
-
-    '''
-    assert isinstance(xlabel, str)
-    assert isinstance(ylabel, str)
-    if not subplot:
-        _ = plt.figure()
-
-    plt.grid(True, which='both')
-    plt.ylabel(ylabel, fontsize=18)
-    plt.xlabel(xlabel, fontsize=18)
-    plt.autoscale()
-
-    for result in results:
-        labels = [par.num_partitions for par in parameters]
-        panel = load_data(parameters, labels, result)
-        if 'load' not in panel:
-            continue
-
-        xdata = panel.minor_axis
-        ydata = panel['load']
-
-        if normalize:
-            ydata /= panel['uncoded_load']
-
-        ydata_mean = ydata.mean()
-        ydata_min = ydata.min()
-        ydata_max = ydata.max()
-        yerr = np.array([ydata_mean - ydata_min, ydata_max - ydata_mean])
-
-        plt.semilogx(xdata, ydata_mean, result['color'] + result['marker'],
-                     label=result['name'], linewidth=2)
-        plt.errorbar(xdata, ydata_mean, yerr=yerr, fmt='none', ecolor=result['color'])
-
-        plt.rc('text', usetex=True)
-        plt.rc('font', family='serif')
+    # plt.rc('text', usetex=True)
+    # plt.rc('font', family='serif')
 
     if not subplot:
         plt.legend(numpoints=1, fontsize=20, loc='best')
@@ -305,10 +168,11 @@ def communication_load_plot(parameters, results, xlabel='', ylabel='',
 
     return
 
-def load_data(parameters, labels, result, shuffling_strategy='best'):
+def load_data(parameters, labels, result):
     '''Load data from disk and construct a Pandas panel.
 
     Args:
+
     parameters: An array-like of parameters objects.
 
     labels: An array-like of same length as parameters with labels of
@@ -316,8 +180,6 @@ def load_data(parameters, labels, result, shuffling_strategy='best'):
 
     result: A dict with plot parameter. Example:
     {'directory': './results/RandomSolver/', 'color': 'c', 'marker': 'v', 'name': 'Random'}
-
-    shuffling_strategy: Can be '1', '2', or best.
 
     Returns: A Pandas panel with the loaded date.
 
@@ -338,48 +200,35 @@ def load_data(parameters, labels, result, shuffling_strategy='best'):
 
         logging.debug('Loading data from %s', filename)
 
-        # Compute uncoded performance for normalization
-        dataframe['uncoded_load'] = pd.DataFrame([par.num_source_rows * (1 - par.server_storage)])
-        dataframe['uncoded_load'] *= par.num_outputs / par.q
-        dataframe['uncoded_load'] /= par.num_source_rows
-        dataframe['uncoded_delay'] = pd.DataFrame([par.computational_delay(q=par.num_servers)])
-        dataframe['uncoded_delay'] *= complexity.matrix_vector_complexity(par.server_storage * par.num_source_rows,
-                                                                          par.num_columns)
-        dataframe['uncoded_delay'] /= par.num_source_rows# * par.num_outputs
-
         # Scale map delay by its complexity
-        dataframe['delay'] *= complexity.matrix_vector_complexity(par.server_storage * par.num_source_rows,
-                                                                  par.num_columns)
-        # Normalize by number of source rows and output vectors
-        dataframe['delay'] /= par.num_source_rows# * par.num_outputs
+        if result['name'] == 'Uncoded':
+            uncoded_storage = 1 / par.num_servers
+            dataframe['delay'] *= complexity.matrix_vector_complexity(uncoded_storage * par.num_source_rows,
+                                                                      par.num_columns)
+        else:
+            dataframe['delay'] *= complexity.matrix_vector_complexity(par.server_storage * par.num_source_rows,
+                                                                      par.num_columns)
 
-        # Set load
-        # dataframe['load'] = dataframe['unicasts_strat_1']
-        # dataframe['load'] += dataframe['multicasts_strat_1']
-        # dataframe['load'] /= par.num_source_rows * par.num_outputs
+        # Normalize by number of source rows
+        dataframe['delay'] /= par.num_source_rows
 
-        # dataframe['load'] = dataframe['unicasts_strat_2']
-        # dataframe['load'] += dataframe['multicasts_strat_2']
-        # dataframe['load'] /= par.num_source_rows * par.num_outputs
-
-        # Compute load if not already stored
+        # Compute load if not already in the DataFrame
         if 'load' not in dataframe:
 
             # Set load to inf if there are no results
-            if ('unicasts_strat_1' not in dataframe or 'unicasts_strat_2' not in dataframe or
-                'multicasts_strat_1' not in dataframe or 'multicasts_strat_2' not in dataframe):
+            if ('unicast_load_1' not in dataframe or 'unicast_load_2' not in dataframe or
+                'multicast_load_1' not in dataframe or 'multicast_load_2' not in dataframe):
                 dataframe['load'] = math.inf
 
             # Otherwise select the strategy that minimizes the load
-            elif (dataframe['unicasts_strat_1'].mean() + dataframe['multicasts_strat_1'].mean() <
-                  dataframe['unicasts_strat_2'].mean() + dataframe['multicasts_strat_2'].mean()):
-                dataframe['load'] = dataframe['unicasts_strat_1'] + dataframe['multicasts_strat_1']
-
+            elif (dataframe['unicast_load_1'].mean() + dataframe['multicast_load_1'].mean() <
+                  dataframe['unicast_load_2'].mean() + dataframe['multicast_load_2'].mean()):
+                dataframe['load'] = dataframe['unicast_load_1'] + dataframe['multicast_load_1']
             else:
-                dataframe['load'] = dataframe['unicasts_strat_2'] + dataframe['multicasts_strat_2']
+                dataframe['load'] = dataframe['unicast_load_2'] + dataframe['multicast_load_2']
 
-            # We are interested in load per source row and output vector
-            dataframe['load'] /= par.num_source_rows * par.num_outputs
+            # We are interested in load per source row
+            # dataframe['load'] /= par.num_source_rows
 
         # Add the partitioned reduce delay
         dataframe['partitioned_reduce_delay'] = par.reduce_delay()
@@ -389,9 +238,6 @@ def load_data(parameters, labels, result, shuffling_strategy='best'):
 
         # Add the unpartitioned reduce delay
         dataframe['rs_reduce_delay'] = par.reduce_delay(num_partitions=1)
-
-        # Add the peeling decoder reduce delay
-        dataframe['peeling_reduce_delay'] = par.reduce_delay_ldpc_peeling()
 
         data[label] = dataframe
 
@@ -439,7 +285,27 @@ def get_parameters_size():
                                                                  min_num_servers=servers,
                                                                  code_rate=code_rate,
                                                                  muq=muq, num_columns=num_columns)
-        # print(par.server_storage * par.num_source_rows * par.num_columns, par.num_outputs, par.num_servers / par.q)
+        parameters.append(par)
+        print(par)
+
+    return parameters
+
+def get_parameters_size_2():
+    '''Get a list of parameters for the size plot.'''
+    rows_per_server = 2000
+    rows_per_partition = 5
+    code_rate = 8/10
+    muq = 2
+    num_columns = int(1e4)
+    parameters = list()
+    num_servers = [0]
+    for servers in num_servers:
+        print(servers)
+        par = model.SystemParameters.fixed_complexity_parameters(rows_per_server=rows_per_server,
+                                                                 rows_per_partition=rows_per_partition,
+                                                                 min_num_servers=servers,
+                                                                 code_rate=code_rate,
+                                                                 muq=muq, num_columns=num_columns)
         parameters.append(par)
 
     return parameters
@@ -464,138 +330,163 @@ def get_parameters_partitioning():
 
     return parameters
 
+def get_parameters_partitioning_2():
+    '''Get a list of parameters for the partitioning plot.'''
+    rows_per_batch = 250
+    num_servers = 9
+    q = 8
+    num_outputs = q
+    server_storage = 1/4
+    num_partitions = [2, 20, 25, 40, 50, 100, 125, 200, 250, 500, 1000]
+
+    parameters = list()
+    for partitions in num_partitions:
+        par = model.SystemParameters(rows_per_batch=rows_per_batch, num_servers=num_servers, q=q,
+                                     num_outputs=num_outputs, server_storage=server_storage,
+                                     num_partitions=partitions)
+        parameters.append(par)
+
+    return parameters
+
+def get_parameters_partitioning_3():
+    '''Get a list of parameters for the partitioning plot.'''
+    rows_per_batch = 500
+    num_servers = 9
+    q = 6
+    num_outputs = q
+    server_storage = 1/6
+    max_partitions = 1500
+    num_partitions = list()
+    for i in range(1, 1500 + 1):
+        if max_partitions / i % 1 == 0:
+            num_partitions.append(int(max_partitions / i))
+
+    parameters = list()
+    for partitions in num_partitions:
+        par = model.SystemParameters(rows_per_batch=rows_per_batch, num_servers=num_servers, q=q,
+                                     num_outputs=num_outputs, server_storage=server_storage,
+                                     num_partitions=partitions, num_columns=None)
+        parameters.append(par)
+
+    return parameters
+
+def foo():
+    df = pd.read_csv('./results2/Heuristic/m_6000_K_9_q_6_N_6_muq_2_T_3000.csv')
+    df['load'] = df['unicast_load_1'] + df['multicast_load_1']
+    print(df['load'].mean())
+    print(df[df['load'] < 3.1]['delay'].mean(), df[df['load'] > 3.1]['delay'].mean())
+    _ = plt.figure()
+
+    plt.hist(df[df['load'] < 3.1]['delay'], normed=True, alpha=0.7)
+    plt.hist(df[df['load'] > 3.1]['delay'], normed=True, alpha=0.7)
+    plt.show()
+
 def main():
-    """Main examples function."""
+    '''Main examples function.'''
 
-    # Compute/simulate the load and delay for various parameters and solvers
-    heuristic_simulator = simulation.Simulator(solver=heuristicsolver.HeuristicSolver(),
-                                               directory='./results/HeuristicSolver/',
-                                               num_assignments=1, num_samples=1000,
-                                               rerun=False)
+    # Setup the evaluators
+    sample_100 = SampleEvaluator(num_samples=100)
+    sample_1000 = SampleEvaluator(num_samples=1000)
 
-    random_simulator = simulation.Simulator(solver=randomsolver.RandomSolver(),
-                                            directory='./results/RandomSolver/',
-                                            num_assignments=10, num_samples=100,
-                                            rerun=False)
+    # Get parameters
+    partition_parameters = get_parameters_partitioning()
+    size_parameters = get_parameters_size()[0:-2]
+    partition_parameters_3 = get_parameters_partitioning_3()
 
-    # unsupervised_simulator = simulation.Simulator(solver=None,
-    #                                               par_eval=evaluation.eval_unsupervised,
-    #                                               directory='./results/Unsupervised/',
-    #                                               num_samples=100)
+    # Setup the simulators
+    heuristic_sim = Simulator(solver=HeuristicSolver(),
+                              assignment_eval=sample_1000,
+                              directory='./results2/Heuristic/')
 
-    heuristic_upper_bound = simulation.Simulator(solver=heuristicsolver.HeuristicSolver(),
-                                                 rerun=True, directory='./results/HeuristicUpper/',
-                                                 eval_fun=analytic.block_diagonal_upper_bound,
-                                                 num_assignments=1)
+    random_sim = Simulator(solver=RandomSolver(), assignments=10,
+                           assignment_eval=sample_100,
+                           directory='./results2/Random/')
 
-    heuristic_analytic = simulation.Simulator(solver=None, rerun=False,
-                                              par_eval=analytic.average_heuristic,
-                                              directory='./results/HeuristicAnalytic/')
+    hybrid_solver = HybridSolver(initialsolver=HeuristicSolver(),
+                                 directory='./saved_assignments_2/',
+                                 clear=3)
+    hybrid_solver = AssignmentLoader(directory='./results/HybridSolver')
+    hybrid_sim = Simulator(solver=hybrid_solver, assignments=1,
+                           assignment_eval=sample_1000,
+                           assignment_type=CachedAssignment,
+                           directory='./results2/Hybrid/')
 
-    tree_simulator = simulation.Simulator(solver=treesolver.TreeSolver(),
-                                          directory='./results/Tree/', num_assignments=1,
-                                          num_samples=1000)
+    rs_sim = Simulator(solver=None, assignments=1,
+                       parameter_eval=analytic.mds_performance,
+                       directory='./results2/RS/')
 
-    lt_code = simulation.Simulator(solver=None, rerun=False,
-                                   par_eval=analytic.lt_performance,
-                                   directory='./results/LT/')
+    uncoded_sim = Simulator(solver=None, assignments=1,
+                            parameter_eval=analytic.uncoded_performance,
+                            directory='./results2/Uncoded/')
 
-    rs_code = simulation.Simulator(solver=None, rerun=False,
-                                   par_eval=analytic.mds_performance,
-                                   directory='./results/RS/')
+    # Run the simulations
+    heuristic_partitions = heuristic_sim.simulate_parameter_list(partition_parameters)
+    random_partitions = random_sim.simulate_parameter_list(partition_parameters)
+    hybrid_partitions = hybrid_sim.simulate_parameter_list(partition_parameters)
+    rs_partitions = rs_sim.simulate_parameter_list(partition_parameters)
+    uncoded_partitions = uncoded_sim.simulate_parameter_list(partition_parameters)
 
-    uncoded = simulation.Simulator(solver=None, rerun=True,
-                                   par_eval=analytic.uncoded_performance,
-                                   directory='./results/Uncoded/')
+    # heuristic_partitions = heuristic_sim.simulate_parameter_list(partition_parameters_3)
+    # random_partitions = random_sim.simulate_parameter_list(partition_parameters_3)
+    # hybrid_partitions = hybrid_sim.simulate_parameter_list(partition_parameters_3)
+    # rs_partitions = rs_sim.simulate_parameter_list(partition_parameters_3)
+    # uncoded_partitions = uncoded_sim.simulate_parameter_list(partition_parameters_3)
 
-    # Get parameter lists
-    load_delay_parameters = get_parameters_size()[0:-2]
-    load_delay_parameters_light = load_delay_parameters#[0:-2]
-    partitioning_parameters = get_parameters_partitioning()
+    heuristic_size = heuristic_sim.simulate_parameter_list(size_parameters)
+    random_size = random_sim.simulate_parameter_list(size_parameters)
+    rs_size = rs_sim.simulate_parameter_list(size_parameters)
+    uncoded_size = uncoded_sim.simulate_parameter_list(size_parameters)
 
-    # Load-delay parameters
-    heuristic_simulator.simulate_parameter_list(parameter_list=load_delay_parameters_light)
-    random_simulator.simulate_parameter_list(parameter_list=load_delay_parameters_light)
-    # unsupervised_simulator.simulate_parameter_list(parameter_list=load_delay_parameters)
-    # heuristic_upper_bound.simulate_parameter_list(parameter_list=load_delay_parameters_light)
-    # heuristic_analytic.simulate_parameter_list(parameter_list=load_delay_parameters)
-    lt_code.simulate_parameter_list(parameter_list=load_delay_parameters)
-    rs_code.simulate_parameter_list(parameter_list=load_delay_parameters)
-    uncoded.simulate_parameter_list(parameter_list=load_delay_parameters)
+    # Include the reduce delay
+    heuristic_partitions.set_reduce_delay(function=complexity.partitioned_reduce_delay)
+    random_partitions.set_reduce_delay(function=complexity.partitioned_reduce_delay)
+    hybrid_partitions.set_reduce_delay(function=complexity.partitioned_reduce_delay)
+    rs_partitions.set_reduce_delay(function=lambda x: complexity.partitioned_reduce_delay(x, partitions=1))
+    uncoded_partitions.set_reduce_delay(function=lambda x: 0)
+    uncoded_partitions.set_uncoded(enable=True)
 
-    # Partitioning parameters
-    heuristic_simulator.simulate_parameter_list(parameter_list=partitioning_parameters)
-    random_simulator.simulate_parameter_list(parameter_list=partitioning_parameters)
-    # unsupervised_simulator.simulate_parameter_list(parameter_list=partitioning_parameters)
-    # heuristic_upper_bound.simulate_parameter_list(parameter_list=partitioning_parameters)
-    # heuristic_analytic.simulate_parameter_list(parameter_list=partitioning_parameters)
-    lt_code.simulate_parameter_list(parameter_list=partitioning_parameters)
-    rs_code.simulate_parameter_list(parameter_list=partitioning_parameters)
-    uncoded.simulate_parameter_list(parameter_list=partitioning_parameters)
+    heuristic_size.set_reduce_delay(function=complexity.partitioned_reduce_delay)
+    random_size.set_reduce_delay(function=complexity.partitioned_reduce_delay)
+    rs_size.set_reduce_delay(function=lambda x: complexity.partitioned_reduce_delay(x, partitions=1))
+    uncoded_size.set_reduce_delay(function=lambda x: 0)
+    uncoded_size.set_uncoded(enable=True)
 
-    # tree_simulator.simulate(partitioning_parameters[29])
-    # for parameters, i in zip(partitioning_parameters, range(len(partitioning_parameters))):
-    #     print('Simulation {}:\n{}'.format(i, parameters))
-    #     tree_simulator.simulate(parameters)
+    # Setup plot settings
+    heuristic_plot_settings = {
+        'label': 'Heuristic',
+        'color': 'r',
+        'marker': 'H',
+        'linewidth': 2,
+        'size': 10}
+    random_plot_settings = {
+        'label': 'Random',
+        'color': 'b',
+        'marker': '^',
+        'linewidth': 2,
+        'size': 8}
+    rs_plot_settings = {
+        'label': 'RS',
+        'color': 'c',
+        'marker': 'v',
+        'linewidth': 2,
+        'size': 12}
+    hybrid_plot_settings = {
+        'label': 'Hybrid',
+        'color': 'g',
+        'marker': 's',
+        'linewidth': 2,
+        'size': 6}
 
-    # tree_simulator.simulate_parameter_list(parameter_list=partitioning_parameters)
+    plot_settings = [heuristic_plot_settings, random_plot_settings,
+                     hybrid_plot_settings]
 
-    # Setup a list of dicts containing plotting parameters
-    plot_settings = list()
-    plot_settings.append({'directory': './results/RS/',
-                          'reduce_label': 'rs_reduce_delay',
-                          'color': 'k', 'marker': '-', 'name': 'RS'}) # H
+    load_delay_plot([heuristic_partitions, random_partitions, hybrid_partitions],
+                    plot_settings, xlabel='T', normalize=rs_partitions)
 
-    # plot_settings.append({'directory': './results/Uncoded/',
-    #                       'reduce_label': 'uncoded_reduce_delay',
-    #                       'color': 'b', 'marker': '-', 'name': 'Uncoded'}) # s
-
-    # plot_settings.append({'directory': './results/LT/',
-    #                       'reduce_label': 'peeling_reduce_delay',
-    #                       'color': 'm', 'marker': '--', 'name': 'LT'}) s
-
-    # plot_settings.append({'directory': './results/HeuristicAnalytic/',
-    #                       'reduce_label': 'partitioned_reduce_delay',
-    #                       'color': 'b', 'marker': 'D', 'name': 'Heuristic Theo.'})
-
-    plot_settings.append({'directory': './results/HeuristicSolver/',
-                          'reduce_label': 'partitioned_reduce_delay',
-                          'color': 'r', 'marker': 'd', 'name': 'BDC, Heuristic'})
-
-    # plot_settings.append({'directory': './results/Unsupervised/',
-    #                       'color': 'k', 'marker': 'D', 'name':
-    #                       'Unsupervised'})
-
-    # plot_settings.append({'directory': './results/HeuristicUpper/',
-    #                       'reduce_label': 'partitioned_reduce-delay',
-    #                       'color': 'm', 'marker': 'D', 'name':
-    #                       'Heuristic Upper Bound'})
-
-    # plot_settings.append({'directory': './results/Tree/',
-    #                       'reduce_label': 'partitioned_reduce_delay',
-    #                       'color': 'm', 'marker': 'D', 'name':
-    #                       'Tree'})
-
-    plot_settings.append({'directory': './results/RandomSolver/',
-                          'reduce_label': 'partitioned_reduce_delay',
-                          'color': 'c', 'marker': 'v', 'name': 'BDC, Random'})
-
-    # hist_plot(partitioning_parameters[29], {'directory': './results/HeuristicSolverHist/',
-    #                                         'reduce_label': 'partitioned_reduce_delay',
-    #                                         'color': 'r', 'marker': 'd', 'name': 'Heuristic'})
-
-    # hist_plot(partitioning_parameters[29], {'directory': './results/Tree/',
-    #                                         'reduce_label': 'partitioned_reduce_delay',
-    #                                         'color': 'm', 'marker': 'D', 'name':
-    #                                         'Tree'})
-
-
-    load_delay_plot(partitioning_parameters, plot_settings, xlabel='$T$')
-    load_delay_plot(load_delay_parameters, plot_settings, xlabel='$K$')
-    # delay_delay_plot(load_delay_parameters, partitioning_parameters, plot_settings)
-    # delay_delay_plot(load_delay_parameters, partitioning_parameters, plot_settings)
+    load_delay_plot([heuristic_size, random_size],
+                    plot_settings, xlabel='K', normalize=rs_size)
     return
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
     main()
