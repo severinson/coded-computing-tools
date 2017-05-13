@@ -22,6 +22,35 @@ RS_XOR_PER_WORD = 44.6
 ADDITION_COMPLEXITY = 0
 MULTIPLICATION_COMPLEXITY = 87e-6
 
+def partitioned_reduce_delay(parameters, partitions=None):
+    '''Compute delay incurred by the reduce phase. Assumes a shifted
+    exponential distribution.
+
+    Args:
+
+    parameters: System parameters.
+
+    partitions: The number of partitions. If None, the value in
+    parameters is used.
+
+    Returns: The reduce delay.
+
+    '''
+    assert partitions is None or (isinstance(partitions, int) and partitions > 0)
+    if partitions is None:
+        partitions = parameters.num_partitions
+
+    delay = 1
+    for j in range(1, parameters.q):
+        delay += 1 / j
+
+    # Scale by decoding complexity
+    delay *= block_diagonal_decoding_complexity(parameters.num_coded_rows,
+                                                1, 1 - parameters.q / parameters.num_servers,
+                                                partitions)
+    delay *= parameters.num_outputs / parameters.q
+    return delay
+
 def rs_decoding_complexity(code_length, packet_size, erasure_prob):
     '''Compute the decoding complexity of Reed-Solomon codes
 

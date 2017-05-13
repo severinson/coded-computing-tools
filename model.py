@@ -468,37 +468,6 @@ class SystemParameters(object):
         delay *= self.server_storage * self.num_outputs
         return delay
 
-    @functools.lru_cache(maxsize=8)
-    def reduce_delay(self, num_partitions=None):
-        '''Return the delay incurred in the reduce step.
-
-        Calculates the reduce delay assuming a shifted exponential
-        distribution.
-
-        Args:
-        num_partitions: The number of partitions. If None, the value in self is used.
-
-        Returns:
-        The reduce delay.
-
-        '''
-        assert num_partitions is None or isinstance(num_partitions, int)
-        if num_partitions is None:
-            num_partitions = self.num_partitions
-
-        delay = 1
-        for j in range(1, self.q):
-            delay += 1 / j
-
-        # Scale by decoding complexity
-        delay *= complexity.block_diagonal_decoding_complexity(self.num_coded_rows,
-                                                               1,
-                                                               1 - self.q / self.num_servers,
-                                                               num_partitions)
-        delay *= self.num_outputs / self.q
-        delay /= self.num_source_rows
-        return delay
-
     def reduce_delay_ldpc_peeling(self):
         '''Return the delay incurred in the reduce step when using an LDPC
         code and a peeling decoder..
