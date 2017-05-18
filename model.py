@@ -14,13 +14,8 @@
 # limitations under the License.                                           #
 ############################################################################
 
-'''This module contains code relating to the system model presented
-in the paper by Li et al, as well as the integer programming
-formulation presented by us. This module is used primarily by the
-various solvers.
-
-This module consists of the SystemParameters object, which is used to
-pass around parameters associated with the distributed computing
+'''This module consists of the SystemParameters object, which is used
+to pass around parameters associated with the distributed computing
 system under simulation.
 
 '''
@@ -29,6 +24,7 @@ import math
 import functools
 from scipy.misc import comb as nchoosek
 import complexity
+import stats
 
 class ModelError(Exception):
     '''Base class for exceptions raised by this module.'''
@@ -122,29 +118,6 @@ class SystemParameters(object):
         return
 
     @classmethod
-    def fixed_complexity_parameters_row(cls, rows_per_server=None,
-                                        rows_per_partition=None,
-                                        num_servers=None,
-                                        code_rate=None, muq=None,
-                                        num_columns=None):
-        '''Attempt to find a set of servers with a fixed number of rows per
-        server and rows per partition.
-
-        '''
-        raise NotImplementedError('Not implemented yet.')
-        assert isinstance(rows_per_server, int) and rows_per_server > 0
-        assert isinstance(rows_per_partition, int) and rows_per_partition > 0
-        assert isinstance(num_servers, int) and num_servers > 0
-        assert isinstance(code_rate, int) or isinstance(code_rate, float)
-        assert isinstance(muq, int) and muq > 0
-        assert isinstance(num_columns, int) and num_columns > 0
-        num_source_rows = 1
-        while True:
-            server_storage = rows_per_server
-            q = num_servers * code_rate
-
-
-    @classmethod
     def fixed_complexity_parameters(cls, rows_per_server=None,
                                     rows_per_partition=None,
                                     min_num_servers=None,
@@ -231,28 +204,6 @@ class SystemParameters(object):
     def __repr__(self):
         return str(self.asdict())
 
-    # def __str__(self):
-    #     string = '------------------------------\n'
-    #     string += 'System Parameters:\n'
-    #     string += '------------------------------\n'
-    #     string += 'Rows per batch:  ' + str(self.rows_per_batch) + '\n'
-    #     string += 'Servers: ' + str(self.num_servers) + '\n'
-    #     string += 'Wait for: ' + str(self.q) + '\n'
-    #     string += 'Input/output vectors: ' + str(self.num_outputs) + '\n'
-    #     string += 'Storage: ' + str(self.server_storage) + '\n'
-    #     string += 'Batches: ' + str(self.num_batches) + '\n'
-    #     string += 'muq: ' + self.muq + '\n'
-    #     string += 'Code rate: ' + str(self.q / self.num_servers) + '\n'
-    #     string += 'Source rows: ' + str(self.num_source_rows) + '\n'
-    #     string += 'Coded rows: ' + str(self.num_coded_rows) + '\n'
-    #     string += 'Columns: ' + str(self.num_columns) + '\n'
-    #     string += 'Partitions: ' + str(self.num_partitions) + '\n'
-    #     string += 'Rows per partition: ' + str(self.rows_per_partition) + '\n'
-    #     string += 'Multicast messages: ' + str(self.num_multicasts()) + '\n'
-    #     string += 'Unpartitioned load: ' + str(self.unpartitioned_load()) + '\n'
-    #     string += '------------------------------'
-    #     return string
-
     def identifier(self):
         '''Return a string identifier for these parameters.'''
         string = 'm_' + str(self.num_source_rows)
@@ -280,9 +231,13 @@ class SystemParameters(object):
         return result
 
     @functools.lru_cache(maxsize=8)
-    def multicast_set_size_1(self):
+    def multicast_set_size_1(self, overhead=1):
         '''Compute the size of the smallest multicast set using strategy 1.
         Denoted by s_q in the paper.
+
+        Args:
+
+        overhead: Code overhead. Equal to 1 for MDS codes.
 
         Raises:
 
@@ -299,15 +254,19 @@ class SystemParameters(object):
         set_size = self.muq
         while set_size > 1:
             cumsum += self.alphaj(set_size)
-            if cumsum > 1 - self.server_storage:
+            if cumsum > overhead - self.server_storage:
                 return max(min(set_size + 1, self.muq), 2)
             set_size -= 1
 
         return 2
 
-    def multicast_set_size_2(self):
+    def multicast_set_size_2(self, overhead=1):
         '''Compute the size of the smallest multicast set using strategy 2.
         Denoted by s_q - 1 in the paper.
+
+        Args:
+
+        overhead: Code overhead. Equal to 1 for MDS codes.
 
         Raises:
 
@@ -315,13 +274,17 @@ class SystemParameters(object):
         parameters.
 
         '''
-        if self.multicast_set_size_1() < 3:
+        if self.multicast_set_size_1(overhead=overhead) < 3:
             raise ModelError('Shuffling strategy 2 requires multicast_set_size_1 to be at least 3.')
-        return self.multicast_set_size_1() - 1
+        return self.multicast_set_size_1(overhead=overhead) - 1
 
-    @functools.lru_cache(maxsize=8)
-    def multicast_load(self):
+    @functools.lru_cache(maxsize=128)
+    def multicast_load(self, overhead=1):
         '''Compute the multicast load for strategy 1 and 2.
+
+        Args:
+
+        overhead: Code overhead. Equal to 1 for MDS codes.
 
         Returns: A tuple (multicast_load_1, multicast_load_2)
 
@@ -331,7 +294,7 @@ class SystemParameters(object):
 
         # Compute load 1 and 2 (leaving out the last term of load 2).
         try:
-            for j in range(self.multicast_set_size_1(), self.muq + 1):
+            for j in range(self.multicast_set_size_1(overhead=overhead), self.muq+1):
                 alpha = self.alphaj(j)
                 load_1 += alpha / j
                 load_2 += alpha / j
@@ -340,7 +303,7 @@ class SystemParameters(object):
 
         # Add last term of load 2, or set to infinity if unavailable.
         try:
-            load_2 += self.alphaj(self.multicast_set_size_2())
+            load_2 += self.alphaj(self.multicast_set_size_2(overhead=overhead))
         except ModelError:
             load_2 = math.inf
 
@@ -349,8 +312,8 @@ class SystemParameters(object):
         load_2 *= self.num_outputs
         return load_1, load_2
 
-    @functools.lru_cache(maxsize=8)
-    def unpartitioned_load(self, strategy='best', multicast_cost=1):
+    @functools.lru_cache(maxsize=128)
+    def unpartitioned_load(self, strategy='best', multicast_cost=1, overhead=1):
         '''Compute the communication load of the unpartitioned scheme.
 
         Args:
@@ -360,6 +323,8 @@ class SystemParameters(object):
 
         multicast_cost: The cost of multicasting relative to
         unicasting.
+
+        overhead: Code overhead. Equal to 1 for MDS codes.
 
         Returns: Total number of messages per source row.
 
@@ -373,10 +338,10 @@ class SystemParameters(object):
         assert 0 < multicast_cost < math.inf
 
         # Unicasting load
-        load_1 = 1 - self.server_storage
+        load_1 = overhead - self.server_storage
         load_2 = 0
         try:
-            for j in range(self.multicast_set_size_1(), self.muq + 1):
+            for j in range(self.multicast_set_size_1(overhead=overhead), self.muq+1):
                 alpha = self.alphaj(j)
                 load_1 -= alpha
         except ModelError:
@@ -384,7 +349,7 @@ class SystemParameters(object):
         load_1 *= self.num_outputs
 
         # Multicasting load
-        multicast_load_1, multicast_load_2 = self.multicast_load()
+        multicast_load_1, multicast_load_2 = self.multicast_load(overhead=overhead)
         load_1 += multicast_load_1
         load_2 += multicast_load_2
 
@@ -398,15 +363,18 @@ class SystemParameters(object):
         elif strategy == '2':
             return load_2
 
-    @functools.lru_cache(maxsize=8)
-    def computational_delay(self, q=None):
+    @functools.lru_cache(maxsize=128)
+    def computational_delay(self, q=None, overhead=1):
         '''Return the delay incurred in the map phase.
 
         Calculates the computational delay assuming a shifted
         exponential distribution.
 
         Args:
+
         q: The number of servers to wait for. If q is None, the value in self is used.
+
+        overhead: Code overhead. Equal to 1 for MDS codes.
 
         Returns: The normalized computational delay. Multiply the
         result by
@@ -419,74 +387,15 @@ class SystemParameters(object):
         if q is None:
             q = self.q
 
+        # Add the overhead factor
+        q = math.ceil(q * overhead)
+
         # Return infinity if waiting for more than num_servers servers
         if q > self.num_servers:
             return math.inf
 
-        delay = 1
-        for j in range(self.num_servers - q + 1, self.num_servers):
-            delay += 1 / j
+        delay = stats.order_mean_shiftexp(self.num_servers, q)
 
         # Scale by number of output vectors
         delay *= self.num_outputs
-        return delay
-
-    def computational_delay_ldpc(self, q=None, overhead=1.10):
-        '''Estimate the theoretical computational delay when using an LDPC
-        code.
-
-        Args:
-
-        q: The number of servers to wait for. If q is None, the value
-        in self is used.
-
-        overhead: The overhead is the percentage increase in number of
-        servers required to decode. 1.10 means that an additional 10%
-        servers is required.
-
-        Returns: The estimated computational delay.
-
-        '''
-        assert isinstance(q, int) or q is None
-        assert isinstance(overhead, float) or isinstance(overhead, int)
-        if q is not None:
-            assert q >= 1
-
-        if q is None:
-            q = self.q
-
-        servers_to_wait_for = math.ceil(q * overhead)
-
-        # Return infinity if waiting for more than num_servers servers
-        if servers_to_wait_for > self.num_servers:
-            return math.inf
-
-        delay = 1
-        for j in range(self.num_servers - servers_to_wait_for + 1, self.num_servers):
-            delay += 1 / j
-
-        delay *= self.server_storage * self.num_outputs
-        return delay
-
-    def reduce_delay_ldpc_peeling(self):
-        '''Return the delay incurred in the reduce step when using an LDPC
-        code and a peeling decoder..
-
-        Calculates the reduce delay assuming a shifted exponential
-        distribution.
-
-        Returns:
-        The reduce delay.
-
-        '''
-        delay = 1
-        for j in range(1, self.q):
-            delay += 1 / j
-
-        code_rate = self.q / self.num_servers
-        delay *= complexity.peeling_decoding_complexity(self.num_coded_rows,
-                                                        code_rate,
-                                                        1 - self.q / self.num_servers)
-        delay *= self.num_outputs / self.q
-        delay /= self.num_source_rows# * self.num_outputs
         return delay
