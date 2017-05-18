@@ -391,6 +391,8 @@ class Simulator(object):
 
         # Concatenate DataFrames and write to disk
         dataframe = pd.concat(results)
+        filename = os.path.join(self.directory, parameters.identifier() + '.csv')
+        dataframe.to_csv(filename)
 
         # Write the best assignment to disk
         if best_assignment is not None:
