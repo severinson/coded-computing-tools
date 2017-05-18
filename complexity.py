@@ -7,6 +7,8 @@ import math
 import random
 import matplotlib.pyplot as plt
 import numpy as np
+import stats
+import lt
 
 # Source: http://web.eecs.utk.edu/~plank/plank/papers/FAST-2005.pdf
 LDPC_RATE = 1.0496
@@ -19,8 +21,10 @@ RS_XOR_PER_WORD = 44.6
 
 # Ignore addition cost to simplify analysis
 # ADDITION_COMPLEXITY = 0.13e-6
+# ADDITION_COMPLEXITY = 0
+# MULTIPLICATION_COMPLEXITY = 87e-6
 ADDITION_COMPLEXITY = 0
-MULTIPLICATION_COMPLEXITY = 87e-6
+MULTIPLICATION_COMPLEXITY = 1
 
 def partitioned_reduce_delay(parameters, partitions=None):
     '''Compute delay incurred by the reduce phase. Assumes a shifted
@@ -40,14 +44,30 @@ def partitioned_reduce_delay(parameters, partitions=None):
     if partitions is None:
         partitions = parameters.num_partitions
 
-    delay = 1
-    for j in range(1, parameters.q):
-        delay += 1 / j
+    delay = stats.order_mean_shiftexp(parameters.q, parameters.q)
 
     # Scale by decoding complexity
     delay *= block_diagonal_decoding_complexity(parameters.num_coded_rows,
                                                 1, 1 - parameters.q / parameters.num_servers,
                                                 partitions)
+    delay *= parameters.num_outputs / parameters.q
+    return delay
+
+def lt_reduce_delay(parameters):
+    '''Compute delay incurred by the reduce phase using an LT code.
+    Assumes a shifted exponential distribution.
+
+    Args:
+
+    parameters: System parameters.
+
+    Returns: The reduce delay.
+
+    '''
+    delay = stats.order_mean_shiftexp(parameters.q, parameters.q)
+
+    # Scale by decoding complexity
+    delay *= peeling_decoding_complexity(parameters.num_source_rows)
     delay *= parameters.num_outputs / parameters.q
     return delay
 
@@ -119,7 +139,20 @@ def block_diagonal_decoding_complexity(code_length, packet_size, erasure_prob, p
     partition_complexity = rs_decoding_complexity(partition_length, packet_size, erasure_prob)
     return partition_complexity * partitions
 
-def peeling_decoding_complexity(code_length, code_rate, erasure_prob):
+def peeling_decoding_complexity(source_length):
+    '''Compute the decoding complexity of an LT erasure code using a
+    peeling decoder.
+
+    Args:
+
+    source_length: Number of source symbols.
+
+    '''
+    lt_simulation = lt.lt_overhead(source_length)
+    return lt_simulation['additions'] * ADDITION_COMPLEXITY
+
+def peeling_decoding_complexity_old(code_length, code_rate, erasure_prob):
+
     '''Compute the decoding complexity of decoding an erasure code using a
     peeling decoder.
 
@@ -167,114 +200,3 @@ def matrix_vector_complexity(rows, cols):
     additions = cols * rows - 1
     multiplications = cols * rows
     return additions * ADDITION_COMPLEXITY + multiplications * MULTIPLICATION_COMPLEXITY
-
-def order_stat(icdf, total, kth):
-    '''Compute the order statistic of a given distribution numerically
-
-    Compute the k:th order statistic for total number of random
-    variables with distribution given by the argument. Runs in O(total).
-
-    Args:
-    icdf: The inverse cumulative distribution function of the
-    probability distribution of interest. Provided as a function with
-    one argument.
-    total: The total number of realizations.
-    kth: The order to compute the statistic of.
-
-    Returns:
-    The k:th order statistic for total number of random variables
-    with distribution given by the argument.
-
-    '''
-    # assert isinstance(icdf, fun)
-    assert isinstance(total, int)
-    assert isinstance(kth, int)
-    assert total >= kth, 'kth must be less or equal to total.'
-    realizations = [icdf(random.random()) for _ in range(total)]
-    return np.partition(np.asarray(realizations), kth)[kth]
-
-def expected_order_stat(icdf, total, kth, samples=1000):
-    '''Compute the expected order statistic numerically
-
-    Args:
-    icdf: The inverse cumulative distribution function of the
-    probability distribution of interest. Provided as a function with
-    one argument.
-    total: The total number of realizations.
-    kth: The order to compute the statistic of.
-    samples: Number of times to sample the order statistic.
-
-    Returns:
-    The expected k:th order statistic for total number of random variables
-    with distribution given by the argument.
-    '''
-    realizations = [order_stat(icdf, total, kth) for _ in range(samples)]
-    return sum(realizations) / (len(realizations) + 1)
-
-def order_mean_shifted_exponential(total, kth, mu=1):
-    '''Compute the expected k:th order statistic of a shifted exponential distribution
-
-    The expectation is computed analytically.
-
-    Args:
-    total: The total number of realizations.
-    kth: The order to compute the statistic of.
-    mu: The exponential distribution parameter. Also called the straggling parameter.
-
-    Returns:
-    The k:th order statistic for total number of random variables
-    distributed accoridng to the shifted expinential distribution.
-    '''
-    return 1 + (1 / mu) * math.log(total / (total - kth))
-
-def icdf_shifted_exponential(value, mu=1):
-    '''ICDF of the shifted exponential distribution.
-
-    Pass uniformly distributed random numbers into this function to
-    generate random numbers from the shifted exponential distribution.
-
-    Args:
-    value: The value to compute the ICDF of. Must be less than 1.
-    mu: The exponential distribution parameter. Also called the straggling parameter.
-
-    Returns:
-    The ICDF evaluated at value.
-
-    '''
-    assert value < 1, 'Cannot compute the ICDF of values larger than or equal to 1.'
-    return 1 - math.log(1 - value) / mu;
-
-def main():
-    map_servers = 600
-    map_threshold = 400
-    rate = map_threshold / map_servers
-
-    # Compute the map latency by scaling it by the number of
-    # operations performed by each server.
-
-    rows = 1e5
-    cols = 1e5
-    vevtors_per_server = map_threshold
-
-    map_complexity = matrix_vector_complexity(rows, cols, vectors )
-
-    samples = 500
-    map_runtimes = [order_stat(icdf_shifted_exponential, k, q) for _ in range(samples)]
-    sample_mean = sum(runtimes) / (len(runtimes) + 1)
-
-    # analytical_mean = order_mean_shifted_exponential(k, q)
-    # print('Sample mean: ' + str(sample_mean) + '. Analytical mean: ' + str(analytical_mean) + '.')
-
-    fig = plt.figure()
-    plt.hist(runtimes)
-    plt.grid(True, which='both')
-    plt.ylabel('Probability', fontsize=18)
-    plt.xlabel('Runtime', fontsize=18)
-    plt.autoscale()
-    plt.tight_layout()
-    plt.show()
-    return
-
-
-if __name__ == '__main__':
-    main()
