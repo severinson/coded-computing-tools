@@ -34,9 +34,9 @@ class EvaluationTests(unittest.TestCase):
 
     def test_lt(self):
         '''Test the analytic LT code evaluation.'''
-        correct_results = [{'servers': 6, 'batches': 48, 'delay': 11.3},
-                           {'servers': 6, 'batches': 48, 'delay': 11.3},
-                           {'servers': 6, 'batches': 48, 'delay': 11.3}]
+        correct_results = [{'servers': 7, 'delay': 13.97},
+                           {'servers': 7, 'delay': 13.97},
+                           {'servers': 7, 'delay': 13.97}]
 
         for par, correct_result in zip(self.get_parameters_partitioning(),
                                        correct_results):
@@ -47,9 +47,9 @@ class EvaluationTests(unittest.TestCase):
 
     def test_mds(self):
         '''Test the analytic MDS code evaluation.'''
-        correct_results = [{'servers': 6, 'batches': 48, 'delay': 11.3},
-                           {'servers': 6, 'batches': 48, 'delay': 11.3},
-                           {'servers': 6, 'batches': 48, 'delay': 11.3}]
+        correct_results = [{'servers': 6, 'batches': 48, 'delay': 11.97},
+                           {'servers': 6, 'batches': 48, 'delay': 11.97},
+                           {'servers': 6, 'batches': 48, 'delay': 11.97}]
 
         for par, correct_result in zip(self.get_parameters_partitioning(),
                                        correct_results):
