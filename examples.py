@@ -41,7 +41,7 @@ from solvers.hybrid import HybridSolver
 from solvers.assignmentloader import AssignmentLoader
 from assignments.cached import CachedAssignment
 
-def load_delay_plot(results, plot_settings, xlabel='', normalize=None):
+def load_delay_plot(results, plot_settings, xdata, xlabel='', normalize=None):
     '''Create a plot with two subplots for load and delay respectively.
 
     Args:
@@ -49,6 +49,8 @@ def load_delay_plot(results, plot_settings, xlabel='', normalize=None):
     results: SimulatorResult to plot.
 
     plot_settings: List of dicts with plot settings.
+
+    xdata: Label of the X axis data ('partitions' or 'servers').
 
     xlabel: X axis label
 
@@ -61,14 +63,15 @@ def load_delay_plot(results, plot_settings, xlabel='', normalize=None):
     assert isinstance(normalize, SimulatorResult) or normalize is None
 
     _ = plt.figure(figsize=(8,5))
+    # _ = plt.figure()
 
     # Plot load
     ax1 = plt.subplot(211)
-    plt.setp(ax1.get_xticklabels(), fontsize=20, weight='bold', visible=False)
+    plt.setp(ax1.get_xticklabels(), fontsize=20, visible=False)
     plt.setp(ax1.get_yticklabels(), fontsize=20)
     for result, plot_setting in zip(results, plot_settings):
-        plot_result(result, plot_setting, 'partitions', 'load',
-                    ylabel='Load', subplot=True, normalize=normalize)
+        plot_result(result, plot_setting, xdata, 'load',
+                    ylabel='$L$', subplot=True, normalize=normalize)
 
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
@@ -76,11 +79,11 @@ def load_delay_plot(results, plot_settings, xlabel='', normalize=None):
 
     # Plot delay
     ax2 = plt.subplot(212, sharex=ax1)
-    plt.setp(ax2.get_xticklabels(), fontsize=20, weight='bold')
+    plt.setp(ax2.get_xticklabels(), fontsize=20)
     plt.setp(ax2.get_yticklabels(), fontsize=20)
     for result, plot_setting in zip(results, plot_settings):
-        plot_result(result, plot_setting, 'partitions', 'delay', xlabel=xlabel,
-                    ylabel='Delay', subplot=True, normalize=normalize)
+        plot_result(result, plot_setting, xdata, 'delay', xlabel=xlabel,
+                    ylabel='$D$', subplot=True, normalize=normalize)
 
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
@@ -286,7 +289,6 @@ def get_parameters_size():
                                                                  code_rate=code_rate,
                                                                  muq=muq, num_columns=num_columns)
         parameters.append(par)
-        print(par)
 
     return parameters
 
@@ -300,7 +302,6 @@ def get_parameters_size_2():
     parameters = list()
     num_servers = [0]
     for servers in num_servers:
-        print(servers)
         par = model.SystemParameters.fixed_complexity_parameters(rows_per_server=rows_per_server,
                                                                  rows_per_partition=rows_per_partition,
                                                                  min_num_servers=servers,
@@ -398,9 +399,13 @@ def main():
                               assignment_eval=sample_1000,
                               directory='./results2/Heuristic/')
 
-    random_sim = Simulator(solver=RandomSolver(), assignments=10,
+    random_sim = Simulator(solver=RandomSolver(), assignments=100,
                            assignment_eval=sample_100,
-                           directory='./results2/Random/')
+                           directory='./results2/Random_100/')
+
+    random_sim_1000 = Simulator(solver=RandomSolver(), assignments=1000,
+                                assignment_eval=sample_1000,
+                                directory='./results2/Random_1000/')
 
     hybrid_solver = HybridSolver(initialsolver=HeuristicSolver(),
                                  directory='./saved_assignments_2/',
@@ -415,6 +420,10 @@ def main():
                        parameter_eval=analytic.mds_performance,
                        directory='./results2/RS/')
 
+    lt_sim = Simulator(solver=None, assignments=1,
+                       parameter_eval=analytic.lt_performance,
+                       directory='./results2/LT/')
+
     uncoded_sim = Simulator(solver=None, assignments=1,
                             parameter_eval=analytic.uncoded_performance,
                             directory='./results2/Uncoded/')
@@ -424,17 +433,13 @@ def main():
     random_partitions = random_sim.simulate_parameter_list(partition_parameters)
     hybrid_partitions = hybrid_sim.simulate_parameter_list(partition_parameters)
     rs_partitions = rs_sim.simulate_parameter_list(partition_parameters)
+    lt_partitions = lt_sim.simulate_parameter_list(partition_parameters)
     uncoded_partitions = uncoded_sim.simulate_parameter_list(partition_parameters)
-
-    # heuristic_partitions = heuristic_sim.simulate_parameter_list(partition_parameters_3)
-    # random_partitions = random_sim.simulate_parameter_list(partition_parameters_3)
-    # hybrid_partitions = hybrid_sim.simulate_parameter_list(partition_parameters_3)
-    # rs_partitions = rs_sim.simulate_parameter_list(partition_parameters_3)
-    # uncoded_partitions = uncoded_sim.simulate_parameter_list(partition_parameters_3)
 
     heuristic_size = heuristic_sim.simulate_parameter_list(size_parameters)
     random_size = random_sim.simulate_parameter_list(size_parameters)
     rs_size = rs_sim.simulate_parameter_list(size_parameters)
+    # lt_size = lt_sim.simulate_parameter_list(size_parameters)
     uncoded_size = uncoded_sim.simulate_parameter_list(size_parameters)
 
     # Include the reduce delay
@@ -442,12 +447,14 @@ def main():
     random_partitions.set_reduce_delay(function=complexity.partitioned_reduce_delay)
     hybrid_partitions.set_reduce_delay(function=complexity.partitioned_reduce_delay)
     rs_partitions.set_reduce_delay(function=lambda x: complexity.partitioned_reduce_delay(x, partitions=1))
+    lt_partitions.set_reduce_delay(complexity.lt_reduce_delay)
     uncoded_partitions.set_reduce_delay(function=lambda x: 0)
     uncoded_partitions.set_uncoded(enable=True)
 
     heuristic_size.set_reduce_delay(function=complexity.partitioned_reduce_delay)
     random_size.set_reduce_delay(function=complexity.partitioned_reduce_delay)
     rs_size.set_reduce_delay(function=lambda x: complexity.partitioned_reduce_delay(x, partitions=1))
+    # lt_size.set_reduce_delay(complexity.lt_reduce_delay)
     uncoded_size.set_reduce_delay(function=lambda x: 0)
     uncoded_size.set_uncoded(enable=True)
 
@@ -476,17 +483,32 @@ def main():
         'marker': 's',
         'linewidth': 2,
         'size': 6}
+    lt_plot_settings = {
+        'label': 'LT',
+        'color': 'g',
+        'marker': 'v',
+        'linewidth': 2,
+        'size': 6}
 
     plot_settings = [heuristic_plot_settings, random_plot_settings,
-                     hybrid_plot_settings]
+                     lt_plot_settings, hybrid_plot_settings]
 
-    load_delay_plot([heuristic_partitions, random_partitions, hybrid_partitions],
-                    plot_settings, xlabel='T', normalize=rs_partitions)
+    # Plot including LT codes
+    # load_delay_plot([heuristic_partitions, hybrid_partitions, random_partitions, lt_partitions],
+    #                 [heuristic_plot_settings, hybrid_plot_settings, random_plot_settings, lt_plot_settings],
+    #                 'partitions', xlabel='T', normalize=rs_partitions)
+    # return
+
+    # Plots without LT codes.
+    load_delay_plot([heuristic_partitions, hybrid_partitions, random_partitions],
+                    [heuristic_plot_settings, hybrid_plot_settings, random_plot_settings],
+                    'partitions', xlabel='$T$', normalize=rs_partitions)
 
     load_delay_plot([heuristic_size, random_size],
-                    plot_settings, xlabel='K', normalize=rs_size)
+                    [heuristic_plot_settings, random_plot_settings],
+                    'servers', xlabel='$K$', normalize=rs_size)
     return
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     main()
