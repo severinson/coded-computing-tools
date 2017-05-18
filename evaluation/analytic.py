@@ -19,8 +19,9 @@ performance of an assignment. This is only possible in some cases.
 
 '''
 
-import pandas as pd
 import math
+import pandas as pd
+import lt
 import model
 import assignments
 
@@ -28,6 +29,7 @@ def uncoded_performance(parameters, num_samples=1):
     '''Compute load and delay for an uncoded scheme.
 
     Args:
+
     parameters: A system parameters object.
 
     num_samples: Unused
@@ -37,6 +39,24 @@ def uncoded_performance(parameters, num_samples=1):
     load *= parameters.num_outputs
     delay = parameters.computational_delay(q=parameters.num_servers)
     return pd.DataFrame({'load': [load], 'delay': [delay]})
+
+def lt_performance(parameters, num_samples=1):
+    '''Compute load and delay for an uncoded scheme.
+
+    Args:
+    parameters: A system parameters object.
+
+    num_samples: Unused
+    '''
+    # Get the LT code overhead over MDS codes.
+    overhead = lt.lt_simulate(parameters.num_source_rows)['coded']
+    overhead /= parameters.num_source_rows
+
+    # Compute load and delay.
+    servers = math.ceil(parameters.q * overhead)
+    load = parameters.unpartitioned_load(overhead=overhead)
+    delay = parameters.computational_delay(overhead=overhead)
+    return pd.DataFrame({'load': [load], 'delay': [delay], 'servers': [servers]})
 
 def mds_performance(par, num_samples=1):
     '''Compute load/delay for an MDS code.
@@ -56,29 +76,6 @@ def mds_performance(par, num_samples=1):
     return pd.DataFrame({'load': [load], 'delay': [delay],
                          'batches': [batches_to_wait_for],
                          'servers': [par.q]})
-
-def lt_performance(par, num_samples=1, overhead=1):
-    '''Estimate LDPC performance.
-
-    Args:
-    par: A system parameters object.
-
-    overhead: The overhead is the percentage increase in number of
-    servers required to decode. 1.10 means that an additional 10%
-    servers is required.
-
-    Returns: The estimated performance.
-
-    '''
-    assert isinstance(par, model.SystemParameters)
-    load = par.unpartitioned_load()
-    servers_to_wait_for = math.ceil(par.q * overhead)
-    delay = par.computational_delay(q=servers_to_wait_for)
-    coded_rows_per_server = round(par.num_source_rows * par.server_storage)
-    batches_per_server = coded_rows_per_server / par.rows_per_batch
-    batches_to_wait_for = servers_to_wait_for * batches_per_server
-    return pd.DataFrame({'batches': [batches_to_wait_for], 'delay': [delay],
-                         'servers': [servers_to_wait_for], 'load': [load]})
 
 def average_heuristic(par, num_samples=1):
     '''Evaluate the performance of the heuristic assignment.'''
