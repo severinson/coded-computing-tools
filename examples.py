@@ -397,36 +397,36 @@ def main():
     # Setup the simulators
     heuristic_sim = Simulator(solver=HeuristicSolver(),
                               assignment_eval=sample_1000,
-                              directory='./results2/Heuristic/')
+                              directory='./results/Heuristic/')
 
     random_sim = Simulator(solver=RandomSolver(), assignments=100,
                            assignment_eval=sample_100,
-                           directory='./results2/Random_100/')
+                           directory='./results/Random_100/')
 
     random_sim_1000 = Simulator(solver=RandomSolver(), assignments=1000,
                                 assignment_eval=sample_1000,
-                                directory='./results2/Random_1000/')
+                                directory='./results/Random_1000/')
 
     hybrid_solver = HybridSolver(initialsolver=HeuristicSolver(),
                                  directory='./saved_assignments_2/',
                                  clear=3)
-    hybrid_solver = AssignmentLoader(directory='./results/HybridSolver')
+    hybrid_solver = AssignmentLoader(directory='./results/Hybrid/assignments/')
     hybrid_sim = Simulator(solver=hybrid_solver, assignments=1,
                            assignment_eval=sample_1000,
                            assignment_type=CachedAssignment,
-                           directory='./results2/Hybrid/')
+                           directory='./results/Hybrid/')
 
     rs_sim = Simulator(solver=None, assignments=1,
                        parameter_eval=analytic.mds_performance,
-                       directory='./results2/RS/')
+                       directory='./results/RS/')
 
     lt_sim = Simulator(solver=None, assignments=1,
                        parameter_eval=analytic.lt_performance,
-                       directory='./results2/LT/')
+                       directory='./results/LT/')
 
     uncoded_sim = Simulator(solver=None, assignments=1,
                             parameter_eval=analytic.uncoded_performance,
-                            directory='./results2/Uncoded/')
+                            directory='./results/Uncoded/')
 
     # Run the simulations
     heuristic_partitions = heuristic_sim.simulate_parameter_list(partition_parameters)
