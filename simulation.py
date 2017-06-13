@@ -74,6 +74,7 @@ class SimulatorResult(object):
 
         # Set default parameters
         self.set_uncoded(enable=False)
+        self.set_cmapred(enable=False)
         self.set_reduce_delay()
         self.set_shuffling_strategy()
         return
@@ -123,6 +124,14 @@ class SimulatorResult(object):
     def set_uncoded(self, enable=True):
         '''Compute load and delay for these parameters as if it's uncoded.'''
         self.uncoded = enable
+        return
+
+    def set_cmapred(self, enable=True):
+        '''Compute load and delay for these parameters using no erasure code
+        to deal with stragglers, i.e., only coded MapReduce.
+
+        '''
+        self.cmapred = enable
         return
 
     def set_reduce_delay(self, function=None):
@@ -203,6 +212,14 @@ class SimulatorResult(object):
                 rows_per_server = uncoded_storage * parameters.num_source_rows
                 frame_delay *= complexity.matrix_vector_complexity(rows_per_server,
                                                                    parameters.num_columns)
+
+            # If no straggler erasure code is used, i.e., only coded MapReduce.
+            elif self.cmapred:
+                server_storage = parameters.muq / parameters.num_servers
+                rows_per_server = server_storage * parameters.num_source_rows
+                frame_delay *= complexity.matrix_vector_complexity(rows_per_server,
+                                                                   parameters.num_columns)
+
             else:
                 rows_per_server = parameters.server_storage * parameters.num_source_rows
                 frame_delay *= complexity.matrix_vector_complexity(rows_per_server,
