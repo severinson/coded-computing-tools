@@ -19,7 +19,9 @@
 import math
 import random
 import functools
+import statistics
 import numpy as np
+import scipy as sp
 
 def order_sample(icdf, total, order):
     '''Sample the order statistic.
@@ -61,8 +63,10 @@ def order_mean_empiric(icdf, total, order, samples=1000):
     the given distribution.
 
     '''
-    samples = (order_sample(icdf, total, order) for _ in range(samples))
-    return sum(samples) / len(samples)
+    samples = [order_sample(icdf, total, order) for _ in range(samples)]
+    mean = statistics.mean(samples)
+    variance = statistics.variance(samples, xbar=mean)
+    return mean, variance
 
 @functools.lru_cache(maxsize=1024)
 def order_mean_shiftexp(total, order, parameter=1, exact=True):
@@ -91,43 +95,131 @@ def order_mean_shiftexp(total, order, parameter=1, exact=True):
         mean *= parameter
         return mean
     else:
+        raise NotImplementedError
         if total == order:
             raise ValueError('Non-exact computation required order < total.')
         return 1 + (1 / parameter) * math.log(total / (total - order))
 
-def icdf_shiftexp(value, parameter=1):
-    '''ICDF of the shifted exponential distribution.
-
-    Pass uniformly distributed random numbers into this function to
-    generate random numbers from the shifted exponential distribution.
+@functools.lru_cache(maxsize=1024)
+def order_variance_shiftexp(total, order, parameter):
+    '''Compute the variance of the shifted exponential order statistic.
 
     Args:
 
-    value: The value to compute the ICDF of. Must be 0 <= value < 1.
+    total: Total number of variables.
+
+    order: Statistic order.
 
     parameter: Distribution parameter.
 
-    Returns:
-    The ICDF evaluated at value.
+    Returns: The variance of the order statistic with variables drawn from
+    the shifted exponential distribution.
 
     '''
-    assert 0 <= value < 1, 'Value must be <= 0 and < 1.'
-    return parameter * (1 - math.log(1 - value))
+    variance = 0
+    for i in range(total-order+1, total+1):
+        variance += 1 / math.pow(i, 2)
+
+    variance *= math.pow(parameter, 2)
+    return variance
+
+class ShiftexpOrder(object):
+    '''Shifted exponential order statistic random variable.'''
+
+    def __init__(self, parameter, total, order):
+        '''Initialize the object.
+
+        Args:
+
+        parameter: Shifted exponential parameter.
+
+        '''
+        assert 0 < parameter < math.inf
+        assert 0 < total < math.inf and total % 1 == 0
+        assert 0 < order <= total and order % 1 == 0
+        self.parameter = parameter
+        self.total = total
+        self.order = order
+        self.beta = self.mean() / self.variance()
+        self.alpha = self.mean() * self.beta
+        return
+
+    def pdf(self, value):
+        '''Probability density function.'''
+        assert 0 <= value <= math.inf
+        return sp.stats.gamma.pdf(value, self.alpha, scale=1/self.beta,
+                                  loc=self.parameter)
+
+    def mean(self):
+        '''Expected value.'''
+        return order_mean_shiftexp(self.total, self.order,
+                                   parameter=self.parameter,
+                                   exact=True)
+
+    def variance(self):
+        '''Random variable variance.'''
+        return order_variance_shiftexp(self.total, self.order,
+                                       self.parameter)
+
+class Shiftexp(object):
+    '''Shifted exponential distributed random variable.'''
+
+    def __init__(self, parameter):
+        '''Initialize the object.
+
+        Args:
+
+        parameter: Shifted exponential parameter.
+
+        '''
+        assert 0 < parameter < math.inf
+        self.parameter = parameter
+        return
+
+    def pdf(self, value):
+        '''Shifted exponential distribution PDF.'''
+        assert 0 <= value <= math.inf
+        if value < self.parameter:
+            return 0
+        else:
+            return 1 / self.parameter * math.exp(-(value / self.parameter - 1))
+
+    def cdf(self, value):
+        '''Shifted exponential distribution CDF.'''
+        assert 0 <= value <= math.inf
+        if value < self.parameter:
+            return 0
+        else:
+            return 1 - math.exp(-(value / self.parameter - 1))
+
+    def icdf(self, value):
+        '''Shifted exponential distribution inverse CDF.'''
+        assert 0 <= value < 1, 'Value must be <= 0 and < 1.'
+        return self.parameter * (1 - math.log(1 - value))
+
+    def mean(self):
+        '''Expected value.'''
+        return self.parameter
 
 def validate():
     '''Validate the analytic computation of the order stats.'''
-    total = 100
-    order = 100
+    total = 1000
+    order = 900
     mu = 2
     icdf = lambda x: icdf_shiftexp(x, parameter=mu)
-    samples = [order_sample(icdf, total, order) for _ in range(100000)]
-    mean = sum(samples) / len(samples)
-    exact_analytic = order_mean_shiftexp(total, order, parameter=mu)
+    mean, variance = order_mean_empiric(icdf, total, order, samples=10000)
+
+    # samples = [order_sample(icdf, total, order) for _ in range(100000)]
+    # mean = sum(samples) / len(samples)
+    analytic_mean = order_mean_shiftexp(total, order, parameter=mu)
+    analytic_variance = order_variance_shiftexp(total, order, parameter=mu)
+
     try:
         fast_analytic = order_mean_shiftexp(total, order, parameter=mu, exact=False)
-    except ValueError:
+    except (ValueError, NotImplementedError):
         fast_analytic = math.inf
-    print(mean, exact_analytic, fast_analytic)
+    print(mean, analytic_mean)
+    print(variance, analytic_variance)
     return
 
 if __name__ == '__main__':
