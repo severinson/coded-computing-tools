@@ -40,6 +40,22 @@ def uncoded_performance(parameters, num_samples=1):
     delay = parameters.computational_delay(q=parameters.num_servers)
     return pd.DataFrame({'load': [load], 'delay': [delay]})
 
+def cmapred_performance(parameters, num_samples=1):
+    '''Compute load/delay for the coded MapReduce scheme, i.e., no
+    straggler erasure code.
+
+    Args:
+
+    parameters: A system parameters object.
+
+    num_samples: Unused
+
+    '''
+    assert isinstance(parameters, model.SystemParameters)
+    load = parameters.unpartitioned_load()
+    delay = parameters.computational_delay(q=parameters.num_servers)
+    return pd.DataFrame({'load': [load], 'delay': [delay]})
+
 def lt_performance(parameters, num_samples=1):
     '''Compute load and delay for an uncoded scheme.
 
