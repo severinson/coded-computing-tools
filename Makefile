@@ -3,4 +3,3 @@ test:
 
 check:
 	pylint3 -E ./*
-
