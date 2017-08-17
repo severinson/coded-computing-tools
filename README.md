@@ -16,14 +16,8 @@ This project is a toolbox for research on coding theoretic applications to compu
 * tests: All tests reside in this package.
 
 # Setup
-The code is written for Python 3, and you need to following modules:
-* scipy
-* numpy
-* pandas
-* matplotlib
-* pyplot
+With Python 3 installed, setup the project by running `setup.sh`. This creates a Python 3 virtual environment and automatically installs all dependencies. Activate the virtual environment by typing `source venv/bin/activate`. To avoid having to re-run the simulations, download the data used in our paper [here](https://www.dropbox.com/s/8oc40l3m9ksxah8/results.tar.gz?dl=0) and extract the contents to the project folder. Next, show the plots by running `python3 examples.py`.
 
-If you have pip3 (a Python 3 package manager) installed, you can install the modules by running ```pip3 install <modulename>``` in a terminal.
 
 # Running
 If you have Make installed you can run the tests by typing ```make test``` in the project root folder. The results of our simulations is included in the results.tar.gz archive. Extract the contents to the current directory and show the plots by entering ```python3 examples.py```.
