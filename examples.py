@@ -305,32 +305,6 @@ def load_data(parameters, labels, result):
     # Create panel and return
     return pd.Panel.from_dict(data, orient='minor')
 
-def hist_plot(par, result):
-    '''Draw a histogram for some par and result objects.
-
-    Args:
-    par: A parameters object.
-
-    result: A dict with plot parameter. Example:
-    {'directory': './results/RandomSolver/', 'color': 'c', 'marker': 'v', 'name': 'Random'}
-
-    '''
-    data = load_data([par], [par.num_partitions], result)
-    _ = plt.figure()
-    ax = plt.axes()
-    print(data)
-    plt.hist(data['batches'], bins=15, normed=True)
-    plt.grid(True, which='both')
-    plt.autoscale()
-    plt.ylabel('Probability Density', fontsize=20)
-    plt.xlabel('Batches', fontsize=20)
-    plt.setp(ax.get_xticklabels(), fontsize=20, weight='bold')
-    plt.setp(ax.get_yticklabels(), fontsize=20, weight='bold')
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    plt.show()
-    return
-
 def get_parameters_size():
     '''Get a list of parameters for the size plot.'''
     rows_per_server = 2000
