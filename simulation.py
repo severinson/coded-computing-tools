@@ -75,6 +75,7 @@ class SimulatorResult(object):
         # Set default parameters
         self.set_uncoded(enable=False)
         self.set_cmapred(enable=False)
+        self.set_stragglerc(enable=False)
         self.set_reduce_delay()
         self.set_shuffling_strategy()
         return
@@ -86,6 +87,9 @@ class SimulatorResult(object):
 
         if key == 'delay':
             return self.delay()
+
+        if key == 'reduce':
+            return self.reduce_delay()
 
         if key == 'partitions':
             return np.asarray([parameters.num_partitions
@@ -132,6 +136,15 @@ class SimulatorResult(object):
 
         '''
         self.cmapred = enable
+        return
+
+    def set_stragglerc(self, enable=True):
+        '''Compute load/delay for a system using only straggler coding, i.e.,
+        using an erasure code to deal with stragglers but no coded
+        multicasting.
+
+        '''
+        self.stragglerc = enable
         return
 
     def set_reduce_delay(self, function=None):
@@ -190,6 +203,27 @@ class SimulatorResult(object):
 
         return loads
 
+    def reduce_delay(self):
+        '''Collect the reduce (decoding) delay of all parameters in this
+        result into a single array.
+
+        '''
+        assert self.reduce_function is not None, \
+            'Reduce function must be set before computing reduce delay.'
+
+        delays = np.zeros([3, len(self.dataframes)])
+        for i in range(len(self.dataframes)):
+            parameters = self.parameter_list[i]
+            frame_delay = self.reduce_function(parameters)
+
+            # Normalize and append
+            frame_delay /= parameters.num_source_rows
+            delays[0, i] = frame_delay
+            delays[1, i] = frame_delay
+            delays[2, i] = frame_delay
+
+        return delays
+
     def delay(self):
         '''Collect the computational delay of all parameters in this result
         into a single array.
@@ -216,6 +250,13 @@ class SimulatorResult(object):
             # If no straggler erasure code is used, i.e., only coded MapReduce.
             elif self.cmapred:
                 server_storage = parameters.muq / parameters.num_servers
+                rows_per_server = server_storage * parameters.num_source_rows
+                frame_delay *= complexity.matrix_vector_complexity(rows_per_server,
+                                                                   parameters.num_columns)
+
+            # If only straggler coding is used, i.e., no coded multicasts.
+            elif self.stragglerc:
+                server_storage = 1 / parameters.q
                 rows_per_server = server_storage * parameters.num_source_rows
                 frame_delay *= complexity.matrix_vector_complexity(rows_per_server,
                                                                    parameters.num_columns)
