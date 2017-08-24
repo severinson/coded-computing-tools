@@ -53,6 +53,30 @@ def partitioned_reduce_delay(parameters, partitions=None):
     delay *= parameters.num_outputs / parameters.q
     return delay
 
+def stragglerc_reduce_delay(parameters):
+    '''Compute reduce delay for a system using only straggler coding,
+    i.e., using an erasure code to deal with stragglers but no coded
+    multicasting.
+
+    Args:
+
+    parameters: System parameters.
+
+    Returns: The reduce delay.
+
+    '''
+    delay = stats.order_mean_shiftexp(parameters.q, parameters.q)
+
+    # Scale by decoding complexity
+    rows_per_server = parameters.num_source_rows / parameters.q
+    delay *= block_diagonal_decoding_complexity(parameters.num_servers,
+                                                rows_per_server,
+                                                1 - parameters.q / parameters.num_servers,
+                                                1)
+    delay *= parameters.num_outputs / parameters.q
+    return delay
+
+
 def lt_reduce_delay(parameters):
     '''Compute delay incurred by the reduce phase using an LT code.
     Assumes a shifted exponential distribution.
@@ -79,8 +103,11 @@ def rs_decoding_complexity(code_length, packet_size, erasure_prob):
     channel, and using the Berelkamp-Massey algorithm.
 
     Args:
+
     code_length: The length of the code in number of coded symbols.
+
     packet_size: The size of a packet in number of symbols.
+
     erasure_prob: The erasure probability of the packet erasure channel.
 
     Returns: The total complexity of decoding.
@@ -88,28 +115,6 @@ def rs_decoding_complexity(code_length, packet_size, erasure_prob):
     '''
     additions = code_length * (erasure_prob * code_length - 1) * packet_size
     multiplications = pow(code_length, 2) * erasure_prob * packet_size;
-    return additions * ADDITION_COMPLEXITY + multiplications * MULTIPLICATION_COMPLEXITY
-
-def rs_decoding_complexity_large_packets(code_length, erasure_prob):
-    '''Compute the decoding complexity of Reed-Solomon codes
-
-    Return the number of operations (additions and multiplications)
-    required to decode a Reed-Solomon code over the packet erasure
-    channel, and using the Berelkamp-Massey algorithm. This function
-    considers the asymptotic case as the packet size approaches
-    infinity.
-
-    Args:
-    code_length: The length of the code in number of coded symbols.
-    erasure_prob: The erasure probability of the packet erasure channel.
-
-    Returns:
-    The total complexity of decoding.
-
-    '''
-    raise NotImplemented('Use the rs_decoding_complexity() method instead.')
-    additions = code_length * (erasure_prob * code_length - 1)
-    multiplications = pow(code_length, 2) * erasure_prob
     return additions * ADDITION_COMPLEXITY + multiplications * MULTIPLICATION_COMPLEXITY
 
 def block_diagonal_decoding_complexity(code_length, packet_size, erasure_prob, partitions):
@@ -131,7 +136,7 @@ def block_diagonal_decoding_complexity(code_length, packet_size, erasure_prob, p
 
     '''
     assert isinstance(code_length, int)
-    assert isinstance(packet_size, int)
+    assert isinstance(packet_size, int) or isinstance(packet_size, float)
     assert isinstance(erasure_prob, float)
     assert isinstance(partitions, int)
     assert code_length % partitions == 0, 'Partitions must divide code_length.'
@@ -148,7 +153,7 @@ def peeling_decoding_complexity(source_length):
     source_length: Number of source symbols.
 
     '''
-    lt_simulation = lt.lt_overhead(source_length)
+    lt_simulation = lt.lt_simulate(source_length)
     return lt_simulation['additions'] * ADDITION_COMPLEXITY
 
 def peeling_decoding_complexity_old(code_length, code_rate, erasure_prob):
