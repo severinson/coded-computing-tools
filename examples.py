@@ -615,7 +615,5 @@ def main():
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-    # main()
-    # lt_main()
-    # presentation_plots()
-    get_parameters_size()
+    main()
+    
