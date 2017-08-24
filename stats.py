@@ -22,6 +22,7 @@ import functools
 import statistics
 import numpy as np
 import scipy as sp
+import scipy.stats
 
 def order_sample(icdf, total, order):
     '''Sample the order statistic.
@@ -147,8 +148,8 @@ class ShiftexpOrder(object):
     def pdf(self, value):
         '''Probability density function.'''
         assert 0 <= value <= math.inf
-        return sp.stats.gamma.pdf(value, self.alpha, scale=1/self.beta,
-                                  loc=self.parameter)
+        return scipy.stats.gamma.pdf(value, self.alpha, scale=1/self.beta,
+                                     loc=self.parameter)
 
     def mean(self):
         '''Expected value.'''
