@@ -30,9 +30,7 @@ import numpy as np
 import model
 from simulation import Simulator, SimulatorResult
 from evaluation import analytic
-from evaluation import independent
 from evaluation.binsearch import SampleEvaluator
-import mathtools
 import complexity
 from solvers.randomsolver import RandomSolver
 from solvers.heuristicsolver import HeuristicSolver
