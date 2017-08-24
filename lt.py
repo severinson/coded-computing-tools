@@ -190,7 +190,8 @@ class Soliton(object):
         ivalue = random.random()
         return self.icdf(ivalue)
 
-def lt_simulate(symbols, failprob=1/2, moderate=1/2, mode=None, filename='./ltsim.csv', eps=1, min_runs=10):
+def lt_simulate(symbols, failprob=1/2, moderate=1/2, mode=None,
+                filename='./ltsim.csv', eps=10, min_runs=10):
     '''Simulate the decoding performance of an LT code.
 
     Args:
@@ -245,6 +246,7 @@ def lt_simulate(symbols, failprob=1/2, moderate=1/2, mode=None, filename='./ltsi
     total_coded = 0
     total_additions = 0
     while True:
+
         # Store the mean of last round.
         prev_coded = coded
 
@@ -264,6 +266,8 @@ def lt_simulate(symbols, failprob=1/2, moderate=1/2, mode=None, filename='./ltsi
         # Exit if the mean has converged.
         if runs > min_runs and abs(coded - prev_coded) < eps:
             break
+
+        logging.info('Ran once with %f overhead.', code.coded_symbols / symbols)
 
     additions = total_additions / runs
     logging.debug('Converged to %d after %d runs. Mode: %d.',
@@ -343,45 +347,6 @@ def required_sample(soliton, symbols):
         code.add(symbol)
         i += 1
     return i, code.additions
-
-def main():
-    symbols = int(1e4)
-    # modes = [round(symbols / 2)]
-    # modes = np.arange(1, 400, 10)
-    modes = np.arange(1, symbols, 1000)
-    results = [lt_simulate(symbols, mode=mode) for mode in modes]
-    coded = [result['coded'] for result in results]
-    overhead = np.asarray(coded) / symbols
-    additions = [result['additions'] / symbols for result in results]
-    c = [result['c'] for result in results]
-
-    _ = plt.figure()
-    plt.grid(True, which='both')
-    plt.ylabel('Overhead', fontsize=18)
-    plt.xlabel('$c$', fontsize=18)
-
-    plt.semilogx(c, overhead)
-
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    plt.autoscale(enable=True)
-    plt.tight_layout()
-
-    _ = plt.figure()
-    plt.grid(True, which='both')
-    plt.ylabel('Operations per Source Symbol', fontsize=18)
-    plt.xlabel('$c$', fontsize=18)
-
-    plt.semilogx(c, additions)
-    # plt.semilogx(parameter, operations_pred)
-
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    plt.autoscale(enable=True)
-    plt.tight_layout()
-
-    plt.show()
-    return
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
