@@ -56,6 +56,25 @@ def cmapred_performance(parameters, num_samples=1):
     delay = parameters.computational_delay(q=parameters.num_servers)
     return pd.DataFrame({'load': [load], 'delay': [delay]})
 
+def stragglerc_performance(parameters, num_samples=1):
+    '''Compute load/delay for a system using only straggler coding, i.e.,
+    using an erasure code to deal with stragglers but no coded
+    multicasting.
+
+    Args:
+
+    parameters: A system parameters object.
+
+    num_samples: Unused
+
+    '''
+    assert isinstance(parameters, model.SystemParameters)
+    server_storage = 1 / parameters.num_servers
+    load = 1 - server_storage
+    load *= parameters.num_outputs
+    delay = parameters.computational_delay()
+    return pd.DataFrame({'load': [load], 'delay': [delay]})
+
 def lt_performance(parameters, num_samples=1):
     '''Compute load and delay for an uncoded scheme.
 
