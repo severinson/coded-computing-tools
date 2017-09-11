@@ -313,7 +313,7 @@ class SystemParameters(object):
         return load_1, load_2
 
     @functools.lru_cache(maxsize=128)
-    def unpartitioned_load(self, strategy='best', multicast_cost=1, overhead=1):
+    def unpartitioned_load(self, strategy='best', multicast_cost=None, overhead=1):
         '''Compute the communication load of the unpartitioned scheme.
 
         Args:
@@ -321,8 +321,13 @@ class SystemParameters(object):
         strategy: Can be '1', '2', or 'best'. 'best' selects the
         strategy minimizing the load.
 
-        multicast_cost: The cost of multicasting relative to
-        unicasting.
+        multicast_cost: Function used to compute the cost of multicasting
+        relative to unicasting. Must take the number of recipients as j its
+        single argument and return the ratio of the cost of unicasting the same
+        message to all recipients to the cost of multicasting that message to
+        all recipients. For example, if the cost of multicasting is the same as
+        sending a single unicasted message, j should be returned. This is the
+        default.
 
         overhead: Code overhead. Equal to 1 for MDS codes.
 
@@ -334,8 +339,9 @@ class SystemParameters(object):
 
         '''
         assert strategy == 'best' or strategy == '1' or strategy == '2'
-        assert isinstance(multicast_cost, int) or isinstance(multicast_cost, float)
         assert 0 < multicast_cost < math.inf
+        if not multicast_cost:
+            multicast_cost = lambda j: j
 
         # Unicasting load
         load_1 = overhead - self.server_storage
