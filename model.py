@@ -303,7 +303,8 @@ class SystemParameters(object):
 
         # Add last term of load 2, or set to infinity if unavailable.
         try:
-            load_2 += self.alphaj(self.multicast_set_size_2(overhead=overhead))
+            alpha = self.alphaj(self.multicast_set_size_2(overhead=overhead))
+            load_2 += alpha / j
         except ModelError:
             load_2 = math.inf
 
