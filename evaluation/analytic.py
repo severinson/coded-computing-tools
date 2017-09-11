@@ -84,8 +84,9 @@ def lt_performance(parameters, num_samples=1):
     num_samples: Unused
     '''
     # Get the LT code overhead over MDS codes.
-    overhead = lt.lt_simulate(parameters.num_source_rows)['coded']
-    overhead /= parameters.num_source_rows
+    # overhead = lt.lt_simulate(parameters.num_source_rows)['coded']
+    # overhead /= parameters.num_source_rows
+    overhead = 1.1
 
     # Compute load and delay.
     servers = math.ceil(parameters.q * overhead)
