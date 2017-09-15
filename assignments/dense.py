@@ -114,7 +114,7 @@ class DenseAssignment(Assignment):
         assignment_matrix = np.load(directory + par.identifier() + '.npy')
         return cls(par, assignment_matrix=assignment_matrix, score=False, index=False)
 
-    def label(self, shuffle=True):
+    def label(self, shuffle=False):
         '''Label the batches with server subsets
 
         Label all batches with subsets.
