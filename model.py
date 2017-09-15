@@ -279,32 +279,38 @@ class SystemParameters(object):
         return self.multicast_set_size_1(overhead=overhead) - 1
 
     @functools.lru_cache(maxsize=128)
-    def multicast_load(self, overhead=1):
+    def multicast_load(self, multicast_cost=None, overhead=1):
         '''Compute the multicast load for strategy 1 and 2.
 
         Args:
+
+        multicast_cost: See unpartitioned_load()
 
         overhead: Code overhead. Equal to 1 for MDS codes.
 
         Returns: A tuple (multicast_load_1, multicast_load_2)
 
         '''
+        if not multicast_cost:
+            multicast_cost = lambda j: j / math.log(j)
+
         load_1 = 0
         load_2 = 0
 
         # Compute load 1 and 2 (leaving out the last term of load 2).
         try:
             for j in range(self.multicast_set_size_1(overhead=overhead), self.muq+1):
-                alpha = self.alphaj(j)
-                load_1 += alpha / j
-                load_2 += alpha / j
+                alpha = self.alphaj(j) / multicast_cost(j)
+                load_1 += alpha
+                load_2 += alpha
         except ModelError:
             pass
 
         # Add last term of load 2, or set to infinity if unavailable.
         try:
             alpha = self.alphaj(self.multicast_set_size_2(overhead=overhead))
-            load_2 += alpha / j
+            alpha /= multicast_cost(j)
+            load_2 += alpha
         except ModelError:
             load_2 = math.inf
 
@@ -340,9 +346,6 @@ class SystemParameters(object):
 
         '''
         assert strategy == 'best' or strategy == '1' or strategy == '2'
-        assert 0 < multicast_cost < math.inf
-        if not multicast_cost:
-            multicast_cost = lambda j: j
 
         # Unicasting load
         load_1 = overhead - self.server_storage
@@ -356,7 +359,8 @@ class SystemParameters(object):
         load_1 *= self.num_outputs
 
         # Multicasting load
-        multicast_load_1, multicast_load_2 = self.multicast_load(overhead=overhead)
+        multicast_load_1, multicast_load_2 = self.multicast_load(
+            overhead=overhead, multicast_cost=multicast_cost)
         load_1 += multicast_load_1
         load_2 += multicast_load_2
 
