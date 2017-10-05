@@ -60,7 +60,7 @@ class Modeltests(unittest.TestCase):
                                             server_storage=1/3, num_partitions=5)
         load_1, load_2 = parameters.multicast_load()
         self.assertAlmostEqual(load_1 * parameters.num_source_rows, 840)
-        self.assertEqual(load_2 * parameters.num_source_rows, 2100)
+        self.assertEqual(load_2 * parameters.num_source_rows, 1470)
         return
 
     def test_unpartitioned_load_1(self):
@@ -83,6 +83,7 @@ class Modeltests(unittest.TestCase):
         load_1 = parameters.unpartitioned_load(strategy='1')
         load_2 = parameters.unpartitioned_load(strategy='2')
         load_best = parameters.unpartitioned_load(strategy='best')
-        self.assertEqual(load_1, load_best)
+        self.assertEqual(load_2, load_best)
         self.assertAlmostEqual(load_1, 2.8888888888888897)
+        self.assertAlmostEqual(load_2, 2.7222222222222223)
         return

@@ -139,7 +139,7 @@ class EvaluationTests(unittest.TestCase):
                                             server_storage=1/3, num_partitions=5)
         correct = {'servers': 9, 'batches': 324, 'delay': 25.460714285714285,
                    'unicast_load_1': 720 / 540, 'multicast_load_1': 840 / 540,
-                   'unicast_load_2': 0, 'multicast_load_2': 2100 / 540}
+                   'unicast_load_2': 0, 'multicast_load_2': 1470 / 540}
         solver = HeuristicSolver()
         self.verify_solver(solver, [parameters], [correct])
         return

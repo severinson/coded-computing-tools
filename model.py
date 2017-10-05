@@ -292,7 +292,7 @@ class SystemParameters(object):
 
         '''
         if not multicast_cost:
-            multicast_cost = lambda j: j / math.log(j)
+            multicast_cost = lambda j: j
 
         load_1 = 0
         load_2 = 0
@@ -308,9 +308,8 @@ class SystemParameters(object):
 
         # Add last term of load 2, or set to infinity if unavailable.
         try:
-            alpha = self.alphaj(self.multicast_set_size_2(overhead=overhead))
-            alpha /= multicast_cost(j)
-            load_2 += alpha
+            j = self.multicast_set_size_2(overhead=overhead)
+            load_2 += self.alphaj(j) / multicast_cost(j)
         except ModelError:
             load_2 = math.inf
 
@@ -329,8 +328,8 @@ class SystemParameters(object):
         strategy minimizing the load.
 
         multicast_cost: Function used to compute the cost of multicasting
-        relative to unicasting. Must take the number of recipients as j its
-        single argument and return the ratio of the cost of unicasting the same
+        relative to unicasting. Must take the number of recipients j as its
+        only argument and return the ratio of the cost of unicasting the same
         message to all recipients to the cost of multicasting that message to
         all recipients. For example, if the cost of multicasting is the same as
         sending a single unicasted message, j should be returned. This is the
@@ -399,6 +398,7 @@ class SystemParameters(object):
             q = self.q
 
         # Add the overhead factor
+        # TODO: This is incorrect
         q = math.ceil(q * overhead)
 
         # Return infinity if waiting for more than num_servers servers
