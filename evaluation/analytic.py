@@ -21,7 +21,6 @@ performance of an assignment. This is only possible in some cases.
 
 import math
 import pandas as pd
-import lt
 import model
 import assignments
 
@@ -83,9 +82,7 @@ def lt_performance(parameters, num_samples=1):
 
     num_samples: Unused
     '''
-    # Get the LT code overhead over MDS codes.
-    # overhead = lt.lt_simulate(parameters.num_source_rows)['coded']
-    # overhead /= parameters.num_source_rows
+    # manually set the LT code overhead
     overhead = 1.1
 
     # Compute load and delay.
