@@ -76,6 +76,7 @@ class SimulatorResult(object):
         self.set_uncoded(enable=False)
         self.set_cmapred(enable=False)
         self.set_stragglerc(enable=False)
+        self.set_encode_delay()
         self.set_reduce_delay()
         self.set_shuffling_strategy()
         return
@@ -87,6 +88,9 @@ class SimulatorResult(object):
 
         if key == 'delay':
             return self.delay()
+
+        if key == 'encode':
+            return self.encode_delay()
 
         if key == 'reduce':
             return self.reduce_delay()
@@ -147,9 +151,21 @@ class SimulatorResult(object):
         self.stragglerc = enable
         return
 
+    def set_encode_delay(self, function=None):
+        '''Include the encoding delay in the total computational delay.
+
+        Args:
+
+        function: A function that takes a parameters object and returns its
+        encoding delay.
+
+        '''
+        logging.debug('Set encode function %s.', str(function))
+        self.encode_function = function
+        return
+
     def set_reduce_delay(self, function=None):
-        '''Include the reduce (decoding) delay in the total computational
-        delay.
+        '''Include the reduce (decoding) delay in the total computational delay.
 
         Args:
 
@@ -203,9 +219,28 @@ class SimulatorResult(object):
 
         return loads
 
+    def encode_delay(self):
+        '''Collect the encoding delay of all parameters into a single array.
+
+        '''
+        assert self.encode_function is not None, \
+            'Encode function must be set before computing encoding delay.'
+
+        delays = np.zeros([3, len(self.dataframes)])
+        for i in range(len(self.dataframes)):
+            parameters = self.parameter_list[i]
+            frame_delay = self.encode_function(parameters)
+
+            # Normalize and append.
+            frame_delay /= parameters.num_source_rows
+            delays[0, i] = frame_delay
+            delays[1, i] = frame_delay
+            delays[2, i] = frame_delay
+
+        return delays
+
     def reduce_delay(self):
-        '''Collect the reduce (decoding) delay of all parameters in this
-        result into a single array.
+        '''Collect the reduce (decoding) delay of all parameters into a single array.
 
         '''
         assert self.reduce_function is not None, \
@@ -216,7 +251,7 @@ class SimulatorResult(object):
             parameters = self.parameter_list[i]
             frame_delay = self.reduce_function(parameters)
 
-            # Normalize and append
+            # Normalize and append.
             frame_delay /= parameters.num_source_rows
             delays[0, i] = frame_delay
             delays[1, i] = frame_delay
