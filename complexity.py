@@ -8,7 +8,6 @@ import random
 import matplotlib.pyplot as plt
 import numpy as np
 import stats
-import lt
 
 # Source: http://web.eecs.utk.edu/~plank/plank/papers/FAST-2005.pdf
 LDPC_RATE = 1.0496
@@ -25,6 +24,47 @@ RS_XOR_PER_WORD = 44.6
 # MULTIPLICATION_COMPLEXITY = 87e-6
 ADDITION_COMPLEXITY = 0
 MULTIPLICATION_COMPLEXITY = 1
+
+def partitioned_encode_delay(parameters, partitions=None):
+    '''Compute delay incurred by the encoding phase. Assumes a shifted exponential
+    distribution.
+
+    Args:
+
+    parameters: System parameters.
+
+    partitions: The number of partitions. If None, the value in parameters is
+    used.
+
+    Returns: The reduce delay.
+
+    '''
+    # TODO: Add additions
+    assert partitions is None or partitions % 1 == 0
+    if partitions is None:
+        partitions = parameters.num_partitions
+
+    delay = stats.order_mean_shiftexp(parameters.num_servers, parameters.num_servers)
+
+    # Scale by encoding complexity
+    delay *= parameters.num_source_rows / partitions
+    delay *= parameters.num_coded_rows * parameters.num_columns
+    delay /= parameters.num_servers
+    return delay
+
+def stragglerc_encode_delay(parameters):
+    '''Compute reduce delay for a system using only straggler coding, i.e., using
+    an erasure code to deal with stragglers but no coded multicasting.
+
+    Args:
+
+    parameters: System parameters.
+
+    Returns: The reduce delay.
+
+    '''
+    partitions = parameters.num_source_rows / parameters.q
+    return partitioned_encode_delay(parameters, partitions=partitions)
 
 def partitioned_reduce_delay(parameters, partitions=None):
     '''Compute delay incurred by the reduce phase. Assumes a shifted
@@ -65,6 +105,7 @@ def stragglerc_reduce_delay(parameters):
     Returns: The reduce delay.
 
     '''
+    # TODO: Evaluate partitioned_reduce_delay for correct T instead
     delay = stats.order_mean_shiftexp(parameters.q, parameters.q)
 
     # Scale by decoding complexity
@@ -127,9 +168,13 @@ def block_diagonal_decoding_complexity(code_length, packet_size, erasure_prob, p
     infinity.
 
     Args:
+
     code_length: The length of the code in number of coded symbols.
+
     packet_size: The size of a packet in number of symbols.
+
     erasure_prob: The erasure probability of the packet erasure channel.
+
     partitions: The number of block-diagonal code partitions.
 
     Returns: The total complexity of decoding.
@@ -143,48 +188,6 @@ def block_diagonal_decoding_complexity(code_length, packet_size, erasure_prob, p
     partition_length = code_length / partitions
     partition_complexity = rs_decoding_complexity(partition_length, packet_size, erasure_prob)
     return partition_complexity * partitions
-
-def peeling_decoding_complexity(source_length):
-    '''Compute the decoding complexity of an LT erasure code using a
-    peeling decoder.
-
-    Args:
-
-    source_length: Number of source symbols.
-
-    '''
-    lt_simulation = lt.lt_simulate(source_length)
-    return lt_simulation['additions'] * ADDITION_COMPLEXITY
-
-def peeling_decoding_complexity_old(code_length, code_rate, erasure_prob):
-
-    '''Compute the decoding complexity of decoding an erasure code using a
-    peeling decoder.
-
-    Args:
-
-    code_length: The length of the code in number of coded symbols.
-
-    code_rate: The rate of the code as given by
-    num_information_symbols / num_coded_symbols.
-
-    erasure_prob: The packet erasure probability.
-
-    Returns: The total complexity of decoding.
-
-    '''
-    information_symbols = round(code_length * code_rate)
-
-    # Compute the average degree for the ideal Soliton distribution
-    avg_check_degree = 1 / information_symbols
-    avg_check_degree += sum([k / (k * (k - 1)) for k in range(2, information_symbols + 1)])
-
-    num_iterations = round(code_length * erasure_prob)
-    additions_per_iteration = avg_check_degree - 1
-    multiplications_per_iteration = avg_check_degree
-    complexity_per_iteration = additions_per_iteration * ADDITION_COMPLEXITY
-    complexity_per_iteration += multiplications_per_iteration * MULTIPLICATION_COMPLEXITY
-    return num_iterations * complexity_per_iteration
 
 def matrix_vector_complexity(rows, cols):
     '''Compute the complexity of matrix-vector multiplication
