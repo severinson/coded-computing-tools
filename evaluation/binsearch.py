@@ -20,6 +20,9 @@ evaluated through Monte Carlo simulations by randomizing the order in
 which servers finish. The number of servers needed in a given Monte
 Carlo iteration is computed by performing binary search.
 
+The performance is evaluated exhaustively if the number of possible
+realizations is smaller than the number of requested samples.
+
 '''
 
 import math
