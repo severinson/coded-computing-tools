@@ -25,7 +25,6 @@ import model
 import simulation
 from solvers.heuristicsolver import HeuristicSolver
 from solvers import randomsolver
-from evaluation import sampled
 from evaluation import binsearch
 from evaluation import analytic
 
