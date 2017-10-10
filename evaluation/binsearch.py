@@ -1,5 +1,5 @@
 ############################################################################
-# Copyright 2016 Albin Severinson                                          #
+# Copyright 2017 Albin Severinson                                          #
 #                                                                          #
 # Licensed under the Apache License, Version 2.0 (the "License");          #
 # you may not use this file except in compliance with the License.         #
@@ -14,11 +14,11 @@
 # limitations under the License.                                           #
 ############################################################################
 
-'''This module provides functionality for efficiently sampling the
-performance of an assignment. Specifically, the performance is
-evaluated through Monte Carlo simulations by randomizing the order in
-which servers finish. The number of servers needed in a given Monte
-Carlo iteration is computed by performing binary search.
+'''This module provides functionality for efficiently sampling the performance
+of an assignment. Specifically, the performance is evaluated through Monte
+Carlo simulations by randomizing the order in which servers finish. The number
+of servers needed in a given Monte Carlo iteration is computed by performing
+binary search.
 
 The performance is evaluated exhaustively if the number of possible
 realizations is smaller than the number of requested samples.
@@ -111,7 +111,7 @@ class SampleEvaluator(AssignmentEvaluator):
         # Check all or num_samples samples. Whichever is smaller.
         exhaustive_samples = nchoosek(parameters.num_servers, parameters.q)
         exhaustive_samples *= math.factorial(parameters.num_servers - parameters.q)
-        if exhaustive_samples < self.num_samples:
+        if exhaustive_samples <= self.num_samples:
             completion_orders = self.exhaustive_completion_orders(parameters)
         else:
             completion_orders = self.random_completion_orders(parameters)
@@ -175,8 +175,8 @@ def computational_delay_sample(parameters, assignment, completion_order):
 
     assignment: Assignment to evaluate.
 
-    completion_order: A list of server indices in the order they
-    completed their map phase computation.
+    completion_order: A list of server indices in the order they completed
+    their map phase computation.
 
     Returns: A dict containing the results.
 
@@ -187,8 +187,7 @@ def computational_delay_sample(parameters, assignment, completion_order):
     for server in completion_order[0:parameters.q]:
         permanently_added.update(assignment.labels[server])
 
-    # TODO: Use a leaner dtype?
-    permanent_count = np.zeros(parameters.num_partitions)
+    permanent_count = np.zeros(parameters.num_partitions, dtype=np.int64)
     permanent_count += assignment.batch_union(permanently_added)
 
     incomplete_partitions = set(range(parameters.num_partitions))
