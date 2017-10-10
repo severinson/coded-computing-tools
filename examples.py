@@ -34,11 +34,9 @@ from evaluation.binsearch import SampleEvaluator
 import complexity
 from solvers.randomsolver import RandomSolver
 from solvers.heuristicsolver import HeuristicSolver
-from solvers.treesolver import TreeSolver
 from solvers.hybrid import HybridSolver
 from solvers.assignmentloader import AssignmentLoader
 from assignments.cached import CachedAssignment
-import lt
 
 def load_delay_plot(results, plot_settings, xdata, xlabel='', normalize=None, legend='load'):
     '''Create a plot with two subplots for load and delay respectively.
@@ -101,8 +99,8 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='', normalize=None, le
     plt.show()
     return
 
-def complexity_plot(results, plot_settings, xdata, xlabel='', normalize=None):
-    '''Create a plot with two subplots for load and delay respectively.
+def complexity_plot(results, plot_settings, xdata, xlabel='', normalize=None, phase='reduce'):
+    '''Plot the encoding or decoding delay.
 
     Args:
 
@@ -117,10 +115,13 @@ def complexity_plot(results, plot_settings, xdata, xlabel='', normalize=None):
     normalize: If a SimulatorResult is provided, all ploted results
     are normalized by this one.
 
+    phase: Phase to plot the delay of (encode or reduce)
+
     '''
     assert isinstance(results, list)
     assert isinstance(plot_settings, list)
     assert isinstance(normalize, SimulatorResult) or normalize is None
+    assert phase == 'encode' or phase == 'reduce'
 
     # Create plot window
     # _ = plt.figure(figsize=(8,5))
@@ -133,8 +134,8 @@ def complexity_plot(results, plot_settings, xdata, xlabel='', normalize=None):
     plt.setp(ax.get_xticklabels(), fontsize=25)
     plt.setp(ax.get_yticklabels(), fontsize=25)
     for result, plot_setting in zip(results, plot_settings):
-        plot_result(result, plot_setting, xdata, 'reduce', xlabel=xlabel,
-                    ylabel=r'$D_{\mathsf{reduce}}$', subplot=True, normalize=normalize,
+        plot_result(result, plot_setting, xdata, phase, xlabel=xlabel,
+                    ylabel=r'$D_{\mathsf{' + phase + r'}}$', subplot=True, normalize=normalize,
                     plot_type='loglog')
 
     # plt.rc('text', usetex=True)
@@ -154,7 +155,7 @@ def plot_result(result, plot_settings, xdata, ydata, xlabel='',
 
     Args:
 
-    result: A SimulationResult.
+    result: A SimulatorResult.
 
     plot_settings: A dict with plot settings.
 
@@ -179,7 +180,7 @@ def plot_result(result, plot_settings, xdata, ydata, xlabel='',
     assert isinstance(result, SimulatorResult)
     assert isinstance(plot_settings, dict)
     assert xdata == 'partitions' or xdata == 'servers'
-    assert ydata == 'load' or ydata == 'delay' or ydata == 'reduce'
+    assert ydata == 'load' or ydata == 'delay' or ydata == 'reduce' or ydata == 'encode'
     assert isinstance(xlabel, str)
     assert isinstance(ylabel, str)
     assert isinstance(subplot, bool)
@@ -344,7 +345,7 @@ def get_parameters_partitioning():
 def lt_main():
 
     # Simulate LT code performance
-    symbols = int(1e4)
+    symbols = int(1e5)
     # modes = [round(symbols / 2)]
     # modes = np.arange(1, 400, 10)
     modes = np.arange(1, symbols, 1000)
@@ -400,7 +401,6 @@ def main():
     # Get parameters
     partition_parameters = get_parameters_partitioning()
     size_parameters = get_parameters_size()[0:-2]
-    unicast_parameters = get_parameters_no_multicast()
 
     # Setup the simulators
     heuristic_sim = Simulator(solver=HeuristicSolver(),
@@ -436,9 +436,9 @@ def main():
                             parameter_eval=analytic.uncoded_performance,
                             directory='./results/Uncoded/')
 
-    nostraggler_sim = Simulator(solver=None, assignments=1,
-                                parameter_eval=analytic.nostraggler_performance,
-                                directory='./results/Nostraggler/')
+    # nostraggler_sim = Simulator(solver=None, assignments=1,
+    #                             parameter_eval=analytic.nostraggler_performance,
+    #                             directory='./results/Nostraggler/')
 
     # Simulate partition parameters
     heuristic_partitions = heuristic_sim.simulate_parameter_list(partition_parameters)
@@ -447,49 +447,38 @@ def main():
     rs_partitions = rs_sim.simulate_parameter_list(partition_parameters)
     lt_partitions = lt_sim.simulate_parameter_list(partition_parameters)
     uncoded_partitions = uncoded_sim.simulate_parameter_list(partition_parameters)
-    nostraggler_partitions = nostraggler_sim.simulate_parameter_list(partition_parameters)
+    # nostraggler_partitions = nostraggler_sim.simulate_parameter_list(partition_parameters)
 
     # Include the reduce delay
     heuristic_partitions.set_reduce_delay(function=complexity.partitioned_reduce_delay)
     random_partitions.set_reduce_delay(function=complexity.partitioned_reduce_delay)
     hybrid_partitions.set_reduce_delay(function=complexity.partitioned_reduce_delay)
     rs_partitions.set_reduce_delay(function=lambda x: complexity.partitioned_reduce_delay(x, partitions=1))
-    lt_partitions.set_reduce_delay(complexity.lt_reduce_delay)
+    # lt_partitions.set_reduce_delay(complexity.lt_reduce_delay)
+    lt_partitions.set_reduce_delay(function=lambda x: 0)
     uncoded_partitions.set_reduce_delay(function=lambda x: 0)
     uncoded_partitions.set_uncoded(enable=True)
-    nostraggler_partitions.set_reduce_delay(function=lambda x: 0)
-    nostraggler_partitions.set_nostraggler(enable=True)
+    # nostraggler_partitions.set_reduce_delay(function=lambda x: 0)
+    # nostraggler_partitions.set_nostraggler(enable=True)
 
     # Simulate size parameters
-    heuristic_size = heuristic_sim.simulate_parameter_list(size_parameters)
-    random_size = random_sim.simulate_parameter_list(size_parameters)
-    rs_size = rs_sim.simulate_parameter_list(size_parameters)
+    # heuristic_size = heuristic_sim.simulate_parameter_list(size_parameters)
+    # random_size = random_sim.simulate_parameter_list(size_parameters)
+    # rs_size = rs_sim.simulate_parameter_list(size_parameters)
     # lt_size = lt_sim.simulate_parameter_list(size_parameters)
-    uncoded_size = uncoded_sim.simulate_parameter_list(size_parameters)
-    nostraggler_size = nostraggler_sim.simulate_parameter_list(size_parameters)
+    # uncoded_size = uncoded_sim.simulate_parameter_list(size_parameters)
+    # # nostraggler_size = nostraggler_sim.simulate_parameter_list(size_parameters)
 
     # Include the reduce delay
-    heuristic_size.set_reduce_delay(function=complexity.partitioned_reduce_delay)
-    random_size.set_reduce_delay(function=complexity.partitioned_reduce_delay)
-    rs_size.set_reduce_delay(function=lambda x: complexity.partitioned_reduce_delay(x, partitions=1))
-    # lt_size.set_reduce_delay(complexity.lt_reduce_delay)
-    uncoded_size.set_reduce_delay(function=lambda x: 0)
-    uncoded_size.set_uncoded(enable=True)
-    nostraggler_size.set_reduce_delay(function=lambda x: 0)
-    nostraggler_size.set_nostraggler(enable=True)
-
-    # Simulate unicast parameters
-    heuristic_unicast = heuristic_sim.simulate_parameter_list(unicast_parameters)
-    random_unicast = random_sim.simulate_parameter_list(unicast_parameters)
-    rs_unicast = rs_sim.simulate_parameter_list(unicast_parameters)
-    uncoded_unicast = uncoded_sim.simulate_parameter_list(unicast_parameters)
-
-    # Include the reduce delay
-    heuristic_unicast.set_reduce_delay(function=complexity.partitioned_reduce_delay)
-    random_unicast.set_reduce_delay(function=complexity.partitioned_reduce_delay)
-    # rs_unicast.set_reduce_delay(function=lambda x: complexity.partitioned_reduce_delay(x, partitions=1))
-    uncoded_unicast.set_reduce_delay(function=lambda x: 0)
-    uncoded_unicast.set_uncoded(enable=True)
+    # heuristic_size.set_reduce_delay(function=complexity.partitioned_reduce_delay)
+    # random_size.set_reduce_delay(function=complexity.partitioned_reduce_delay)
+    # rs_size.set_reduce_delay(function=lambda x: complexity.partitioned_reduce_delay(x, partitions=1))
+    # # lt_size.set_reduce_delay(complexity.lt_reduce_delay)
+    # lt_partitions.set_reduce_delay(function=lambda x: 0)
+    # uncoded_size.set_reduce_delay(function=lambda x: 0)
+    # uncoded_size.set_uncoded(enable=True)
+    # # nostraggler_size.set_reduce_delay(function=lambda x: 0)
+    # # nostraggler_size.set_nostraggler(enable=True)
 
     # Setup plot settings
     heuristic_plot_settings = {
@@ -532,6 +521,11 @@ def main():
     #                 [heuristic_plot_settings, hybrid_plot_settings, random_plot_settings, lt_plot_settings],
     #                 'partitions', xlabel='T', normalize=rs_partitions)
 
+
+    # load_delay_plot([heuristic_size, random_size, lt_size],
+    #                 [heuristic_plot_settings, random_plot_settings, lt_plot_settings],
+    #                 'servers', xlabel='Servers $K$', normalize=rs_size)
+
     # Plots without LT codes.
     # load_delay_plot([heuristic_partitions, hybrid_partitions, random_partitions],
     #                 [heuristic_plot_settings, hybrid_plot_settings, random_plot_settings],
@@ -549,6 +543,7 @@ def main():
     # load_delay_plot([heuristic_size, random_size, rs_size],
     #                 [heuristic_plot_settings, random_plot_settings, rs_plot_settings],
     #                 'servers', xlabel='$K$', normalize=uncoded_size)
+
 
     # Plots for presentation
     rs_plot_settings = {
@@ -575,8 +570,8 @@ def main():
         'marker': '-^',
         'linewidth': 2,
         'size': 8}
-    load_delay_plot([rs_partitions, heuristic_partitions, random_partitions],
-                    [rs_plot_settings, heuristic_plot_settings, random_plot_settings],
+    load_delay_plot([rs_partitions, heuristic_partitions],
+                    [rs_plot_settings, heuristic_plot_settings],
                     'partitions', xlabel='Partitions $T$', normalize=uncoded_partitions)
 
     # load_delay_plot([rs_size, heuristic_size, random_size],
@@ -616,4 +611,3 @@ def main():
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     main()
-    
