@@ -52,6 +52,14 @@ def partitioned_encode_delay(parameters, partitions=None):
     delay /= parameters.num_servers
     return delay
 
+def block_diagonal_encoding_complexity(parameters, partitions=None):
+    assert partitions is None or partitions % 1 == 0
+    if partitions is None:
+        partitions = parameters.num_partitions
+    multiplications = parameters.num_source_rows / partitions
+    multiplications *= parameters.num_coded_rows * parameters.num_columns
+    return multiplications
+
 def stragglerc_encode_delay(parameters):
     '''Compute reduce delay for a system using only straggler coding, i.e., using
     an erasure code to deal with stragglers but no coded multicasting.
