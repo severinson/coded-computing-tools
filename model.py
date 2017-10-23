@@ -201,6 +201,18 @@ class SystemParameters(object):
                'multicast_size_1': multicast_size_1, 'multicast_size_2': multicast_size_2}
         return dct
 
+    @classmethod
+    def fromdct(cls, dct):
+        return cls(
+            rows_per_batch=int(dct['rows_per_batch']),
+            num_servers=int(dct['servers']),
+            q=int(dct['wait_for']),
+            num_outputs=int(dct['inputs_outputs']),
+            server_storage=float(dct['storage']),
+            num_partitions=int(dct['partitions']),
+            num_columns=int(dct['columns'])
+        )
+
     def __repr__(self):
         return str(self.asdict())
 
@@ -386,14 +398,13 @@ class SystemParameters(object):
 
         overhead: Code overhead. Equal to 1 for MDS codes.
 
-        Returns: The normalized computational delay. Multiply the
-        result by
+        returns: The normalized computational delay. Multiply the result by
         complexity.matrix_vector_complexity(self.server_storage *
-        self.num_source_rows, # self.num_columns) for the absolute
-        result.
+        self.num_columns) for the absolute result.
 
         '''
         assert q is None or isinstance(q, int)
+        assert overhead == 1
         if q is None:
             q = self.q
 
