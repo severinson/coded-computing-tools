@@ -220,7 +220,9 @@ class SimulatorResult(object):
         return loads
 
     def encode_delay(self):
-        '''Collect the encoding delay of all parameters into a single array.
+        '''Collect the encoding delay of all parameters into a single array. This
+        method is used to collect only the encoding delay. It's not used by the delay
+        method as that method does its own scaling.
 
         '''
         assert self.encode_function is not None, \
@@ -241,6 +243,8 @@ class SimulatorResult(object):
 
     def reduce_delay(self):
         '''Collect the reduce (decoding) delay of all parameters into a single array.
+        This method is used to collect only the reduce (decoding) delay. It's
+        not used by the delay method as that method does its own scaling.
 
         '''
         assert self.reduce_function is not None, \
@@ -309,15 +313,15 @@ class SimulatorResult(object):
                     parameters.num_columns
                 )
 
-            # Include reduce time if enabled
+            # include reduce time if enabled. this value must not be normalized.
             if self.reduce_function is not None:
                 frame_delay += self.reduce_function(parameters)
 
-            # Include encode time if enabled
+            # include encode time if enabled. this value must not be normalized.
             if self.encode_function is not None:
                 frame_delay += self.encode_function(parameters)
 
-            # Normalize and append
+            # normalize and append
             frame_delay /= parameters.num_source_rows
             delays[0, i] = frame_delay.mean()
             delays[1, i] = frame_delay.min()
