@@ -22,7 +22,7 @@ system under simulation.
 
 import math
 import functools
-from scipy.misc import comb as nchoosek
+from scipy.special import comb as nchoosek
 import complexity
 import stats
 
@@ -420,6 +420,10 @@ class SystemParameters(object):
 
         delay = stats.order_mean_shiftexp(self.num_servers, q)
 
-        # Scale by number of output vectors
+        # scale by number of output vectors. we do not scale by server_storage
+        # * num_source_rows here as this value varies depending on the scheme
+        # (uncoded, coded MapReduce, and straggler coding). this scaling is
+        # carried out in simulation.py.
         delay *= self.num_outputs
+
         return delay
