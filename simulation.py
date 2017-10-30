@@ -279,31 +279,43 @@ class SimulatorResult(object):
             if self.uncoded:
                 uncoded_storage = 1 / parameters.num_servers
                 rows_per_server = uncoded_storage * parameters.num_source_rows
-                frame_delay *= complexity.matrix_vector_complexity(rows_per_server,
-                                                                   parameters.num_columns)
+                frame_delay *= complexity.matrix_vector_complexity(
+                    rows_per_server,
+                    parameters.num_columns
+                )
 
             # If no straggler erasure code is used, i.e., only coded MapReduce.
             elif self.cmapred:
                 server_storage = parameters.muq / parameters.num_servers
                 rows_per_server = server_storage * parameters.num_source_rows
-                frame_delay *= complexity.matrix_vector_complexity(rows_per_server,
-                                                                   parameters.num_columns)
+                frame_delay *= complexity.matrix_vector_complexity(
+                    rows_per_server,
+                    parameters.num_columns
+                )
 
             # If only straggler coding is used, i.e., no coded multicasts.
             elif self.stragglerc:
                 server_storage = 1 / parameters.q
                 rows_per_server = server_storage * parameters.num_source_rows
-                frame_delay *= complexity.matrix_vector_complexity(rows_per_server,
-                                                                   parameters.num_columns)
+                frame_delay *= complexity.matrix_vector_complexity(
+                    rows_per_server,
+                    parameters.num_columns
+                )
 
             else:
                 rows_per_server = parameters.server_storage * parameters.num_source_rows
-                frame_delay *= complexity.matrix_vector_complexity(rows_per_server,
-                                                                   parameters.num_columns)
+                frame_delay *= complexity.matrix_vector_complexity(
+                    rows_per_server,
+                    parameters.num_columns
+                )
 
             # Include reduce time if enabled
             if self.reduce_function is not None:
                 frame_delay += self.reduce_function(parameters)
+
+            # Include encode time if enabled
+            if self.encode_function is not None:
+                frame_delay += self.encode_function(parameters)
 
             # Normalize and append
             frame_delay /= parameters.num_source_rows
