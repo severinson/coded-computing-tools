@@ -95,9 +95,12 @@ def partitioned_reduce_delay(parameters, partitions=None):
     delay = stats.order_mean_shiftexp(parameters.q, parameters.q)
 
     # Scale by decoding complexity
-    delay *= block_diagonal_decoding_complexity(parameters.num_coded_rows,
-                                                1, 1 - parameters.q / parameters.num_servers,
-                                                partitions)
+    delay *= block_diagonal_decoding_complexity(
+        parameters.num_coded_rows,
+        1,
+        1 - parameters.q / parameters.num_servers,
+        partitions,
+    )
     delay *= parameters.num_outputs / parameters.q
     return delay
 
