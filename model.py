@@ -122,12 +122,12 @@ class SystemParameters(object):
                                     rows_per_partition=None,
                                     min_num_servers=None,
                                     code_rate=None, muq=None,
-                                    num_columns=None):
+                                    num_columns=None,
+                                    num_outputs_factor=1):
         '''Attempt to find a set of servers with a fixed number of rows per
         server and rows per partition.
 
         '''
-
         num_servers = min_num_servers
         while True:
             num_servers = num_servers + 1
@@ -173,11 +173,13 @@ class SystemParameters(object):
             num_partitions = int(num_partitions)
             break
 
-        return cls(rows_per_batch=rows_per_batch,
-                   num_servers=num_servers, q=q, num_outputs=q,
-                   server_storage=server_storage,
-                   num_partitions=num_partitions,
-                   num_columns=num_columns)
+        if num_columns is None:
+            num_columns = num_source_rows
+
+        num_outputs = num_outputs_factor * q
+        return cls(rows_per_batch=rows_per_batch, num_servers=num_servers, q=q,
+                   num_outputs=num_outputs, server_storage=server_storage,
+                   num_partitions=num_partitions, num_columns=num_columns)
 
     def asdict(self):
         '''Convert this object to a dict.'''
