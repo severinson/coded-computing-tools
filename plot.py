@@ -112,7 +112,7 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='', normalize=None, le
     plt.setp(ax1.get_yticklabels(), fontsize=25)
     for result, plot_setting in zip(results, plot_settings):
         plot_result(result, plot_setting, xdata, 'load',
-                    ylabel='$L$', subplot=True, normalize=normalize)
+                    ylabel='$\mathsf{Load}$', subplot=True, normalize=normalize)
 
     plt.margins(y=0.1)
     if legend == 'load':
@@ -132,7 +132,7 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='', normalize=None, le
     plt.setp(ax2.get_yticklabels(), fontsize=25)
     for result, plot_setting in zip(results, plot_settings):
         plot_result(result, plot_setting, xdata, 'delay', xlabel=xlabel,
-                    ylabel='$D$', subplot=True, normalize=normalize)
+                    ylabel='$\mathsf{Delay}$', subplot=True, normalize=normalize)
 
     if legend == 'delay':
         plt.legend(numpoints=1, shadow=True, labelspacing=0,
