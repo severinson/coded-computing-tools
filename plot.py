@@ -73,6 +73,26 @@ def get_parameters_partitioning():
 
     return parameters
 
+def get_parameters_partitioning_2():
+    '''Constant system size, increasing partitions, num_outputs=num_columns'''
+    rows_per_batch = 250
+    num_servers = 9
+    q = 6
+    num_outputs = 6000
+    server_storage = 1/3
+    num_partitions = [2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 24, 25, 30,
+                      40, 50, 60, 75, 100, 120, 125, 150, 200, 250,
+                      300, 375, 500, 600, 750, 1000, 1500, 3000]
+
+    parameters = list()
+    for partitions in num_partitions:
+        par = model.SystemParameters(rows_per_batch=rows_per_batch, num_servers=num_servers, q=q,
+                                     num_outputs=num_outputs, server_storage=server_storage,
+                                     num_partitions=partitions)
+        parameters.append(par)
+
+    return parameters
+
 
 def load_delay_plot(results, plot_settings, xdata, xlabel='', normalize=None, legend='load', show=True):
     '''Create a plot with two subplots for load and delay respectively.
@@ -98,21 +118,24 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='', normalize=None, le
     '''
     assert isinstance(results, list)
     assert isinstance(plot_settings, list)
-    assert isinstance(normalize, SimulatorResult) or normalize is None
+    # assert isinstance(normalize, SimulatorResult) or normalize is None
     assert isinstance(show, bool)
 
     plt.rc('pgf',  texsystem='pdflatex')
     plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
+    # plt.rc('font', family='serif')
+    plt.rcParams['text.latex.preamble'] = [r'\usepackage{lmodern}']
     _ = plt.figure(figsize=(10,6))
 
     # Plot load
+    plt.autoscale(enable=True)
+    plt.tight_layout()
     ax1 = plt.subplot(211)
     plt.setp(ax1.get_xticklabels(), fontsize=25, visible=False)
     plt.setp(ax1.get_yticklabels(), fontsize=25)
     for result, plot_setting in zip(results, plot_settings):
         plot_result(result, plot_setting, xdata, 'load',
-                    ylabel='$\mathsf{Load}$', subplot=True, normalize=normalize)
+                    ylabel='Load', subplot=True, normalize=normalize)
 
     plt.margins(y=0.1)
     if legend == 'load':
@@ -132,7 +155,7 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='', normalize=None, le
     plt.setp(ax2.get_yticklabels(), fontsize=25)
     for result, plot_setting in zip(results, plot_settings):
         plot_result(result, plot_setting, xdata, 'delay', xlabel=xlabel,
-                    ylabel='$\mathsf{Delay}$', subplot=True, normalize=normalize)
+                    ylabel='Delay', subplot=True, normalize=normalize)
 
     if legend == 'delay':
         plt.legend(numpoints=1, shadow=True, labelspacing=0,
@@ -167,7 +190,7 @@ def complexity_plot(results, plot_settings, xdata, xlabel='', normalize=None, ph
     '''
     assert isinstance(results, list)
     assert isinstance(plot_settings, list)
-    assert isinstance(normalize, SimulatorResult) or normalize is None
+    # assert isinstance(normalize, SimulatorResult) or normalize is None
     assert phase == 'encode' or phase == 'reduce'
 
     # Create plot window
@@ -175,7 +198,8 @@ def complexity_plot(results, plot_settings, xdata, xlabel='', normalize=None, ph
 
     plt.rc('pgf',  texsystem='pdflatex')
     plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
+    # plt.rc('font', family='serif')
+    plt.rcParams['text.latex.preamble'] = [r'\usepackage{lmodern}']
 
     # Plot complexity
     fig, ax = plt.subplots(figsize=(6,6))
@@ -223,14 +247,14 @@ def plot_result(result, plot_settings, xdata, ydata, xlabel='',
     errorbars: Plot error bars.
 
     '''
-    assert isinstance(result, SimulatorResult)
+    # assert isinstance(result, SimulatorResult)
     assert isinstance(plot_settings, dict)
     assert xdata == 'partitions' or xdata == 'servers'
     assert ydata == 'load' or ydata == 'delay' or ydata == 'reduce' or ydata == 'encode'
     assert isinstance(xlabel, str)
     assert isinstance(ylabel, str)
     assert isinstance(subplot, bool)
-    assert isinstance(normalize, SimulatorResult) or normalize is None
+    # assert isinstance(normalize, SimulatorResult) or normalize is None
 
     if not subplot:
         _ = plt.figure()
@@ -247,9 +271,14 @@ def plot_result(result, plot_settings, xdata, ydata, xlabel='',
     size = plot_settings['size']
 
     xarray = result[xdata]
-    ymean = result[ydata][0, :]
-    ymin = result[ydata][1, :]
-    ymax = result[ydata][2, :]
+    if np.size(result[ydata], 0) == 3:
+        ymean = result[ydata][0, :]
+        ymin = result[ydata][1, :]
+        ymax = result[ydata][2, :]
+    else:
+        ymean = result[ydata]
+        ymin = ymean
+        ymax = ymean
     yerr = np.zeros([2, len(ymean)])
     yerr[0, :] = ymean - ymin
     yerr[1, :] = ymax - ymean
@@ -269,7 +298,7 @@ def plot_result(result, plot_settings, xdata, ydata, xlabel='',
         plt.errorbar(xarray, ymean, yerr=yerr, fmt='none', ecolor=color)
 
     if not subplot:
-        plt.legend(numpoints=1, fontsize=25, loc='best')
+        plt.legend(numpoints=1, fontsize=25, loc='best', prop={'weight': 'bold'})
         plt.show()
 
     return
