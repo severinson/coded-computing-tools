@@ -70,7 +70,7 @@ def order_mean_empiric(icdf, total, order, samples=1000):
     return mean, variance
 
 @functools.lru_cache(maxsize=1024)
-def order_mean_shiftexp(total, order, parameter=1, exact=True):
+def order_mean_shiftexp(total, order, parameter=1):
     '''Compute the mean of the shifted exponential order statistic.
 
     Args:
@@ -81,25 +81,16 @@ def order_mean_shiftexp(total, order, parameter=1, exact=True):
 
     parameter: Distribution parameter.
 
-    exact: Compute the mean exactly. Set to Falset to speed up the
-    computation.
-
     Returns: The mean of the order statistic with variables drawn from
     the shifted exponential distribution.
 
     '''
-    if exact:
-        mean = 1
-        for i in range(total-order+1, total+1):
-            mean += 1 / i
+    mean = 1
+    for i in range(total-order+1, total+1):
+        mean += 1 / i
 
-        mean *= parameter
-        return mean
-    else:
-        raise NotImplementedError
-        if total == order:
-            raise ValueError('Non-exact computation required order < total.')
-        return 1 + (1 / parameter) * math.log(total / (total - order))
+    mean *= parameter
+    return mean
 
 @functools.lru_cache(maxsize=1024)
 def order_variance_shiftexp(total, order, parameter):
