@@ -39,7 +39,6 @@ def partitioned_encode_delay(parameters, partitions=None):
     Returns: The reduce delay.
 
     '''
-    # TODO: Add additions
     assert partitions is None or partitions % 1 == 0
     if partitions is None:
         partitions = parameters.num_partitions
@@ -58,7 +57,9 @@ def block_diagonal_encoding_complexity(parameters, partitions=None):
         partitions = parameters.num_partitions
     multiplications = parameters.num_source_rows / partitions
     multiplications *= parameters.num_coded_rows * parameters.num_columns
-    return multiplications
+    additions = parameters.num_source_rows / partitions - 1
+    additions *= parameters.num_coded_rows * parameters.num_columns
+    return MULTIPLICATION_COMPLEXITY * multiplications + ADDITION_COMPLEXITY * additions
 
 def stragglerc_encode_delay(parameters):
     '''Compute reduce delay for a system using only straggler coding, i.e., using
@@ -128,6 +129,24 @@ def stragglerc_reduce_delay(parameters):
     delay *= parameters.num_outputs / parameters.q
     return delay
 
+def encoding_complexity_from_density(parameters=None, density=None):
+    '''compute encoding complexity from the density of the encoding matrix
+
+    args:
+
+    parameters: system parameters
+
+    density: average fraction of non-zero entries in the encoding matrix.
+
+    returns: complexity of the encoding.
+
+    '''
+    assert 0 < density <= 1
+    multiplications = parameters.num_source_rows * density
+    multiplications *= parameters.num_coded_rows * parameters.num_columns
+    additions = parameters.num_source_rows * density - 1
+    additions *= parameters.num_coded_rows * parameters.num_columns
+    return additions * ADDITION_COMPLEXITY + multiplications * MULTIPLICATION_COMPLEXITY
 
 def lt_reduce_delay(parameters):
     '''Compute delay incurred by the reduce phase using an LT code.
@@ -140,12 +159,7 @@ def lt_reduce_delay(parameters):
     Returns: The reduce delay.
 
     '''
-    delay = stats.order_mean_shiftexp(parameters.q, parameters.q)
 
-    # Scale by decoding complexity
-    delay *= peeling_decoding_complexity(parameters.num_source_rows)
-    delay *= parameters.num_outputs / parameters.q
-    return delay
 
 def rs_decoding_complexity(code_length, packet_size, erasure_prob):
     '''Compute the decoding complexity of Reed-Solomon codes
@@ -200,7 +214,7 @@ def block_diagonal_decoding_complexity(code_length, packet_size, erasure_prob, p
     partition_complexity = rs_decoding_complexity(partition_length, packet_size, erasure_prob)
     return partition_complexity * partitions
 
-def matrix_vector_complexity(rows, cols):
+def matrix_vector_complexity(rows=None, cols=None):
     '''Compute the complexity of matrix-vector multiplication
 
     Return the complexity of multiplying a matrix A with number of
