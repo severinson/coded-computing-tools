@@ -25,10 +25,11 @@ import os
 import math
 import logging
 import datetime
-from multiprocessing import Pool
 import numpy as np
 import pandas as pd
 import complexity
+
+from multiprocessing import Pool
 from solvers import Solver
 from model import SystemParameters
 from assignments.sparse import SparseAssignment
