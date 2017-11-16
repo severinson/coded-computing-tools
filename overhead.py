@@ -34,8 +34,9 @@ import numtools
 
 from functools import lru_cache
 
+@lru_cache()
 def performance_from_overhead(parameters=None, overhead=1, num_samples=100):
-    '''compute the average performance impact due to partitioning.
+    '''compute the average performance at some fixed overhead.
 
     args:
 
@@ -211,4 +212,4 @@ def load_from_order(parameters=None, overhead=None):
     '''compute the load for some overhead.'''
     assert isinstance(parameters, model.SystemParameters)
     assert overhead is not None
-    return {'load': parameters.unpartitioned_load(overhead=1)}
+    return {'load': parameters.unpartitioned_load(overhead=overhead)}
