@@ -32,7 +32,7 @@ from solvers.assignmentloader import AssignmentLoader
 from solvers.randomsolver import RandomSolver
 from solvers.heuristicsolver import HeuristicSolver
 from assignments.cached import CachedAssignment
-from examples import load_delay_plot, complexity_plot
+from plot import load_delay_plot, complexity_plot
 
 # Set default plot fonts
 rc('font', **{'family':'sans-serif', 'sans-serif':['Helvetica']})
@@ -146,6 +146,9 @@ def stats_plots():
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
 
+    plt.rc('pgf',  texsystem='pdflatex')
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
     _, ax = plt.subplots()
 
     # Uncoded server runtime
@@ -165,17 +168,27 @@ def stats_plots():
                     label='Coded')
 
     plt.grid(True, which='both')
-    plt.ylabel('Runtime Probability Density', fontsize=28)
+    plt.ylabel('Delay Probability Density', fontsize=28)
     plt.xlabel('Time', fontsize=28)
     plt.xticks(range(13), labels)
-    plt.setp(ax.get_xticklabels(), fontsize=25)
-    plt.setp(ax.get_yticklabels(), fontsize=25)
-    # plt.title('Server Runtime')
-
-    plt.legend(numpoints=1, fontsize=25, loc='best')
+    plt.setp(ax.get_xticklabels(), fontsize=24)
+    plt.setp(ax.get_yticklabels(), fontsize=24)
+    plt.title('Delay per Server', fontsize=24)
+    plt.legend(
+        numpoints=1,
+        shadow=True,
+        labelspacing=0,
+        fontsize=24,
+        loc='best',
+        fancybox=False,
+        borderaxespad=0.1,
+    )
     plt.tight_layout()
-    plt.savefig('./plots/report/runtime/subtask.pgf')
+    plt.savefig('./plots/itw/subtask.pgf')
 
+    plt.rc('pgf',  texsystem='pdflatex')
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
     _, ax = plt.subplots()
 
     # Uncoded overall runtime
@@ -195,17 +208,25 @@ def stats_plots():
                     label='Coded')
 
     plt.grid(True, which='both')
-    plt.ylabel('Runtime Probability Density', fontsize=28)
+    plt.ylabel('Delay Probability Density', fontsize=28)
     plt.xlabel('Time', fontsize=28)
     plt.xticks(range(13), labels)
-    plt.setp(ax.get_xticklabels(), fontsize=25)
-    plt.setp(ax.get_yticklabels(), fontsize=25)
-    # plt.title('Overall Runtime')
-    plt.legend(numpoints=1, fontsize=25, loc='best')
+    plt.setp(ax.get_xticklabels(), fontsize=24)
+    plt.setp(ax.get_yticklabels(), fontsize=24)
+    plt.title('Overall Delay', fontsize=24)
+    plt.legend(
+        numpoints=1,
+        shadow=True,
+        labelspacing=0,
+        fontsize=24,
+        loc='best',
+        fancybox=False,
+        borderaxespad=0.1,
+    )
 
     plt.autoscale(enable=True)
     plt.tight_layout()
-    plt.savefig('./plots/report/runtime/overall.pgf')
+    plt.savefig('./plots/itw/overall.pgf')
     # plt.subplots_adjust(wspace=0, hspace=0.2)
 
     plt.show()
@@ -526,6 +547,6 @@ def main():
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     # shiftexp_plot()
-    # stats_plots()
-    main()
+    stats_plots()
+    # main()
     # example1_plots()
