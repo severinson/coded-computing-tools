@@ -136,7 +136,7 @@ def _rows_from_batches(parameters=None, batches=None):
     return len(batches) * parameters.rows_per_batch
 
 def rows_from_q(parameters=None, q=None, num_samples=1000):
-    '''compute the average number of unique rows stored at num_servers servers'''
+    '''compute the average number of unique rows stored at q servers'''
     assert isinstance(parameters, model.SystemParameters)
     if q is None:
         q = parameters.q
