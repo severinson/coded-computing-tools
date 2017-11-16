@@ -55,10 +55,13 @@ def main():
                                parameter_eval=analytic.stragglerc_performance,
                                directory='./results/Stragglerc/')
 
-    lt_partitions = [rateless.evaluate(partition_parameters[0])] * len(partition_parameters)
+    lt_partitions = [rateless.evaluate(
+        partition_parameters[0],
+        target_overhead=1.3,
+        target_failure_probability=0.5,
+    )] * len(partition_parameters)
     lt_partitions = pd.DataFrame(lt_partitions)
     lt_partitions['partitions'] = [parameters.num_partitions for parameters in partition_parameters]
-    print(lt_partitions)
 
     # Simulate partition parameters
     heuristic_partitions = heuristic_sim.simulate_parameter_list(partition_parameters)
@@ -226,7 +229,7 @@ def main():
         normalize=uncoded_partitions,
         show=False,
     )
-    plt.savefig('./plots/journal/partitions_3.pdf')
+    plt.savefig('./plots/journal/partitions_lt.pdf')
     plt.show()
     return
 
