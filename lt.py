@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker
+import scipy.integrate as integrate
 
 from mpl_toolkits.mplot3d import Axes3D
 from plot import get_parameters_size, get_parameters_size_2
@@ -301,6 +302,51 @@ def plots():
 
     plt.show()
 
+def plot_tfp(target_failure_probability=1e-2, target_overhead=1.1):
+    parameters = get_parameters_size()[0]
+    # c, delta = pyrateless.heuristic(
+    #     num_inputs=parameters.num_source_rows,
+    #     target_failure_probability=target_failure_probability,
+    #     target_overhead=target_overhead,
+    # )
+
+    # # compute the robust Soliton distribution mode
+    # mode = pyrateless.coding.stats.mode_from_delta_c(
+    #     num_inputs=parameters.num_source_rows,
+    #     delta=delta,
+    #     c=c,
+    # )
+
+
+    c, delta, mode = (0.00158028992469, 0.18017545342445374, 3999.0)
+
+    # create a distribution object
+    soliton = pyrateless.Soliton(
+        symbols=parameters.num_source_rows,
+        mode=mode,
+        failure_prob=delta,
+    )
+
+    overhead = np.linspace(1, 2, 100)
+    data = [1-pyrateless.optimize.decoding_failure_prob_estimate(
+        soliton=soliton,
+        num_inputs=parameters.num_source_rows,
+        overhead=x,
+    ) for x in overhead]
+    integral = integrate.quad(
+        lambda x: 1-pyrateless.optimize.decoding_failure_prob_estimate(
+            soliton=soliton,
+            num_inputs=parameters.num_source_rows,
+            overhead=x,
+        ), 1, 20
+    )
+    print('DATA:', data)
+    print('integral:', integral)
+
+    plt.figure()
+    plt.plot(overhead, data)
+    plt.show()
+
 def main():
     parameter_iter = get_parameters_size_2()
     target_overhead_iter = [1.1, 1.2, 1.3]
@@ -336,13 +382,14 @@ def main():
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
-    for p in get_parameters_size():
-        print(p)
-    print('--------------------')
+    # for p in get_parameters_size():
+    #     print(p)
+    # print('--------------------')
     
     # main()
     # plots()
-    num_inputs = 3400
-    pattern = './pyrateless_cache_1/' + str(num_inputs) + '*.csv'
+    # num_inputs = 3400
+    # pattern = './pyrateless_cache_1/' + str(num_inputs) + '*.csv'
     # merge_cached(pattern=pattern, filename='merged_3400.csv')
     # plot_cached()
+    plot_tfp()
