@@ -35,7 +35,7 @@ import numtools
 from functools import lru_cache
 
 @lru_cache()
-def performance_from_overhead(parameters=None, overhead=1, num_samples=100):
+def performance_from_overhead(parameters=None, overhead=1, num_samples=1000):
     '''compute the average performance at some fixed overhead.
 
     args:
