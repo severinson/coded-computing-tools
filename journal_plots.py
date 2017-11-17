@@ -13,11 +13,234 @@ import rateless
 from functools import partial
 from plot import get_parameters_size, load_delay_plot
 from plot import get_parameters_partitioning, get_parameters_partitioning_2
+from plot import get_parameters_N
 from simulation import Simulator
 from evaluation import analytic
 from evaluation.binsearch import SampleEvaluator
 from solvers.randomsolver import RandomSolver
 from solvers.heuristicsolver import HeuristicSolver
+
+def N_n_ratio_plots():
+    parameters = get_parameters_N()
+
+    # simulate lt code performance
+    target_overhead = 1.4
+    lt = [rateless.evaluate(
+        p,
+        target_overhead=target_overhead,
+        target_failure_probability=1e-3,
+    ) for p in parameters]
+    lt = pd.DataFrame(lt)
+
+    # Setup the evaluators
+    sample_100 = SampleEvaluator(num_samples=100)
+    sample_1000 = SampleEvaluator(num_samples=1000)
+
+    # Setup the simulators
+    heuristic_sim = Simulator(
+        solver=HeuristicSolver(),
+        assignment_eval=sample_1000,
+        directory='./results/Heuristic/',
+    )
+
+    uncoded_sim = Simulator(
+        solver=None, assignments=1,
+        parameter_eval=analytic.uncoded_performance,
+        directory='./results/Uncoded/',
+    )
+
+    # run simulations
+    uncoded = uncoded_sim.simulate_parameter_list(parameters)
+    heuristic = heuristic_sim.simulate_parameter_list(parameters)
+
+    # include encoding/decoding delay
+    heuristic.set_encode_delay(function=complexity.partitioned_encode_delay)
+    heuristic.set_reduce_delay(function=complexity.partitioned_reduce_delay)
+
+    # plot settings
+    settings_lt = {
+        'label': 'LT tfp=1e-1',
+        'color': 'g',
+        'marker': '-o',
+        'linewidth': 2,
+        'size': 7}
+    settings_heuristic = {
+        'label': 'BDC heuristic',
+        'color': 'k',
+        'marker': 'x--',
+        'linewidth': 4,
+        'size': 8
+    }
+
+    load_delay_plot(
+        [lt, heuristic],
+        [settings_lt, settings_heuristic],
+        'num_inputs',
+        xlabel='$\mathsf{Vectors}\;N$',
+        normalize=uncoded,
+        show=False,
+    )
+    plt.savefig('./plots/journal/N_n_ratio_3.png')
+    plt.show()
+
+def lt_tfp_plots():
+
+    # get system parameters
+    partition_parameters = get_parameters_partitioning_2()
+
+    # set the target overhead
+    target_overhead = 1.3
+
+    # simulate lt code performance
+    lt_partitions = [rateless.evaluate(
+        partition_parameters[0],
+        target_overhead=target_overhead,
+        target_failure_probability=1e-1,
+    )] * len(partition_parameters)
+    lt_partitions_1 = pd.DataFrame(lt_partitions)
+    lt_partitions_1['partitions'] = [parameters.num_partitions
+                                     for parameters in partition_parameters]
+
+    lt_partitions = [rateless.evaluate(
+        partition_parameters[0],
+        target_overhead=target_overhead,
+        target_failure_probability=1e-2,
+    )] * len(partition_parameters)
+    lt_partitions_2 = pd.DataFrame(lt_partitions)
+    lt_partitions_2['partitions'] = [parameters.num_partitions
+                                     for parameters in partition_parameters]
+
+    lt_partitions = [rateless.evaluate(
+        partition_parameters[0],
+        target_overhead=target_overhead,
+        target_failure_probability=1e-3,
+    )] * len(partition_parameters)
+    lt_partitions_3 = pd.DataFrame(lt_partitions)
+    lt_partitions_3['partitions'] = [parameters.num_partitions
+                                     for parameters in partition_parameters]
+
+    lt_partitions = [rateless.evaluate(
+        partition_parameters[0],
+        target_overhead=target_overhead,
+        target_failure_probability=1e-4,
+    )] * len(partition_parameters)
+    lt_partitions_4 = pd.DataFrame(lt_partitions)
+    lt_partitions_4['partitions'] = [parameters.num_partitions
+                                     for parameters in partition_parameters]
+
+    lt_partitions = [rateless.evaluate(
+        partition_parameters[0],
+        target_overhead=target_overhead,
+        target_failure_probability=1e-5,
+    )] * len(partition_parameters)
+    lt_partitions_5 = pd.DataFrame(lt_partitions)
+    lt_partitions_5['partitions'] = [parameters.num_partitions
+                                     for parameters in partition_parameters]
+
+    # Setup the evaluators
+    sample_100 = SampleEvaluator(num_samples=100)
+    sample_1000 = SampleEvaluator(num_samples=1000)
+
+    # Setup the simulators
+    heuristic_sim = Simulator(solver=HeuristicSolver(),
+                              assignment_eval=sample_1000,
+                              directory='./results/Heuristic/')
+
+    uncoded_sim = Simulator(solver=None, assignments=1,
+                            parameter_eval=analytic.uncoded_performance,
+                            directory='./results/Uncoded/')
+
+    # run simulations
+    uncoded_partitions = uncoded_sim.simulate_parameter_list(partition_parameters)
+    heuristic_partitions = heuristic_sim.simulate_parameter_list(partition_parameters)
+
+    # include encoding/decoding delay
+    heuristic_partitions.set_encode_delay(function=complexity.partitioned_encode_delay)
+    heuristic_partitions.set_reduce_delay(function=complexity.partitioned_reduce_delay)
+
+    settings_1 = {
+        'label': 'LT tfp=1e-1',
+        'color': 'g',
+        'marker': '-o',
+        'linewidth': 2,
+        'size': 7}
+    settings_2 = {
+        'label': 'LT tfp=1e-2',
+        'color': 'm',
+        'marker': 'd-',
+        'linewidth': 2,
+        'size': 7}
+    settings_3 = {
+        'label': 'LT tfp=1e-3',
+        'color': 'r',
+        'marker': '-H',
+        'linewidth': 2,
+        'size': 7}
+    settings_4 = {
+        'label': 'LT tfp=1e-4',
+        'color': 'b',
+        'marker': '-^',
+        'linewidth': 2,
+        'size': 8}
+    settings_5 = {
+        'label': 'LT tfp=1e-5',
+        'color': 'c-',
+        'marker': 'v',
+        'linewidth': 3,
+        'size': 8
+    }
+    settings_heuristic = {
+        'label': 'BDC heuristic',
+        'color': 'k',
+        'marker': 'x--',
+        'linewidth': 4,
+        'size': 8
+    }
+
+    load_delay_plot(
+        [lt_partitions_1,
+         lt_partitions_2,
+         lt_partitions_3,
+         lt_partitions_4,
+         # lt_partitions_5,
+        ],
+        [settings_1,
+         settings_2,
+         settings_3,
+         settings_4,
+         # settings_5,
+        ],
+        'partitions',
+        xlabel='$\mathsf{Partitions}\;T$',
+        normalize=uncoded_partitions,
+        show=False,
+    )
+    plt.savefig('./plots/journal/N_lt_3_tfp_comparison.png')
+
+    load_delay_plot(
+        [lt_partitions_1,
+         lt_partitions_2,
+         lt_partitions_3,
+         lt_partitions_4,
+         # lt_partitions_5,
+         heuristic_partitions,
+        ],
+        [settings_1,
+         settings_2,
+         settings_3,
+         settings_4,
+         # settings_5,
+         settings_heuristic,
+        ],
+        'partitions',
+        xlabel='$\mathsf{Partitions}\;T$',
+        normalize=uncoded_partitions,
+        show=False,
+    )
+    plt.savefig('./plots/journal/N_lt_3_tfp_comparison_bdc.png')
+
+    plt.show()
+    return
 
 def main():
     '''Create plots for the ITW presentation.'''
@@ -55,13 +278,50 @@ def main():
                                parameter_eval=analytic.stragglerc_performance,
                                directory='./results/Stragglerc/')
 
+    # lt_partitions = [rateless.evaluate(
+    #     partition_parameters[0],
+    #     target_overhead=1.3,
+    #     target_failure_probability=1e-1,
+    # )] * len(partition_parameters)
+    # lt_partitions_1 = pd.DataFrame(lt_partitions)
+    # lt_partitions_1['partitions'] = [parameters.num_partitions
+    #                                  for parameters in partition_parameters]
+
+    # lt_partitions = [rateless.evaluate(
+    #     partition_parameters[0],
+    #     target_overhead=1.3,
+    #     target_failure_probability=1e-2,
+    # )] * len(partition_parameters)
+    # lt_partitions_2 = pd.DataFrame(lt_partitions)
+    # lt_partitions_2['partitions'] = [parameters.num_partitions
+    #                                  for parameters in partition_parameters]
+
+    # lt_partitions = [rateless.evaluate(
+    #     partition_parameters[0],
+    #     target_overhead=1.3,
+    #     target_failure_probability=1e-3,
+    # )] * len(partition_parameters)
+    # lt_partitions_3 = pd.DataFrame(lt_partitions)
+    # lt_partitions_3['partitions'] = [parameters.num_partitions
+    #                                  for parameters in partition_parameters]
+
+    # lt_partitions = [rateless.evaluate(
+    #     partition_parameters[0],
+    #     target_overhead=1.3,
+    #     target_failure_probability=1e-4,
+    # )] * len(partition_parameters)
+    # lt_partitions_4 = pd.DataFrame(lt_partitions)
+    # lt_partitions_4['partitions'] = [parameters.num_partitions
+    #                                  for parameters in partition_parameters]
+
     lt_partitions = [rateless.evaluate(
         partition_parameters[0],
         target_overhead=1.3,
-        target_failure_probability=0.5,
+        target_failure_probability=1e-5,
     )] * len(partition_parameters)
-    lt_partitions = pd.DataFrame(lt_partitions)
-    lt_partitions['partitions'] = [parameters.num_partitions for parameters in partition_parameters]
+    lt_partitions_5 = pd.DataFrame(lt_partitions)
+    lt_partitions_5['partitions'] = [parameters.num_partitions
+                                     for parameters in partition_parameters]
 
     # Simulate partition parameters
     heuristic_partitions = heuristic_sim.simulate_parameter_list(partition_parameters)
@@ -222,17 +482,28 @@ def main():
     # plt.savefig('./plots/itw/partitions_2.pdf')
 
     load_delay_plot(
-        [heuristic_partitions, random_partitions, lt_partitions],
+        [lt_partitions_1, lt_partitions_2, lt_partitions_3],
         [heuristic_plot_settings, random_plot_settings, lt_plot_settings],
         'partitions',
         xlabel='$\mathsf{Partitions}\;T$',
         normalize=uncoded_partitions,
         show=False,
     )
-    plt.savefig('./plots/journal/partitions_lt.pdf')
+
+    # load_delay_plot(
+    #     [heuristic_partitions, random_partitions, lt_partitions],
+    #     [heuristic_plot_settings, random_plot_settings, lt_plot_settings],
+    #     'partitions',
+    #     xlabel='$\mathsf{Partitions}\;T$',
+    #     normalize=uncoded_partitions,
+    #     show=False,
+    # )
+    # plt.savefig('./plots/journal/partitions_lt.pdf')
     plt.show()
     return
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
-    main()
+    # N_n_ratio_plots()
+    lt_tfp_plots()
+    # main()
