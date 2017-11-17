@@ -7,6 +7,7 @@ import complexity
 import numpy as np
 import matplotlib.pyplot as plt
 import stats
+import model
 
 from plot import get_parameters_partitioning, get_parameters_size, load_delay_plot
 from simulation import Simulator
@@ -294,7 +295,26 @@ def main():
     plt.savefig('./plots/itw/partitions_3.pdf')
     return
 
+def get_parameters_example():
+    rows_per_batch = 2
+    num_servers = 4
+    q = 2
+    num_outputs = q
+    server_storage = 1
+    num_partitions = 6
+    parameters = model.SystemParameters(
+        rows_per_batch=rows_per_batch,
+        num_servers=num_servers,
+        q=q,
+        num_outputs=num_outputs,
+        server_storage=server_storage,
+        num_partitions=num_partitions,
+    )
+    print(parameters)
+    return parameters
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
-    main()
+    # main()
     # stats_plots()
+    get_parameters_example()
