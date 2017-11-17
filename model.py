@@ -104,7 +104,7 @@ class SystemParameters(object):
             self.num_columns = self.num_source_rows
 
         assert num_source_rows / num_partitions % 1 == 0, \
-            'There must be an integer number of source rows per partition.'
+            'num_partitions must divide num_source_rows %d, %d' % (num_partitions, num_source_rows)
 
         assert num_coded_rows / num_partitions % 1 == 0, \
             'There must be an integer number of coded rows per partition. num_partitions: %d' \
