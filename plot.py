@@ -53,6 +53,29 @@ def get_parameters_size_2():
         parameters.append(par)
     return parameters
 
+def get_parameters_N():
+    '''Get a list of parameters for the N over n ratio plot.'''
+    rows_per_batch = 50
+    num_servers = 9
+    q = 6
+    num_outputs = q
+    server_storage = 1/3
+    num_partitions = 50
+    parameters = list()
+    for i in range(1, 11):
+        num_outputs = i * q * 10
+        par = model.SystemParameters(
+            rows_per_batch=rows_per_batch,
+            num_servers=num_servers,
+            q=q,
+            num_outputs=num_outputs,
+            server_storage=server_storage,
+            num_partitions=num_partitions,
+        )
+        parameters.append(par)
+
+    return parameters
+
 def get_parameters_partitioning():
     '''Get a list of parameters for the partitioning plot.'''
     rows_per_batch = 250
@@ -66,9 +89,14 @@ def get_parameters_partitioning():
 
     parameters = list()
     for partitions in num_partitions:
-        par = model.SystemParameters(rows_per_batch=rows_per_batch, num_servers=num_servers, q=q,
-                                     num_outputs=num_outputs, server_storage=server_storage,
-                                     num_partitions=partitions)
+        par = model.SystemParameters(
+            rows_per_batch=rows_per_batch,
+            num_servers=num_servers,
+            q=q,
+            num_outputs=num_outputs,
+            server_storage=server_storage,
+            num_partitions=partitions,
+        )
         parameters.append(par)
 
     return parameters
@@ -86,9 +114,14 @@ def get_parameters_partitioning_2():
 
     parameters = list()
     for partitions in num_partitions:
-        par = model.SystemParameters(rows_per_batch=rows_per_batch, num_servers=num_servers, q=q,
-                                     num_outputs=num_outputs, server_storage=server_storage,
-                                     num_partitions=partitions)
+        par = model.SystemParameters(
+            rows_per_batch=rows_per_batch,
+            num_servers=num_servers,
+            q=q,
+            num_outputs=num_outputs,
+            server_storage=server_storage,
+            num_partitions=partitions,
+        )
         parameters.append(par)
 
     return parameters
@@ -249,7 +282,7 @@ def plot_result(result, plot_settings, xdata, ydata, xlabel='',
     '''
     # assert isinstance(result, SimulatorResult)
     assert isinstance(plot_settings, dict)
-    assert xdata == 'partitions' or xdata == 'servers'
+    # assert xdata == 'partitions' or xdata == 'servers'
     assert ydata == 'load' or ydata == 'delay' or ydata == 'reduce' or ydata == 'encode'
     assert isinstance(xlabel, str)
     assert isinstance(ylabel, str)
@@ -272,13 +305,13 @@ def plot_result(result, plot_settings, xdata, ydata, xlabel='',
 
     xarray = result[xdata]
     if np.size(result[ydata], 0) == 3:
-        ymean = result[ydata][0, :]
-        ymin = result[ydata][1, :]
-        ymax = result[ydata][2, :]
+        ymean = result[ydata][0, :].copy()
+        ymin = result[ydata][1, :].copy()
+        ymax = result[ydata][2, :].copy()
     else:
-        ymean = result[ydata]
-        ymin = ymean
-        ymax = ymean
+        ymean = result[ydata].copy()
+        ymin = ymean.copy()
+        ymax = ymean.copy()
     yerr = np.zeros([2, len(ymean)])
     yerr[0, :] = ymean - ymin
     yerr[1, :] = ymax - ymean
