@@ -104,6 +104,10 @@ class SimulatorResult(object):
             return np.asarray([parameters.num_servers
                                for parameters in self.parameter_list])
 
+        if key == 'num_inputs':
+            return np.asarray(
+                [parameters.num_outputs for parameters in self.parameter_list]
+            )
         raise SimulatorError('No data for key {}.'.format(key))
 
     def append_results(self, index, dataframe):

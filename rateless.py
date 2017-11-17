@@ -63,10 +63,19 @@ def evaluate(parameters, target_overhead=None, target_failure_probability=None):
     }, overhead=target_overhead)
 
     # average the columns of the df
-    result = {label:df[label].mean() for label in df}
+    mean = {label:df[label].mean() for label in df}
 
-    # scale the number of encoding/decoding multiplications
+    # store the results we return in a new dict. we do not return the mean dict
+    # as we do not scale all of its values correctly when the number of columns
+    # or outputs is not 1.
+    result = dict()
+
+    # we encode each column of the input matrix separately
+    result['encoding_multiplications'] = mean['encoding_multiplications']
     result['encoding_multiplications'] *= parameters.num_columns
+
+    # we decode each output vector separately
+    result['decoding_multiplications'] = mean['decoding_multiplications']
     result['decoding_multiplications'] *= parameters.num_outputs
 
     # compute encoding delay
@@ -83,15 +92,14 @@ def evaluate(parameters, target_overhead=None, target_failure_probability=None):
         parameter=result['decoding_multiplications'],
     )
 
-    # compute map delay
-    # TODO: We assume that q servers is always enough
+    # compute the complexity of the map computation (the matrix multiplication)
     rows_per_server = parameters.server_storage * parameters.num_source_rows
     map_complexity = complexity.matrix_vector_complexity(
         rows=rows_per_server,
         cols=parameters.num_columns,
     )
 
-    # TODO: stuff
+    # simulate the performance at these parameters
     result.update(performance_integral(
         parameters=parameters,
         target_overhead=target_overhead,
@@ -99,25 +107,27 @@ def evaluate(parameters, target_overhead=None, target_failure_probability=None):
         delta=delta,
     ))
 
-    # scale map delay by its complexity and normalize
+    # scale the map delay by its complexity
     result['delay'] *= map_complexity
 
-    # add encoding/decoding to the delay
+    # add encoding/decoding to the overall delay
     result['delay'] += result['encode']
     result['delay'] += result['reduce']
 
     # normalize
     result['delay'] /= parameters.num_source_rows
 
-    # store the number of servers and partitions to plot against later
+    # store some parameters to plot against
     # TODO: This overwrites servers returned from overhead module
     result['servers'] = parameters.num_servers
     result['partitions'] = parameters.num_partitions
+    result['num_inputs'] = parameters.num_outputs
 
     return result
 
 @lru_cache()
-def performance_integral(parameters=None, target_overhead=None, mode=None, delta=None, samples=100):
+def performance_integral(parameters=None, target_overhead=None,
+                         mode=None, delta=None, samples=100):
     '''compute average performance by taking into account the probability of
     finishing at different levels of overhead.
 
@@ -136,7 +146,8 @@ def performance_integral(parameters=None, target_overhead=None, mode=None, delta
         failure_prob=delta,
     )
 
-    # compute the probability of decoding at the levels of overhead
+    # compute the probability of decoding at discrete levels of overhead. the
+    # first element is zero to take make the pdf sum to 1.
     decoding_cdf = np.fromiter(
         [0] + [1-pyrateless.optimize.decoding_failure_prob_estimate(
             soliton=soliton,
@@ -145,13 +156,15 @@ def performance_integral(parameters=None, target_overhead=None, mode=None, delta
         ], dtype=float)
     decoding_pdf = np.diff(decoding_cdf)
 
-    print('cdf', decoding_cdf, len(decoding_cdf))
-    print('pdf', decoding_pdf, len(decoding_pdf))
-    print('overhead', overhead_levels, len(overhead_levels))
+    # print('cdf', decoding_cdf, len(decoding_cdf))
+    # print('pdf', decoding_pdf, len(decoding_pdf))
+    # print('overhead', overhead_levels, len(overhead_levels))
 
     # compute load/delay at the levels of overhead
     results = list()
     for overhead_level, decoding_probability in zip(overhead_levels, decoding_pdf):
+
+        # monte carlo simulation of the load/delay at this overhead
         df = overhead.performance_from_overhead(
             parameters=parameters,
             overhead=overhead_level,
@@ -168,6 +181,4 @@ def performance_integral(parameters=None, target_overhead=None, mode=None, delta
 
     # create a dataframe and sum along the columns
     df = pd.DataFrame(results)
-    print('here')
-    print(df)
     return {label:df[label].sum() for label in df}
