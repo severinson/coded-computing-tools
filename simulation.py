@@ -108,6 +108,11 @@ class SimulatorResult(object):
             return np.asarray(
                 [parameters.num_outputs for parameters in self.parameter_list]
             )
+
+        if key == 'num_columns':
+            return np.asarray(
+                [parameters.num_columns for parameters in self.parameter_list]
+            )
         raise SimulatorError('No data for key {}.'.format(key))
 
     def append_results(self, index, dataframe):
@@ -484,7 +489,10 @@ class Simulator(object):
             # Otherwise find an assignment and evaluate it.
             else:
                 # Create an assignment
-                assignment = self.solver.solve(parameters, assignment_type=self.assignment_type)
+                assignment = self.solver.solve(
+                    parameters,
+                    assignment_type=self.assignment_type
+                )
                 if not assignment.is_valid():
                     logging.error('Assignment invalid for parameters: %s.', str(parameters))
                     return pd.DataFrame()
