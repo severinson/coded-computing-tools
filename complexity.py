@@ -43,9 +43,12 @@ def partitioned_encode_delay(parameters, partitions=None):
     if partitions is None:
         partitions = parameters.num_partitions
 
-    delay = stats.order_mean_shiftexp(parameters.num_servers, parameters.num_servers)
+    delay = stats.order_mean_shiftexp(
+        parameters.num_servers,
+        parameters.num_servers,
+    )
 
-    # Scale by encoding complexity
+    # Scale by encoding complexity per server
     delay *= parameters.num_source_rows / partitions
     delay *= parameters.num_coded_rows * parameters.num_columns
     delay /= parameters.num_servers
@@ -93,9 +96,12 @@ def partitioned_reduce_delay(parameters, partitions=None):
     if partitions is None:
         partitions = parameters.num_partitions
 
-    delay = stats.order_mean_shiftexp(parameters.q, parameters.q)
+    delay = stats.order_mean_shiftexp(
+        parameters.q,
+        parameters.q,
+    )
 
-    # Scale by decoding complexity
+    # Scale by decoding complexity per server
     delay *= block_diagonal_decoding_complexity(
         parameters.num_coded_rows,
         1,
