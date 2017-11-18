@@ -72,11 +72,11 @@ def evaluate(parameters, target_overhead=None, target_failure_probability=None):
 
     # we encode each column of the input matrix separately
     result['encoding_multiplications'] = mean['encoding_multiplications']
-    result['encoding_multiplications'] *= parameters.num_columns
+    result['encoding_multiplications'] *= parameters.num_columns /parameters.num_servers
 
     # we decode each output vector separately
     result['decoding_multiplications'] = mean['decoding_multiplications']
-    result['decoding_multiplications'] *= parameters.num_outputs
+    result['decoding_multiplications'] *= parameters.num_outputs / parameters.q
 
     # compute encoding delay
     result['encode'] = stats.order_mean_shiftexp(
@@ -99,13 +99,15 @@ def evaluate(parameters, target_overhead=None, target_failure_probability=None):
         cols=parameters.num_columns,
     )
 
-    # simulate the performance at these parameters
-    result.update(performance_integral(
+    # simulate the map phase load/delay
+    simulated = performance_integral(
         parameters=parameters,
         target_overhead=target_overhead,
         mode=mode,
         delta=delta,
-    ))
+    )
+    result['delay'] = simulated['delay']
+    result['load'] = simulated['load']
 
     # scale the map delay by its complexity
     result['delay'] *= map_complexity
@@ -116,12 +118,14 @@ def evaluate(parameters, target_overhead=None, target_failure_probability=None):
 
     # normalize
     result['delay'] /= parameters.num_source_rows
+    result['encode'] /= parameters.num_source_rows
+    result['reduce'] /= parameters.num_source_rows
 
     # store some parameters to plot against
-    # TODO: This overwrites servers returned from overhead module
     result['servers'] = parameters.num_servers
     result['partitions'] = parameters.num_partitions
     result['num_inputs'] = parameters.num_outputs
+    result['num_columns'] = parameters.num_columns
 
     return result
 
