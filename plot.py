@@ -54,16 +54,19 @@ def get_parameters_size_2():
     return parameters
 
 def get_parameters_N():
-    '''Get a list of parameters for the N over n ratio plot.'''
-    rows_per_batch = 50
+    '''Get a list of parameters for the N to n ratio plot.'''
+    rows_per_batch = 100
     num_servers = 9
     q = 6
     num_outputs = q
     server_storage = 1/3
-    num_partitions = 50
+    num_partitions = 240
+    num_outputs = q
+    # num_columns = 20000
     parameters = list()
     for i in range(1, 11):
-        num_outputs = i * q * 10
+        # num_outputs = i * q
+        num_columns = i * 4
         par = model.SystemParameters(
             rows_per_batch=rows_per_batch,
             num_servers=num_servers,
@@ -71,6 +74,7 @@ def get_parameters_N():
             num_outputs=num_outputs,
             server_storage=server_storage,
             num_partitions=num_partitions,
+            num_columns=num_columns,
         )
         parameters.append(par)
 
@@ -127,7 +131,8 @@ def get_parameters_partitioning_2():
     return parameters
 
 
-def load_delay_plot(results, plot_settings, xdata, xlabel='', normalize=None, legend='load', show=True):
+def load_delay_plot(results, plot_settings, xdata, xlabel='',
+                    normalize=None, legend='load', show=True):
     '''Create a plot with two subplots for load and delay respectively.
 
     Args:
@@ -202,10 +207,11 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='', normalize=None, le
         plt.show()
     return
 
-def complexity_plot(results, plot_settings, xdata, xlabel='', normalize=None, phase='reduce'):
-    '''Plot the encoding or decoding delay.
+def encode_decode_plot(results, plot_settings, xdata, xlabel='',
+                       normalize=None, legend='load', show=True):
+    '''Create a plot with two subplots for encoding and decoding delay respectively.
 
-    Args:
+    args:
 
     results: SimulatorResult to plot.
 
@@ -218,38 +224,135 @@ def complexity_plot(results, plot_settings, xdata, xlabel='', normalize=None, ph
     normalize: If a SimulatorResult is provided, all ploted results
     are normalized by this one.
 
-    phase: Phase to plot the delay of (encode or reduce)
+    legend: Place the legend in the load or delay plot by setting this
+    argument to 'load' or 'delay'.
+
+    show: show the plots if True.
 
     '''
     assert isinstance(results, list)
     assert isinstance(plot_settings, list)
-    # assert isinstance(normalize, SimulatorResult) or normalize is None
-    assert phase == 'encode' or phase == 'reduce'
-
-    # Create plot window
-    _ = plt.figure(figsize=(8,5))
+    assert isinstance(show, bool)
 
     plt.rc('pgf',  texsystem='pdflatex')
     plt.rc('text', usetex=True)
     # plt.rc('font', family='serif')
     plt.rcParams['text.latex.preamble'] = [r'\usepackage{lmodern}']
+    _ = plt.figure(figsize=(10,6))
 
-    # Plot complexity
-    fig, ax = plt.subplots(figsize=(6,6))
-    plt.setp(ax.get_xticklabels(), fontsize=25)
-    plt.setp(ax.get_yticklabels(), fontsize=25)
+    # Plot load
+    plt.autoscale(enable=True)
+    plt.tight_layout()
+    ax1 = plt.subplot(211)
+    plt.setp(ax1.get_xticklabels(), fontsize=25, visible=False)
+    plt.setp(ax1.get_yticklabels(), fontsize=25)
     for result, plot_setting in zip(results, plot_settings):
-        plot_result(result, plot_setting, xdata, phase, xlabel=xlabel,
-                    ylabel=r'$D_{\mathsf{' + phase + r'}}$', subplot=True, normalize=normalize,
-                    plot_type='loglog')
+        plot_result(
+            result,
+            plot_setting,
+            xdata,
+            'encode',
+            ylabel='Encoding',
+            subplot=True,
+            normalize=normalize
+        )
 
-    plt.legend(numpoints=1, shadow=True, labelspacing=0,
-               fontsize=24, loc='best')
+    plt.margins(y=0.1)
+    if legend == 'encode':
+        plt.legend(
+            numpoints=1,
+            shadow=True,
+            labelspacing=0,
+            fontsize=24,
+            loc='best',
+            fancybox=False,
+            borderaxespad=0.1,
+        )
+
+    # Plot delay
+    ax2 = plt.subplot(212, sharex=ax1)
+    plt.setp(ax2.get_xticklabels(), fontsize=25)
+    plt.setp(ax2.get_yticklabels(), fontsize=25)
+    for result, plot_setting in zip(results, plot_settings):
+        plot_result(
+            result,
+            plot_setting,
+            xdata,
+            'reduce',
+            xlabel=xlabel,
+            ylabel='Decode',
+            subplot=True,
+            normalize=normalize
+        )
+
+    if legend == 'decode':
+        plt.legend(
+            numpoints=1,
+            shadow=True,
+            labelspacing=0,
+            fontsize=24,
+            loc='best',
+            fancybox=False,
+            borderaxespad=0.1,
+        )
+
     plt.autoscale(enable=True)
     plt.tight_layout()
     plt.subplots_adjust(wspace=0, hspace=0.2)
-    plt.show()
+    plt.margins(y=0.1)
+    if show:
+        plt.show()
     return
+
+# def complexity_plot(results, plot_settings, xdata, xlabel='',
+#                     normalize=None, phase='reduce'):
+#     '''Plot the encoding or decoding delay.
+
+#     Args:
+
+#     results: SimulatorResult to plot.
+
+#     plot_settings: List of dicts with plot settings.
+
+#     xdata: Label of the X axis data ('partitions' or 'servers').
+
+#     xlabel: X axis label
+
+#     normalize: If a SimulatorResult is provided, all ploted results
+#     are normalized by this one.
+
+#     phase: Phase to plot the delay of (encode or reduce)
+
+#     '''
+#     assert isinstance(results, list)
+#     assert isinstance(plot_settings, list)
+#     # assert isinstance(normalize, SimulatorResult) or normalize is None
+#     assert phase == 'encode' or phase == 'reduce'
+
+#     # Create plot window
+#     _ = plt.figure(figsize=(8,5))
+
+#     plt.rc('pgf',  texsystem='pdflatex')
+#     plt.rc('text', usetex=True)
+#     # plt.rc('font', family='serif')
+#     plt.rcParams['text.latex.preamble'] = [r'\usepackage{lmodern}']
+
+#     # Plot complexity
+#     fig, ax = plt.subplots(figsize=(6,6))
+#     plt.setp(ax.get_xticklabels(), fontsize=25)
+#     plt.setp(ax.get_yticklabels(), fontsize=25)
+#     for result, plot_setting in zip(results, plot_settings):
+#         plot_result(result, plot_setting, xdata, phase, xlabel=xlabel,
+#                     ylabel=r'$D_{\mathsf{' + phase + r'}}$', subplot=True, normalize=normalize,
+#                     plot_type='loglog')
+
+#     plt.legend(numpoints=1, shadow=True, labelspacing=0,
+#                fontsize=24, loc='best')
+#     plt.autoscale(enable=True)
+#     plt.tight_layout()
+#     plt.subplots_adjust(wspace=0, hspace=0.2)
+#     plt.show()
+#     return
 
 def plot_result(result, plot_settings, xdata, ydata, xlabel='',
                 ylabel='', subplot=False, normalize=None,
