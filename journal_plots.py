@@ -9,6 +9,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import stats
 import rateless
+import plot
 
 from functools import partial
 from plot import get_parameters_size, load_delay_plot
@@ -24,7 +25,7 @@ def N_n_ratio_plots():
     parameters = get_parameters_N()
 
     # simulate lt code performance
-    target_overhead = 1.4
+    target_overhead = 1.3
     lt = [rateless.evaluate(
         p,
         target_overhead=target_overhead,
@@ -72,11 +73,21 @@ def N_n_ratio_plots():
         'size': 8
     }
 
+    plot.encode_decode_plot(
+        [lt, heuristic],
+        [settings_lt, settings_heuristic],
+        'num_columns',
+        xlabel='$\mathsf{Columns}\;n$',
+        normalize=heuristic,
+        show=False,
+    )
+    # plt.show()
+
     load_delay_plot(
         [lt, heuristic],
         [settings_lt, settings_heuristic],
-        'num_inputs',
-        xlabel='$\mathsf{Vectors}\;N$',
+        'num_columns',
+        xlabel='$\mathsf{Columns}\;n$',
         normalize=uncoded,
         show=False,
     )
@@ -128,14 +139,14 @@ def lt_tfp_plots():
     lt_partitions_4['partitions'] = [parameters.num_partitions
                                      for parameters in partition_parameters]
 
-    lt_partitions = [rateless.evaluate(
-        partition_parameters[0],
-        target_overhead=target_overhead,
-        target_failure_probability=1e-5,
-    )] * len(partition_parameters)
-    lt_partitions_5 = pd.DataFrame(lt_partitions)
-    lt_partitions_5['partitions'] = [parameters.num_partitions
-                                     for parameters in partition_parameters]
+    # lt_partitions = [rateless.evaluate(
+    #     partition_parameters[0],
+    #     target_overhead=target_overhead,
+    #     target_failure_probability=1e-5,
+    # )] * len(partition_parameters)
+    # lt_partitions_5 = pd.DataFrame(lt_partitions)
+    # lt_partitions_5['partitions'] = [parameters.num_partitions
+    #                                  for parameters in partition_parameters]
 
     # Setup the evaluators
     sample_100 = SampleEvaluator(num_samples=100)
@@ -215,7 +226,7 @@ def lt_tfp_plots():
         normalize=uncoded_partitions,
         show=False,
     )
-    plt.savefig('./plots/journal/N_lt_3_tfp_comparison.png')
+    # plt.savefig('./plots/journal/N_lt_3_tfp_comparison.png')
 
     load_delay_plot(
         [lt_partitions_1,
@@ -237,7 +248,7 @@ def lt_tfp_plots():
         normalize=uncoded_partitions,
         show=False,
     )
-    plt.savefig('./plots/journal/N_lt_3_tfp_comparison_bdc.png')
+    # plt.savefig('./plots/journal/N_lt_3_tfp_comparison_bdc.png')
 
     plt.show()
     return
@@ -317,10 +328,10 @@ def main():
     lt_partitions = [rateless.evaluate(
         partition_parameters[0],
         target_overhead=1.3,
-        target_failure_probability=1e-5,
+        target_failure_probability=1e-3,
     )] * len(partition_parameters)
-    lt_partitions_5 = pd.DataFrame(lt_partitions)
-    lt_partitions_5['partitions'] = [parameters.num_partitions
+    lt_partitions = pd.DataFrame(lt_partitions)
+    lt_partitions['partitions'] = [parameters.num_partitions
                                      for parameters in partition_parameters]
 
     # Simulate partition parameters
