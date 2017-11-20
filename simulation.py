@@ -28,6 +28,7 @@ import datetime
 import numpy as np
 import pandas as pd
 import complexity
+import model
 
 from multiprocessing import Pool
 from solvers import Solver
@@ -206,13 +207,14 @@ class SimulatorResult(object):
         '''
         loads = np.zeros([3, len(self.dataframes)])
         for i in range(len(self.dataframes)):
+            parameters = self.parameter_list[i]
             dataframe = self.dataframes[i]
             if dataframe is None:
                 loads.append(math.inf)
                 continue
 
             if 'load' in dataframe:
-                frame_load = dataframe['load']
+                frame_load = dataframe['load'].copy()
             elif self.shuffling_strategy == 'L1':
                 frame_load = dataframe['unicast_load_1'] + dataframe['multicast_load_1']
             elif self.shuffling_strategy == 'L2':
