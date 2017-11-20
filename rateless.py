@@ -72,7 +72,7 @@ def evaluate(parameters, target_overhead=None, target_failure_probability=None):
 
     # we encode each column of the input matrix separately
     result['encoding_multiplications'] = mean['encoding_multiplications']
-    result['encoding_multiplications'] *= parameters.num_columns /parameters.num_servers
+    result['encoding_multiplications'] *= parameters.num_columns / parameters.num_servers
 
     # we decode each output vector separately
     result['decoding_multiplications'] = mean['decoding_multiplications']
