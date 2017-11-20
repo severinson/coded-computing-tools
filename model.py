@@ -427,3 +427,64 @@ class SystemParameters(object):
         delay *= self.num_outputs
 
         return delay
+
+def uncoded_initialization_load(parameters, multicast_cost=None):
+    '''load due to the initialization
+
+    compute the load due to transferring the source matrix to the worker
+    servers prior to starting the computation. this method assumes that values
+    are transferred directly to the servers performing the map computation.
+
+    args:
+
+    parameters: system parameters
+
+    multicast_cost: see SystemParameters.unpartitioned_load()
+
+    '''
+
+    if not multicast_cost:
+        multicast_cost = lambda j: j
+
+    load = parameters.num_source_rows * parameters.num_columns
+    num_recipients = parameters.server_storage * parameters.q
+    load *= num_recipients / multicast_cost(num_recipients)
+
+    # normalize consistently with shuffle phase load
+    load /= parameters.num_source_rows
+
+    return load
+
+def coded_initialization_load(parameters, multicast_cost=None):
+    '''load due to the initialization
+
+    compute the load due to transferring the source matrix to the worker
+    servers prior to starting the computation. this method assumes that:
+    1. Uncoded values are transferred to servers performing the encoding.
+    2. Coded values are transferred to servers performing the map phase.
+
+    args:
+
+    parameters: system parameters
+
+    multicast_cost: see SystemParameters.unpartitioned_load()
+
+    '''
+
+    if not multicast_cost:
+        multicast_cost = lambda j: j
+
+    # load due to 1.
+    load1 = parameters.num_source_rows * parameters.num_columns
+
+    # load due to 2.
+    load2 = parameters.num_coded_rows * parameters.num_columns
+    num_recipients = parameters.server_storage * parameters.q
+    load2 *= num_recipients / multicast_cost(num_recipients)
+
+    # normalize consistently with shuffle phase load
+    load = load1 + load2
+    load /= parameters.num_source_rows
+
+    return load
+
