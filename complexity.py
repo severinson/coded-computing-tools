@@ -49,9 +49,14 @@ def partitioned_encode_delay(parameters, partitions=None):
     )
 
     # Scale by encoding complexity per server
-    delay *= parameters.num_source_rows / partitions
-    delay *= parameters.num_coded_rows * parameters.num_columns
+    delay *= block_diagonal_encoding_complexity(
+        parameters,
+        partitions=partitions,
+    )
+
+    # split the work over all servers
     delay /= parameters.num_servers
+
     return delay
 
 def block_diagonal_encoding_complexity(parameters, partitions=None):
