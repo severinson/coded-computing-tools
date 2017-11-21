@@ -401,7 +401,7 @@ class SystemParameters(object):
         overhead: Code overhead. Equal to 1 for MDS codes.
 
         returns: The normalized computational delay. Multiply the result by
-        complexity.matrix_vector_complexity(self.server_storage *
+        complexity.matrix_vector_complexity(self.server_storage*self.num_coded_rows,
         self.num_columns) for the absolute result.
 
         '''
