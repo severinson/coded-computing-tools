@@ -219,12 +219,16 @@ class SystemParameters(object):
         return str(self.asdict())
 
     def identifier(self):
-        '''Return a string identifier for these parameters.'''
+        '''string identifier for these parameters. used as filename when caching
+        simulate results to disk. does not include the number of columns or
+        vectors as the dependence on these is linear, meaning that we can add
+        these to the results when loading from disk.
+
+        '''
         string = 'm_' + str(self.num_source_rows)
         string += '_K_' + str(self.num_servers)
         string += '_q_' + str(self.q)
-        string += '_N_' + str(self.num_outputs)
-        string += '_muq_' + str(int(self.server_storage * self.q))
+        string += '_muq_' + str(self.muq)
         string += '_T_' + str(self.num_partitions)
         return string
 
@@ -388,7 +392,7 @@ class SystemParameters(object):
             return load_2
 
     @functools.lru_cache(maxsize=128)
-    def computational_delay(self, q=None, overhead=1):
+    def computational_delay(self, q=None):
         '''Return the delay incurred in the map phase.
 
         Calculates the computational delay assuming a shifted
@@ -398,23 +402,16 @@ class SystemParameters(object):
 
         q: The number of servers to wait for. If q is None, the value in self is used.
 
-        overhead: Code overhead. Equal to 1 for MDS codes.
-
         returns: The normalized computational delay. Multiply the result by
         complexity.matrix_vector_complexity(self.server_storage*self.num_coded_rows,
         self.num_columns) for the absolute result.
 
         '''
         assert q is None or isinstance(q, int)
-        assert overhead == 1
         if q is None:
             q = self.q
 
-        # Add the overhead factor
-        # TODO: This is incorrect
-        q = math.ceil(q * overhead)
-
-        # Return infinity if waiting for more than num_servers servers
+        # return infinity if waiting for more than num_servers servers
         if q > self.num_servers:
             return math.inf
 
@@ -424,7 +421,7 @@ class SystemParameters(object):
         # * num_source_rows here as this value varies depending on the scheme
         # (uncoded, coded MapReduce, and straggler coding). this scaling is
         # carried out in simulation.py.
-        delay *= self.num_outputs
+        # delay *= self.num_outputs
 
         return delay
 

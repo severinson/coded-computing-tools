@@ -325,6 +325,9 @@ class SimulatorResult(object):
                     parameters.num_columns
                 )
 
+            # each server multiplies the rows it stores by all vectors
+            frame_delay *= parameters.num_outputs
+
             # include reduce time if enabled. this value must not be normalized.
             if self.reduce_function is not None:
                 frame_delay += self.reduce_function(parameters)

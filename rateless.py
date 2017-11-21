@@ -97,7 +97,7 @@ def evaluate(parameters, target_overhead=None, target_failure_probability=None):
     map_complexity = complexity.matrix_vector_complexity(
         rows=rows_per_server,
         cols=parameters.num_columns,
-    )
+    ) * parameters.num_outputs
 
     # simulate the map phase load/delay
     simulated = performance_integral(
