@@ -129,7 +129,6 @@ def evaluate(parameters, target_overhead=None, target_failure_probability=None):
 
     return result
 
-@lru_cache()
 def performance_integral(parameters=None, target_overhead=None,
                          mode=None, delta=None, samples=100):
     '''compute average performance by taking into account the probability of
@@ -172,6 +171,7 @@ def performance_integral(parameters=None, target_overhead=None,
         df = overhead.performance_from_overhead(
             parameters=parameters,
             overhead=overhead_level,
+            design_overhead=target_overhead,
         )
 
         # average the columns of the df

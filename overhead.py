@@ -23,19 +23,20 @@ simulations otherwise.
 
 '''
 
+import os
 import math
 import random
 import itertools
 import numpy as np
 import pandas as pd
-from scipy.misc import comb as nchoosek
 import model
 import numtools
 
 from functools import lru_cache
+from scipy.misc import comb as nchoosek
 
-@lru_cache()
-def performance_from_overhead(parameters=None, overhead=1, num_samples=1000):
+def performance_from_overhead(parameters=None, overhead=1, design_overhead=None,
+                              num_samples=100, cachedir='./results/Overhead'):
     '''compute the average performance at some fixed overhead.
 
     args:
@@ -45,7 +46,23 @@ def performance_from_overhead(parameters=None, overhead=1, num_samples=1000):
     overhead: value such that any overhead * m unique rows is sufficient to
     decode on average.
 
+    design_overhead: see mode.unpartitioned_load()
+
+    cachedir: cache simulations here.
+
     '''
+
+    # returned a cached simulation if available
+    if not os.path.exists(cachedir):
+        os.makedirs(cachedir)
+    filename = os.path.join(
+        cachedir,
+        parameters.identifier() + '_overhead_' + str(overhead) + '.csv',
+    )
+    try:
+        return pd.read_csv(filename)
+    except FileNotFoundError:
+        pass
 
     # check all possible completion orders or num_samples randomly selected
     # orders, whichever is smaller.
@@ -66,11 +83,19 @@ def performance_from_overhead(parameters=None, overhead=1, num_samples=1000):
             delay_from_order(parameters, order, overhead)
         )
         result.update(
-            load_from_order(parameters, overhead)
+            load_from_order(
+                parameters=parameters,
+                overhead=overhead,
+                design_overhead=design_overhead,
+            )
         )
         results.append(result)
 
-    return pd.DataFrame(results)
+    # cache the simulation
+    df = pd.DataFrame(results)
+    df.to_csv(filename, index=False)
+
+    return df
 
 def random_completion_orders(parameters=None, num_samples=None):
     '''generate random server completion orders'''
@@ -82,11 +107,11 @@ def exhaustive_completion_orders(parameters=None):
     '''generate all possible server completion orders'''
     servers = set(range(parameters.num_servers))
 
-    # Order of the first q servers is irrelevant.
+    # completion order of the first q servers is irrelevant.
     for order in itertools.combinations(range(parameters.num_servers), parameters.q):
         remaining_servers = servers - set(order)
 
-        # Evaluate all permutations of the remaining servers.
+        # consider all permutations of the remaining servers.
         for remaining_order in itertools.permutations(remaining_servers):
             yield list(order) + list(remaining_order)
 
@@ -121,8 +146,7 @@ def _batches_by_server(num_servers=None, servers_per_batch=None):
             storage[server_index].add(batch_index)
         batch_index += 1
 
-    # TODO: Return frozensets?
-    return storage
+    return frozenset(storage)
 
 def _batches_from_order(storage=None, servers=None):
     assert storage is not None
@@ -208,8 +232,12 @@ def delay_from_order(parameters=None, order=None, overhead=None):
     return {'servers': required_servers, 'batches': required_servers * batches_per_server,
             'delay': parameters.computational_delay(q=required_servers)}
 
-def load_from_order(parameters=None, overhead=None):
+def load_from_order(parameters=None, overhead=None, design_overhead=None):
     '''compute the load for some overhead.'''
     assert isinstance(parameters, model.SystemParameters)
     assert overhead is not None
-    return {'load': parameters.unpartitioned_load(overhead=overhead)}
+    load = parameters.unpartitioned_load(
+        overhead=overhead,
+        design_overhead=design_overhead,
+    )
+    return {'load': load}
