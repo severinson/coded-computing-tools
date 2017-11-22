@@ -1,6 +1,7 @@
 scipy
 numpy
 pandas
+diskcache
 matplotlib
 https://github.com/severinson/pynumeric/archive/master.zip
 https://github.com/severinson/pyrateless/archive/master.zip
