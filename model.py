@@ -337,7 +337,8 @@ class SystemParameters(object):
         return load_1, load_2
 
     @functools.lru_cache(maxsize=128)
-    def unpartitioned_load(self, strategy='best', multicast_cost=None, overhead=1):
+    def unpartitioned_load(self, strategy='best', multicast_cost=None,
+                           overhead=1, design_overhead=None):
         '''Compute the communication load of the unpartitioned scheme.
 
         Args:
@@ -353,7 +354,10 @@ class SystemParameters(object):
         sending a single unicasted message, j should be returned. This is the
         default.
 
-        overhead: Code overhead. Equal to 1 for MDS codes.
+        overhead: reception overhead. equal to 1 for MDS codes. a higher
+        overhead requires transmitting more values over the network.
+
+        design_overhead: the coded shuffling is tuned to target this overhead.
 
         Returns: Total number of messages per source row.
 
@@ -363,12 +367,16 @@ class SystemParameters(object):
 
         '''
         assert strategy == 'best' or strategy == '1' or strategy == '2'
+        assert design_overhead is None or overhead >= design_overhead, \
+            'design_overhead must be <= overhead'
+        if design_overhead is None:
+            design_overhead = overhead
 
-        # Unicasting load
+        # unicast load
         load_1 = overhead - self.server_storage
         load_2 = 0
         try:
-            for j in range(self.multicast_set_size_1(overhead=overhead), self.muq+1):
+            for j in range(self.multicast_set_size_1(overhead=design_overhead), self.muq+1):
                 alpha = self.alphaj(j)
                 load_1 -= alpha
         except ModelError:
@@ -377,7 +385,9 @@ class SystemParameters(object):
 
         # Multicasting load
         multicast_load_1, multicast_load_2 = self.multicast_load(
-            overhead=overhead, multicast_cost=multicast_cost)
+            overhead=design_overhead,
+            multicast_cost=multicast_cost,
+        )
         load_1 += multicast_load_1
         load_2 += multicast_load_2
 
