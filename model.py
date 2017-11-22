@@ -425,14 +425,8 @@ class SystemParameters(object):
         if q > self.num_servers:
             return math.inf
 
+        # delay per source row and input/output vector
         delay = stats.order_mean_shiftexp(self.num_servers, q)
-
-        # scale by number of output vectors. we do not scale by server_storage
-        # * num_source_rows here as this value varies depending on the scheme
-        # (uncoded, coded MapReduce, and straggler coding). this scaling is
-        # carried out in simulation.py.
-        # delay *= self.num_outputs
-
         return delay
 
 def uncoded_initialization_load(parameters, multicast_cost=None):
