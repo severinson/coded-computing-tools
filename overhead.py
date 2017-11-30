@@ -146,7 +146,8 @@ def _batches_by_server(num_servers=None, servers_per_batch=None):
             storage[server_index].add(batch_index)
         batch_index += 1
 
-    return frozenset(storage)
+    # TODO: We're returning something mutable
+    return storage
 
 def _batches_from_order(storage=None, servers=None):
     assert storage is not None
