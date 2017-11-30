@@ -306,7 +306,8 @@ class SystemParameters(object):
 
         overhead: Code overhead. Equal to 1 for MDS codes.
 
-        Returns: A tuple (multicast_load_1, multicast_load_2)
+        Returns: tuple (multicast_load_1, multicast_load_2) per source row and
+        input/output vector.
 
         '''
         if not multicast_cost:
@@ -331,9 +332,7 @@ class SystemParameters(object):
         except ModelError:
             load_2 = math.inf
 
-        # Scale by outputs and return.
-        load_1 *= self.num_outputs
-        load_2 *= self.num_outputs
+        # this load is per source row and input/output vector
         return load_1, load_2
 
     @functools.lru_cache(maxsize=128)
@@ -359,7 +358,8 @@ class SystemParameters(object):
 
         design_overhead: the coded shuffling is tuned to target this overhead.
 
-        Returns: Total number of messages per source row.
+        returns: total number of messages per source row and input/output
+        vector.
 
         Raises:
 
@@ -381,7 +381,6 @@ class SystemParameters(object):
                 load_1 -= alpha
         except ModelError:
             pass
-        load_1 *= self.num_outputs
 
         # Multicasting load
         multicast_load_1, multicast_load_2 = self.multicast_load(
