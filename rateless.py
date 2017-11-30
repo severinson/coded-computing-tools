@@ -10,9 +10,6 @@ import stats
 import complexity
 import overhead
 
-from functools import lru_cache
-from plot import get_parameters_size_2
-
 def simulate_parameter_list(parameter_list):
     '''evaluate a list of parameters
 
