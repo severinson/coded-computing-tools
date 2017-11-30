@@ -315,6 +315,6 @@ def get_parameters_example():
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
-    # main()
+    main()
     # stats_plots()
-    get_parameters_example()
+    # get_parameters_example()
