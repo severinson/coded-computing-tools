@@ -35,7 +35,6 @@ def uncoded_performance(parameters, num_samples=1):
     '''
     uncoded_storage = 1 / parameters.num_servers
     load = 1 - uncoded_storage
-    load *= parameters.num_outputs
     delay = parameters.computational_delay(q=parameters.num_servers)
     return pd.DataFrame({'load': [load], 'delay': [delay]})
 
@@ -70,7 +69,6 @@ def stragglerc_performance(parameters, num_samples=1):
     assert isinstance(parameters, model.SystemParameters)
     server_storage = 1 / parameters.num_servers
     load = 1 - server_storage
-    load *= parameters.num_outputs
     delay = parameters.computational_delay()
     return pd.DataFrame({'load': [load], 'delay': [delay]})
 
@@ -82,6 +80,8 @@ def lt_performance(parameters, num_samples=1):
 
     num_samples: Unused
     '''
+    raise NotImplementedError
+
     # manually set the LT code overhead
     overhead = 1.1
 

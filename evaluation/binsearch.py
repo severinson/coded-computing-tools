@@ -285,10 +285,6 @@ def communication_load_sample(parameters, assignment, completion_order):
     unicast_load_2 = abs(count_vector[count_vector < 0].sum())
     unicast_load_2 /= parameters.num_source_rows
 
-    # Scale unicasts by number of outputs.
-    unicast_load_1 *= parameters.num_outputs
-    unicast_load_2 *= parameters.num_outputs
-
     # Append the results.
     return {'unicast_load_1': unicast_load_1, 'unicast_load_2': unicast_load_2,
             'multicast_load_1': multicast_load_1, 'multicast_load_2': multicast_load_2}
