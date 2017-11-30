@@ -32,14 +32,14 @@ def get_parameters_size():
 
 def get_parameters_size_2():
     '''Get a list of parameters for the size plot.'''
-    rows_per_server = 200
+    rows_per_server = 2000
     rows_per_partition = 10
     code_rate = 2/3
     muq = 2
     num_columns = None
-    num_outputs_factor=100
+    num_outputs_factor=1000
     parameters = list()
-    num_servers = [2, 5, 8, 20, 50]#, 200]
+    num_servers = [5, 8, 20, 50, 80, 125, 200, 500, 2000]
     for servers in num_servers:
         par = model.SystemParameters.fixed_complexity_parameters(
             rows_per_server=rows_per_server,
@@ -61,12 +61,12 @@ def get_parameters_N():
     num_outputs = q
     server_storage = 1/3
     num_partitions = 240
-    num_outputs = q
+    num_outputs = 10*q
     # num_columns = 20000
     parameters = list()
     for i in range(1, 11):
         # num_outputs = i * q
-        num_columns = i * 4
+        num_columns = pow(i, 2) * 200
         par = model.SystemParameters(
             rows_per_batch=rows_per_batch,
             num_servers=num_servers,
@@ -163,7 +163,7 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
     plt.rc('text', usetex=True)
     # plt.rc('font', family='serif')
     plt.rcParams['text.latex.preamble'] = [r'\usepackage{lmodern}']
-    _ = plt.figure(figsize=(10,6))
+    _ = plt.figure(figsize=(10,8))
 
     # Plot load
     plt.autoscale(enable=True)
@@ -173,7 +173,8 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
     plt.setp(ax1.get_yticklabels(), fontsize=25)
     for result, plot_setting in zip(results, plot_settings):
         plot_result(result, plot_setting, xdata, 'load',
-                    ylabel='Load', subplot=True, normalize=normalize)
+                    ylabel=r'$L$',
+                    subplot=True, normalize=normalize)
 
     plt.margins(y=0.1)
     if legend == 'load':
@@ -181,10 +182,12 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
             numpoints=1,
             shadow=True,
             labelspacing=0,
-            fontsize=24,
+            columnspacing=0,
+            fontsize=22,
             loc='best',
             fancybox=False,
             borderaxespad=0.1,
+            ncol=1,
         )
 
     # Plot delay
@@ -193,15 +196,25 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
     plt.setp(ax2.get_yticklabels(), fontsize=25)
     for result, plot_setting in zip(results, plot_settings):
         plot_result(result, plot_setting, xdata, 'delay', xlabel=xlabel,
-                    ylabel='Delay', subplot=True, normalize=normalize)
+                    ylabel=r'$D$',
+                    subplot=True, normalize=normalize)
 
     if legend == 'delay':
-        plt.legend(numpoints=1, shadow=True, labelspacing=0,
-                   fontsize=24, loc='best')
+        plt.legend(
+            numpoints=1,
+            shadow=True,
+            labelspacing=0,
+            columnspacing=0,
+            fontsize=22,
+            loc='best',
+            fancybox=False,
+            borderaxespad=0.1,
+            ncol=1,
+        )
 
     plt.autoscale(enable=True)
     plt.tight_layout()
-    plt.subplots_adjust(wspace=0, hspace=0.2)
+    plt.subplots_adjust(wspace=0, hspace=0.12)
     plt.margins(y=0.1)
     if show:
         plt.show()
@@ -267,6 +280,7 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
             loc='best',
             fancybox=False,
             borderaxespad=0.1,
+            ncol=2,
         )
 
     # Plot delay
@@ -294,6 +308,7 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
             loc='best',
             fancybox=False,
             borderaxespad=0.1,
+            ncol=2,
         )
 
     plt.autoscale(enable=True)
@@ -303,56 +318,6 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
     if show:
         plt.show()
     return
-
-# def complexity_plot(results, plot_settings, xdata, xlabel='',
-#                     normalize=None, phase='reduce'):
-#     '''Plot the encoding or decoding delay.
-
-#     Args:
-
-#     results: SimulatorResult to plot.
-
-#     plot_settings: List of dicts with plot settings.
-
-#     xdata: Label of the X axis data ('partitions' or 'servers').
-
-#     xlabel: X axis label
-
-#     normalize: If a SimulatorResult is provided, all ploted results
-#     are normalized by this one.
-
-#     phase: Phase to plot the delay of (encode or reduce)
-
-#     '''
-#     assert isinstance(results, list)
-#     assert isinstance(plot_settings, list)
-#     # assert isinstance(normalize, SimulatorResult) or normalize is None
-#     assert phase == 'encode' or phase == 'reduce'
-
-#     # Create plot window
-#     _ = plt.figure(figsize=(8,5))
-
-#     plt.rc('pgf',  texsystem='pdflatex')
-#     plt.rc('text', usetex=True)
-#     # plt.rc('font', family='serif')
-#     plt.rcParams['text.latex.preamble'] = [r'\usepackage{lmodern}']
-
-#     # Plot complexity
-#     fig, ax = plt.subplots(figsize=(6,6))
-#     plt.setp(ax.get_xticklabels(), fontsize=25)
-#     plt.setp(ax.get_yticklabels(), fontsize=25)
-#     for result, plot_setting in zip(results, plot_settings):
-#         plot_result(result, plot_setting, xdata, phase, xlabel=xlabel,
-#                     ylabel=r'$D_{\mathsf{' + phase + r'}}$', subplot=True, normalize=normalize,
-#                     plot_type='loglog')
-
-#     plt.legend(numpoints=1, shadow=True, labelspacing=0,
-#                fontsize=24, loc='best')
-#     plt.autoscale(enable=True)
-#     plt.tight_layout()
-#     plt.subplots_adjust(wspace=0, hspace=0.2)
-#     plt.show()
-#     return
 
 def plot_result(result, plot_settings, xdata, ydata, xlabel='',
                 ylabel='', subplot=False, normalize=None,
