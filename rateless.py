@@ -10,15 +10,23 @@ import stats
 import complexity
 import overhead
 
-def simulate_parameter_list(parameter_list):
-    '''evaluate a list of parameters
+from functools import partial
+from concurrent.futures import ProcessPoolExecutor
 
-    returns: dataframe with the result
+def evaluate_parameter_list(parameter_list, target_overhead=None,
+                            target_failure_probability=None, processes=None):
+    '''concurrently evaluate a list of parameters
+
+    returns: dataframe with the results
 
     '''
-    results = list()
-    for parameters in parameter_list:
-        results.append(evaluate(parameters))
+    f = partial(
+        evaluate,
+        target_overhead=target_overhead,
+        target_failure_probability=target_failure_probability,
+    )
+    with ProcessPoolExecutor(max_workers=processes) as executor:
+        results = list(executor.map(f, parameter_list))
 
     return pd.DataFrame(results)
 
