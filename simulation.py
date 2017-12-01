@@ -30,6 +30,7 @@ import pandas as pd
 import complexity
 import model
 
+from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import Pool
 from solvers import Solver
 from model import SystemParameters
@@ -420,7 +421,7 @@ class Simulator(object):
         self.rerun = rerun
         return
 
-    def simulate_parameter_list(self, parameter_list=None, processes=4):
+    def simulate_parameter_list(self, parameter_list=None, processes=None):
         '''Run simulations for a list of parameters.
 
         Args:
@@ -443,8 +444,8 @@ class Simulator(object):
                        if result.dataframes[i] is None]
 
         # Run simulations for any parameters without results.
-        with Pool(processes=processes) as pool:
-            dataframes = pool.map(self.simulate, [parameter_list[i] for i in indices])
+        with ProcessPoolExecutor(max_workers=processes) as executor:
+            dataframes = executor.map(self.simulate, [parameter_list[i] for i in indices])
 
         # Add the dataframes to the result
         for i, dataframe in zip(indices, dataframes):
