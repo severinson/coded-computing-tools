@@ -20,6 +20,8 @@ from evaluation import analytic
 from evaluation.binsearch import SampleEvaluator
 from solvers.randomsolver import RandomSolver
 from solvers.heuristicsolver import HeuristicSolver
+from solvers.assignmentloader import AssignmentLoader
+from assignments.cached import CachedAssignment
 
 def N_n_ratio_plots():
     parameters = get_parameters_N()
@@ -163,25 +165,25 @@ def lt_plots():
     uncoded.set_uncoded(enable=True)
 
     settings_2_1 = {
-        'label': 'LT $\epsilon_\mathsf{min}=0.2$, $P_{f, \mathsf{target}}=1e-1$',
+        'label': 'LT $\epsilon_\mathsf{min}=0.2$, $P_\mathsf{f, target}=1e-1$',
         'color': 'g',
         'marker': 'x-',
         'linewidth': 2,
         'size': 7}
     settings_2_3 = {
-        'label': 'LT $\epsilon_\mathsf{min}=0.2$, $P_{f, \mathsf{target}}=1e-3$',
+        'label': 'LT $\epsilon_\mathsf{min}=0.2$, $P_\mathsf{f, target}=1e-3$',
         'color': 'b',
         'marker': 'd-',
         'linewidth': 2,
         'size': 7}
     settings_3_1 = {
-        'label': 'LT $\epsilon_\mathsf{min}=0.3$, $P_{f, \mathsf{target}}=1e-1$',
+        'label': 'LT $\epsilon_\mathsf{min}=0.3$, $P_\mathsf{f, target}=1e-1$',
         'color': 'k',
         'marker': 'x--',
         'linewidth': 2,
         'size': 7}
     settings_3_2 = {
-        'label': 'LT $\epsilon_\mathsf{min}=0.3$, $P_{f, \mathsf{target}}=1e-3$',
+        'label': 'LT $\epsilon_\mathsf{min}=0.3$, $P_\mathsf{f, target}=1e-3$',
         'color': 'c',
         'marker': 'd--',
         'linewidth': 2,
@@ -202,47 +204,22 @@ def lt_plots():
     }
 
     load_delay_plot(
-        [lt_2_1,
+        [heuristic,
+         lt_2_1,
          lt_2_3,
          lt_3_1,
-         lt_3_3,
-         heuristic],
-        [settings_2_1,
+         lt_3_3],
+        [settings_heuristic,
+         settings_2_1,
          settings_2_3,
          settings_3_1,
-         settings_3_2,
-         settings_heuristic],
+         settings_3_2],
         'num_columns',
         xlabel='$\mathsf{Vectors}\;N$',
         normalize=uncoded,
         show=False,
     )
     plt.savefig('./plots/journal/lt.pdf')
-    plt.show()
-    return
-
-    load_delay_plot(
-        [lt_partitions_1,
-         lt_partitions_2,
-         lt_partitions_3,
-         lt_partitions_4,
-         # lt_partitions_5,
-         heuristic_partitions,
-        ],
-        [settings_1,
-         settings_2,
-         settings_3,
-         settings_4,
-         # settings_5,
-         settings_heuristic,
-        ],
-        'partitions',
-        xlabel='$\mathsf{Partitions}\;T$',
-        normalize=uncoded_partitions,
-        show=False,
-    )
-    # plt.savefig('./plots/journal/N_lt_3_tfp_comparison_bdc.png')
-
     plt.show()
     return
 
@@ -266,16 +243,17 @@ def load_delay_plots():
 
     random_sim = Simulator(
         solver=RandomSolver(),
-        assignments=10,
+        assignments=100,
         assignment_eval=sample_100,
-        directory='./results/Random_10/',
+        directory='./results/Random_100/',
     )
 
-    rs_sim = Simulator(
-        solver=None,
+    hybrid_sim = Simulator(
+        solver=AssignmentLoader(directory='./results/Hybrid/assignments/'),
         assignments=1,
-        parameter_eval=analytic.mds_performance,
-        directory='./results/RS/',
+        assignment_eval=sample_1000,
+        assignment_type=CachedAssignment,
+        directory='./results/Hybrid/'
     )
 
     uncoded_sim = Simulator(
@@ -283,7 +261,6 @@ def load_delay_plots():
         assignments=1,
         parameter_eval=analytic.uncoded_performance,
         directory='./results/Uncoded/',
-        rerun=True,
     )
 
     cmapred_sim = Simulator(
@@ -300,28 +277,35 @@ def load_delay_plots():
         directory='./results/Stragglerc/',
     )
 
+    rs_sim = Simulator(
+        solver=None,
+        assignments=1,
+        parameter_eval=analytic.mds_performance,
+        directory='./results/RS/',
+    )
+
     # lt code simulations are handled using the rateless module. the simulation
     # framework differs from that for the BDC and analytic.
-    # lt_partitions = [rateless.evaluate(
-    #     partition_parameters[0],
-    #     target_overhead=1.3,
-    #     target_failure_probability=1e-1,
-    # )] * len(partition_parameters)
-    # lt_partitions = pd.DataFrame(lt_partitions)
-    # lt_partitions['partitions'] = [parameters.num_partitions
-    #                                for parameters in partition_parameters]
+    lt_partitions = [rateless.evaluate(
+        partition_parameters[0],
+        target_overhead=1.3,
+        target_failure_probability=1e-1,
+    )] * len(partition_parameters)
+    lt_partitions = pd.DataFrame(lt_partitions)
+    lt_partitions['partitions'] = [parameters.num_partitions
+                                   for parameters in partition_parameters]
 
-    # lt_size = [rateless.evaluate(
-    #     parameters,
-    #     target_overhead=1.3,
-    #     target_failure_probability=1e-1,
-    # ) for parameters in size_parameters]
-    # lt_size = pd.DataFrame(lt_size)
-    # lt_size['servers'] = [parameters.num_servers
-    #                       for parameters in size_parameters]
+    lt_size = rateless.evaluate_parameter_list(
+        size_parameters,
+        target_overhead=1.3,
+        target_failure_probability=1e-1,
+    )
+    lt_size['servers'] = [parameters.num_servers
+                          for parameters in size_parameters]
 
     # Simulate partition parameters
     heuristic_partitions = heuristic_sim.simulate_parameter_list(partition_parameters)
+    hybrid_partitions = hybrid_sim.simulate_parameter_list(partition_parameters)
     random_partitions = random_sim.simulate_parameter_list(partition_parameters)
     rs_partitions = rs_sim.simulate_parameter_list(partition_parameters)
     uncoded_partitions = uncoded_sim.simulate_parameter_list(partition_parameters)
@@ -330,6 +314,7 @@ def load_delay_plots():
 
     # include encoding delay
     heuristic_partitions.set_encode_delay(function=complexity.partitioned_encode_delay)
+    hybrid_partitions.set_encode_delay(function=complexity.partitioned_encode_delay)
     random_partitions.set_encode_delay(function=complexity.partitioned_encode_delay)
     rs_partitions.set_encode_delay(
         function=partial(complexity.partitioned_encode_delay, partitions=1)
@@ -338,6 +323,7 @@ def load_delay_plots():
 
     # Include the reduce delay
     heuristic_partitions.set_reduce_delay(function=complexity.partitioned_reduce_delay)
+    hybrid_partitions.set_reduce_delay(function=complexity.partitioned_reduce_delay)
     random_partitions.set_reduce_delay(function=complexity.partitioned_reduce_delay)
     rs_partitions.set_reduce_delay(
         function=partial(complexity.partitioned_reduce_delay, partitions=1)
@@ -375,24 +361,24 @@ def load_delay_plots():
     stragglerc_size.set_stragglerc(enable=True)
 
     # plot settings
-    rs_plot_settings = {
-        'label': r'Unified',
-        'color': 'k',
-        'marker': 'd--',
-        'linewidth': 2,
-        'size': 7}
     heuristic_plot_settings = {
         'label': r'BDC, Heuristic',
         'color': 'r',
-        'marker': '-H',
+        'marker': 'H-',
         'linewidth': 2,
         'size': 7}
     random_plot_settings = {
         'label': r'BDC, Random',
         'color': 'b',
-        'marker': '-^',
+        'marker': '^-',
         'linewidth': 2,
         'size': 8}
+    hybrid_plot_settings = {
+        'label': r'BDC, Hybrid',
+        'color': 'c-',
+        'marker': 'd',
+        'linewidth': 2,
+        'size': 6}
     lt_plot_settings = {
         'label': r'LT',
         'color': 'c',
@@ -412,49 +398,80 @@ def load_delay_plots():
         'marker': 'H',
         'linewidth': 2,
         'size': 7}
+    rs_plot_settings = {
+        'label': r'Unified',
+        'color': 'k',
+        'marker': 'd--',
+        'linewidth': 2,
+        'size': 7}
 
     # load/delay as function of num_partitions
     load_delay_plot(
-        [rs_partitions,
-         heuristic_partitions,
-         random_partitions,
-         # lt_partitions,
+        [heuristic_partitions,
+         lt_partitions,
          cmapred_partitions,
-         stragglerc_partitions],
-        [rs_plot_settings,
-         heuristic_plot_settings,
-         random_plot_settings,
-         # lt_plot_settings,
+         stragglerc_partitions,
+         rs_partitions],
+        [heuristic_plot_settings,
+         lt_plot_settings,
          cmapred_plot_settings,
-         stragglerc_plot_settings],
+         stragglerc_plot_settings,
+         rs_plot_settings],
         'partitions',
-        xlabel='$\mathsf{Partitions}\;T$',
+        xlabel=r'$T$',
         normalize=uncoded_partitions,
         show=False,
     )
-    plt.savefig('./plots/journal/partitions_t.eps')
+    plt.savefig('./plots/journal/partitions.pdf')
 
     # load/delay as function of system size
     load_delay_plot(
-        [rs_size,
-         random_size,
-         heuristic_size,
-         # lt_size,
+        [heuristic_size,
+         lt_size,
          cmapred_size,
-         stragglerc_size],
-        [rs_plot_settings,
-         random_plot_settings,
-         heuristic_plot_settings,
-         # lt_plot_settings,
+         stragglerc_size,
+         rs_size],
+        [heuristic_plot_settings,
+         lt_plot_settings,
          cmapred_plot_settings,
-         stragglerc_plot_settings],
+         stragglerc_plot_settings,
+         rs_plot_settings],
         'servers',
-        xlabel='$\mathsf{Servers}\;K$',
+        xlabel=r'$K$',
         normalize=uncoded_size,
         legend='load',
         show=False,
     )
-    plt.savefig('./plots/journal/size_t.eps')
+    plt.savefig('./plots/journal/size.pdf')
+
+    # load/delay for different solvers as function of num_partitions
+    load_delay_plot(
+        [heuristic_partitions,
+         hybrid_partitions,
+         random_partitions],
+        [heuristic_plot_settings,
+         hybrid_plot_settings,
+         random_plot_settings],
+        'partitions',
+        xlabel=r'$T$',
+        normalize=uncoded_partitions,
+        show=False,
+    )
+    plt.savefig('./plots/journal/solvers_partitions.pdf')
+
+    # load/delay as function of system size
+    load_delay_plot(
+        [heuristic_size,
+         random_size],
+        [heuristic_plot_settings,
+         random_plot_settings],
+        'servers',
+        xlabel=r'$K$',
+        normalize=uncoded_size,
+        legend='load',
+        show=False,
+    )
+    plt.savefig('./plots/journal/solvers_size.pdf')
 
     plt.show()
     return
@@ -462,5 +479,5 @@ def load_delay_plots():
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     # N_n_ratio_plots()
-    # lt_plots()
-    load_delay_plots()
+    lt_plots()
+    # load_delay_plots()
