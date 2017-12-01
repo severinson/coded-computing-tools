@@ -327,7 +327,11 @@ class CachedAssignment(Assignment):
             raise FileNotFoundError()
 
         filename = os.path.join(directory, parameters.identifier() + '.npy')
-        assignment_matrix = np.load(filename)
+        assignment_matrix = np.zeros(
+            [parameters.num_batches, parameters.num_partitions],
+            dtype=np.int16
+        )
+        assignment_matrix[:] = np.load(filename)
 
         # Infer gamma
         gamma = parameters.rows_per_batch
