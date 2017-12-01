@@ -37,7 +37,7 @@ def get_parameters_size_2():
     code_rate = 2/3
     muq = 2
     num_columns = None
-    num_outputs_factor=1000
+    num_outputs_factor = 1000
     parameters = list()
     num_servers = [5, 8, 20, 50, 80, 125, 200, 500, 2000]
     for servers in num_servers:
