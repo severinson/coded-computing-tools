@@ -31,7 +31,6 @@ import complexity
 import model
 
 from concurrent.futures import ProcessPoolExecutor
-from multiprocessing import Pool
 from solvers import Solver
 from model import SystemParameters
 from assignments.sparse import SparseAssignment
@@ -206,7 +205,8 @@ class SimulatorResult(object):
         into a single array.
 
         '''
-        loads = np.zeros([3, len(self.dataframes)])
+        # loads = np.zeros([3, len(self.dataframes)])
+        loads = np.zeros(len(self.dataframes))
         for i in range(len(self.dataframes)):
             parameters = self.parameter_list[i]
             dataframe = self.dataframes[i]
@@ -226,9 +226,10 @@ class SimulatorResult(object):
             else:
                 frame_load = dataframe['unicast_load_2'] + dataframe['multicast_load_2']
 
-            loads[0, i] = frame_load.mean()
-            loads[1, i] = frame_load.min()
-            loads[2, i] = frame_load.max()
+            loads[i] = frame_load.mean()
+            # loads[0, i] = frame_load.mean()
+            # loads[1, i] = frame_load.min()
+            # loads[2, i] = frame_load.max()
 
         return loads
 
@@ -241,17 +242,14 @@ class SimulatorResult(object):
         assert self.encode_function is not None, \
             'Encode function must be set before computing encoding delay: %s' % self.directory
 
-        delays = np.zeros([3, len(self.dataframes)])
-        for i in range(len(self.dataframes)):
-            parameters = self.parameter_list[i]
-            frame_delay = self.encode_function(parameters)
-
-            # Normalize and append.
-            frame_delay /= parameters.num_source_rows
-            delays[0, i] = frame_delay
-            delays[1, i] = frame_delay
-            delays[2, i] = frame_delay
-
+        delays = np.fromiter(
+            (self.encode_function(parameters) for parameters in self.parameter_list),
+            dtype=float,
+        )
+        delays /= np.fromiter(
+            (parameters.num_source_rows for parameters in self.parameter_list),
+            dtype=float,
+        )
         return delays
 
     def reduce_delay(self):
@@ -262,18 +260,14 @@ class SimulatorResult(object):
         '''
         assert self.reduce_function is not None, \
             'Reduce function must be set before computing reduce delay: %s' % self.directory
-
-        delays = np.zeros([3, len(self.dataframes)])
-        for i in range(len(self.dataframes)):
-            parameters = self.parameter_list[i]
-            frame_delay = self.reduce_function(parameters)
-
-            # Normalize and append.
-            frame_delay /= parameters.num_source_rows
-            delays[0, i] = frame_delay
-            delays[1, i] = frame_delay
-            delays[2, i] = frame_delay
-
+        delays = np.fromiter(
+            (self.reduce_function(parameters) for parameters in self.parameter_list),
+            dtype=float,
+        )
+        delays /= np.fromiter(
+            (parameters.num_source_rows for parameters in self.parameter_list),
+            dtype=float,
+        )
         return delays
 
     def delay(self):
@@ -282,7 +276,7 @@ class SimulatorResult(object):
 
         '''
 
-        delays = np.zeros([3, len(self.dataframes)])
+        delays = np.zeros(len(self.dataframes))
         for i in range(len(self.dataframes)):
             parameters = self.parameter_list[i]
             dataframe = self.dataframes[i]
@@ -339,9 +333,10 @@ class SimulatorResult(object):
 
             # normalize and append
             frame_delay /= parameters.num_source_rows
-            delays[0, i] = frame_delay.mean()
-            delays[1, i] = frame_delay.min()
-            delays[2, i] = frame_delay.max()
+            delays[i] = frame_delay.mean()
+            # delays[0, i] = frame_delay.mean()
+            # delays[1, i] = frame_delay.min()
+            # delays[2, i] = frame_delay.max()
 
         return delays
 
