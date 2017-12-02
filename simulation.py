@@ -239,7 +239,7 @@ class SimulatorResult(object):
 
         '''
         assert self.encode_function is not None, \
-            'Encode function must be set before computing encoding delay.'
+            'Encode function must be set before computing encoding delay: %s' % self.directory
 
         delays = np.zeros([3, len(self.dataframes)])
         for i in range(len(self.dataframes)):
@@ -261,7 +261,7 @@ class SimulatorResult(object):
 
         '''
         assert self.reduce_function is not None, \
-            'Reduce function must be set before computing reduce delay.'
+            'Reduce function must be set before computing reduce delay: %s' % self.directory
 
         delays = np.zeros([3, len(self.dataframes)])
         for i in range(len(self.dataframes)):
