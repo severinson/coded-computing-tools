@@ -133,10 +133,12 @@ def stragglerc_reduce_delay(parameters):
 
     # Scale by decoding complexity
     rows_per_server = parameters.num_source_rows / parameters.q
-    delay *= block_diagonal_decoding_complexity(parameters.num_servers,
-                                                rows_per_server,
-                                                1 - parameters.q / parameters.num_servers,
-                                                1)
+    delay *= block_diagonal_decoding_complexity(
+        parameters.num_servers,
+        rows_per_server,
+        1 - parameters.q / parameters.num_servers,
+        1,
+    )
     delay *= parameters.num_outputs / parameters.q
     return delay
 
@@ -159,18 +161,48 @@ def encoding_complexity_from_density(parameters=None, density=None):
     additions *= parameters.num_coded_rows * parameters.num_columns
     return additions * ADDITION_COMPLEXITY + multiplications * MULTIPLICATION_COMPLEXITY
 
-def lt_reduce_delay(parameters):
-    '''Compute delay incurred by the reduce phase using an LT code.
-    Assumes a shifted exponential distribution.
+def map_complexity_uncoded(parameters):
+    '''uncoded scheme map complexity'''
+    server_storage = 1 / parameters.num_servers
+    rows_per_server = server_storage * parameters.num_source_rows
+    complexity = matrix_vector_complexity(
+        rows_per_server,
+        parameters.num_columns,
+    )
+    complexity *= parameters.num_outputs
+    return complexity
 
-    Args:
+def map_complexity_cmapred(parameters):
+    '''coded MapReduce map complexity'''
+    server_storage = parameters.muq / parameters.num_servers
+    rows_per_server = server_storage * parameters.num_source_rows
+    complexity = matrix_vector_complexity(
+        rows_per_server,
+        parameters.num_columns,
+    )
+    complexity *= parameters.num_outputs
+    return complexity
 
-    parameters: System parameters.
+def map_complexity_stragglerc(parameters):
+    '''straggler coding map complexity'''
+    server_storage = 1 / parameters.q
+    rows_per_server = server_storage * parameters.num_source_rows
+    complexity = matrix_vector_complexity(
+        rows_per_server,
+        parameters.num_columns,
+    )
+    complexity *= parameters.num_outputs
+    return complexity
 
-    Returns: The reduce delay.
-
-    '''
-
+def map_complexity_unified(parameters):
+    '''unified scheme map complexity'''
+    rows_per_server = parameters.server_storage * parameters.num_source_rows
+    complexity = matrix_vector_complexity(
+        rows_per_server,
+        parameters.num_columns,
+    )
+    complexity *= parameters.num_outputs
+    return complexity
 
 def rs_decoding_complexity(code_length, packet_size, erasure_prob):
     '''Compute the decoding complexity of Reed-Solomon codes
