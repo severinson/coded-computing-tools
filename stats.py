@@ -191,7 +191,7 @@ def order_aggregate_cdf_shiftexp(value, parameter=None, total=None,
 class ShiftexpOrder(object):
     '''Shifted exponential order statistic random variable.'''
 
-    def __init__(self, parameter, total, order):
+    def __init__(self, parameter=None, total=None, order=None):
         '''Initialize the object.
 
         Args:
@@ -247,6 +247,15 @@ class ShiftexpOrder(object):
             self.parameter,
         )
 
+    def sample(self, n=1):
+        '''sample the distribution'''
+        return scipy.stats.gamma.rvs(
+            self.b,
+            scale=1/self.a,
+            loc=self.parameter,
+            size=n,
+        )
+
 class Shiftexp(object):
     '''Shifted exponential distributed random variable.'''
 
@@ -291,18 +300,18 @@ def validate():
     '''Validate the analytic computation of the order stats.'''
     total = 9
     order = 6
-    samples = 100000
+    num_samples = 100000
     mu = 2
     x = Shiftexp(mu)
     x_order = ShiftexpOrder(mu, total, order)
-    samples = order_samples(icdf=x.icdf, total=total, order=order, samples=samples)
+    samples = order_samples(icdf=x.icdf, total=total, order=order, samples=num_samples)
+    samples_gamma = x_order.sample(n=num_samples)
     t = np.linspace(min(samples), max(samples), 100)
 
-    print('min:', min(samples), 'max:', max(samples))
-
-    # pdf = [x_order.pdf(i) for i in t]
-    # print(pdf)
-    # return
+    plt.figure()
+    plt.hist(samples, bins=200, histtype='stepfilled', alpha=0.7, density=True)
+    plt.hist(samples_gamma, bins=200, histtype='stepfilled', alpha=0.7, density=True)
+    plt.grid()
 
     plt.figure()
     plt.hist(samples, bins=200, histtype='stepfilled', density=True)
