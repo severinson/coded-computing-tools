@@ -187,32 +187,39 @@ class SystemParameters(object):
             multicast_size_1 = self.multicast_set_size_1()
         except ModelError:
             multicast_size_1 = None
-
         try:
             multicast_size_2 = self.multicast_set_size_2()
         except ModelError:
             multicast_size_2 = None
 
-        dct = {'rows_per_batch': self.rows_per_batch, 'servers': self.num_servers,
-               'wait_for': self.q, 'inputs_outputs': self.num_outputs,
-               'storage': self.server_storage, 'batches': self.num_batches,
-               'muq': self.muq, 'code_rate': self.q / self.num_servers,
-               'source_rows': self.num_source_rows, 'coded_rows': self.num_coded_rows,
-               'columns': self.num_columns, 'partitions': self.num_partitions,
-               'rows_per_partition': self.rows_per_partition,
-               'multicast_size_1': multicast_size_1, 'multicast_size_2': multicast_size_2}
-        return dct
+        return {
+            'rows_per_batch': self.rows_per_batch,
+            'num_servers': self.num_servers,
+            'q': self.q,
+            'num_outputs': self.num_outputs,
+            'server_storage': self.server_storage,
+            'num_batches': self.num_batches,
+            'muq': self.muq,
+            'code_rate': self.q / self.num_servers,
+            'num_source_rows': self.num_source_rows,
+            'num_coded_rows': self.num_coded_rows,
+            'num_columns': self.num_columns,
+            'num_partitions': self.num_partitions,
+            'rows_per_partition': self.rows_per_partition,
+            'multicast_size_1': multicast_size_1,
+            'multicast_size_2': multicast_size_2
+        }
 
     @classmethod
     def fromdct(cls, dct):
         return cls(
             rows_per_batch=int(dct['rows_per_batch']),
-            num_servers=int(dct['servers']),
-            q=int(dct['wait_for']),
-            num_outputs=int(dct['inputs_outputs']),
-            server_storage=float(dct['storage']),
-            num_partitions=int(dct['partitions']),
-            num_columns=int(dct['columns'])
+            num_servers=int(dct['num_servers']),
+            q=int(dct['q']),
+            num_outputs=int(dct['num_outputs']),
+            server_storage=float(dct['server_storage']),
+            num_partitions=int(dct['num_partitions']),
+            num_columns=int(dct['num_columns']),
         )
 
     def __repr__(self):
