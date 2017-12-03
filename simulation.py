@@ -26,8 +26,10 @@ import logging
 import datetime
 import numpy as np
 import pandas as pd
+import scipy.stats
 import complexity
 import model
+import stats
 
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
@@ -41,8 +43,8 @@ from evaluation import AssignmentEvaluator
 process_executor = ProcessPoolExecutor()
 thread_executor = ThreadPoolExecutor()
 
-def delay_distribution(dataframe, parameters=None, map_complexity_fun=None,
-                       encode_delay_fun=None, reduce_delay_fun=None):
+def delay_distribution(dataframe, num_samples=10000, parameters=None, map_complexity_fun=None,
+                       encode_complexity_fun=None, reduce_complexity_fun=None):
     '''find the delay distribution via Monte Carlo simulations
 
     args:
@@ -54,7 +56,48 @@ def delay_distribution(dataframe, parameters=None, map_complexity_fun=None,
     returns: array or samples drawn from the overall delay distribution.
 
     '''
-    pass
+    samples = np.zeros(num_samples)
+
+    # first, sample the encoding and reduce delay
+    if encode_complexity_fun:
+        encoding_distribution = stats.ShiftexpOrder(
+            parameter=encode_complexity_fun(parameters) / parameters.num_servers,
+            total=parameters.num_servers,
+            order=parameters.num_servers,
+        )
+        samples += encoding_distribution.sample(n=num_samples)
+    if reduce_complexity_fun:
+        reduce_distribution = stats.ShiftexpOrder(
+            parameter=reduce_complexity_fun(parameters) / parameters.q,
+            total=parameters.q,
+            order=parameters.q,
+        )
+        samples += reduce_distribution.sample(n=num_samples)
+
+    # next, get the empiric PDF of the number of servers we need to wait for in
+    # the map phase
+    order_counts = dataframe['servers'].value_counts(normalize=True)
+
+    # sample the distribution for each order. the number of samples is given by
+    # the probability of needing to wait for that number of servers in the map
+    # phase.
+    i = 0
+    for order, probability in zip(order_counts.index, order_counts.values):
+        map_distribution = stats.ShiftexpOrder(
+            parameter=map_complexity_fun(parameters),
+            total=parameters.num_servers,
+            order=order,
+        )
+        num_order_samples = int(round(num_samples*probability))
+        samples[i:i+num_order_samples] += map_distribution.sample(n=num_order_samples)
+        i += num_order_samples
+
+    # fit a gamma distribution to the samples. we assume that the overall delay
+    # is gamma distributed. we've not shown that this is true, but the results
+    # line up well enough for numerical results.
+    a, loc, scale = scipy.stats.gamma.fit(samples)
+    cdf = lambda t: scipy.stats.gamma.cdf(t, a, loc=loc, scale=scale)
+    return samples, cdf
 
 def set_load(dataframe, strategy='best'):
     '''compute the communication load for simulated results.
@@ -123,7 +166,7 @@ def simulate_parameter_list(parameter_list=None, simulate_fun=None,
 
     # run simulations for all parameters. we use a thread pool as most of the
     # time is spent waiting for I/O when loading cached results from disk.
-    dataframe_iter = thread_executor.map(simulate_fun, parameter_list)
+    dataframe_iter = list(thread_executor.map(simulate_fun, parameter_list))
 
     # flatten the iterable of dataframes into a single dataframe
     dataframe = flatten_dataframes(dataframe_iter)
