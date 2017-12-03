@@ -7,8 +7,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 
-from simulation import SimulatorResult
-
 def get_parameters_size():
     '''Get a list of parameters for the size plot.'''
     rows_per_server = 2000
