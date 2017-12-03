@@ -106,7 +106,7 @@ def partitioned_reduce_delay(parameters, partitions=None):
         parameters.q,
     )
 
-    # Scale by decoding complexity per server
+    # scale by the decoding complexity per server
     delay *= block_diagonal_decoding_complexity(
         parameters.num_coded_rows,
         1,
@@ -115,6 +115,20 @@ def partitioned_reduce_delay(parameters, partitions=None):
     )
     delay *= parameters.num_outputs / parameters.q
     return delay
+
+def partitioned_reduce_complexity(parameters, partitions=None):
+    '''reduce complexity per server for the partitioned scheme'''
+    if partitions is None:
+        partitions = parameters.num_partitions
+
+    complexity = block_diagonal_decoding_complexity(
+        parameters.num_coded_rows,
+        1,
+        1 - parameters.q / parameters.num_servers,
+        partitions,
+    )
+    complexity *= parameters.num_outputs / parameters.q
+    return complexity
 
 def stragglerc_reduce_delay(parameters):
     '''Compute reduce delay for a system using only straggler coding,
