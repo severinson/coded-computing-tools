@@ -6,18 +6,17 @@ import logging
 import complexity
 import numpy as np
 import pandas as pd
+import scipy.stats
 import matplotlib.pyplot as plt
 import stats
 import rateless
 import plot
-import deadline
 import simulation
 
 from functools import partial
 from plot import get_parameters_size, load_delay_plot
 from plot import get_parameters_partitioning, get_parameters_partitioning_2
 from plot import get_parameters_N
-from simulation import Simulator
 from evaluation import analytic
 from evaluation.binsearch import SampleEvaluator
 from solvers.randomsolver import RandomSolver
@@ -36,74 +35,155 @@ def deadline_plots():
     partition_parameters = get_parameters_partitioning_2()
     size_parameters = plot.get_parameters_size_2()[0:-4] # -2
 
-    # Setup the simulators
-    heuristic_sim = Simulator(
+    # setup the partial functions that handles running the simulations
+    heuristic_fun = partial(
+        simulation.simulate,
+        directory='./results/Heuristic/',
+        samples=1,
         solver=HeuristicSolver(),
         assignment_eval=sample_1000,
-        directory='./results/Heuristic/',
     )
 
-    random_sim = Simulator(
-        solver=RandomSolver(),
-        assignments=100,
-        assignment_eval=sample_100,
-        directory='./results/Random_100/',
-    )
-
-    hybrid_sim = Simulator(
-        solver=AssignmentLoader(directory='./results/Hybrid/assignments/'),
-        assignments=1,
-        assignment_eval=sample_1000,
-        assignment_type=CachedAssignment,
-        directory='./results/Hybrid/'
-    )
-
-    uncoded_sim = Simulator(
-        solver=None,
-        assignments=1,
-        parameter_eval=analytic.uncoded_performance,
+    uncoded_fun = partial(
+        simulation.simulate,
         directory='./results/Uncoded/',
+        samples=1,
+        parameter_eval=analytic.uncoded_performance,
     )
 
-    cmapred_sim = Simulator(
-        solver=None,
-        assignments=1,
-        parameter_eval=analytic.cmapred_performance,
+    cmapred_fun = partial(
+        simulation.simulate,
         directory='./results/Cmapred/',
+        samples=1,
+        parameter_eval=analytic.cmapred_performance,
     )
 
-    stragglerc_sim = Simulator(
-        solver=None,
-        assignments=1,
-        parameter_eval=analytic.stragglerc_performance,
+    stragglerc_fun = partial(
+        simulation.simulate,
         directory='./results/Stragglerc/',
+        samples=1,
+        parameter_eval=analytic.stragglerc_performance,
     )
 
-    rs_sim = Simulator(
-        solver=None,
-        assignments=1,
-        parameter_eval=analytic.mds_performance,
+    rs_fun = partial(
+        simulation.simulate,
         directory='./results/RS/',
+        samples=1,
+        parameter_eval=analytic.mds_performance,
     )
 
-    # lt code simulations are handled using the rateless module. the simulation
-    # framework differs from that for the BDC and analytic.
-    # lt_partitions = [rateless.evaluate(
-    #     partition_parameters[0],
-    #     target_overhead=1.3,
-    #     target_failure_probability=1e-1,
-    # )] * len(partition_parameters)
-    # lt_partitions = pd.DataFrame(lt_partitions)
-    # lt_partitions['partitions'] = [parameters.num_partitions
-    #                                for parameters in partition_parameters]
+    lt_fun = partial(
+        simulation.simulate,
+        directory='./results/LT_3_1/',
+        samples=1,
+        parameter_eval=partial(
+            rateless.evaluate,
+            target_overhead=1.3,
+            target_failure_probability=1e-1,
+        ),
+    )
 
-    # lt_size = rateless.evaluate_parameter_list(
-    #     size_parameters,
-    #     target_overhead=1.3,
-    #     target_failure_probability=1e-1,
-    # )
-    # lt_size['servers'] = [parameters.num_servers
-    #                       for parameters in size_parameters]
+    df = heuristic_fun(size_parameters[-1])
+    samples_bdc, cdf_bdc = simulation.delay_distribution(
+        df,
+        parameters=size_parameters[-1],
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_complexity_fun=complexity.block_diagonal_encoding_complexity,
+        reduce_complexity_fun=complexity.partitioned_reduce_complexity,
+    )
+    t = np.linspace(samples_bdc.min(), samples_bdc.max())
+
+    df = rs_fun(size_parameters[-1])
+    samples_rs, cdf_rs = simulation.delay_distribution(
+        df,
+        parameters=size_parameters[-1],
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_complexity_fun=partial(
+            complexity.block_diagonal_encoding_complexity,
+            partitions=1,
+        ),
+        reduce_complexity_fun=partial(
+            complexity.partitioned_reduce_complexity,
+            partitions=1,
+        ),
+    )
+
+    df = uncoded_fun(size_parameters[-1])
+    print(df)
+    samples_uncoded, cdf_uncoded = simulation.delay_distribution(
+        df,
+        parameters=size_parameters[-1],
+        map_complexity_fun=complexity.map_complexity_uncoded,
+        encode_complexity_fun=False,
+        reduce_complexity_fun=False,
+    )
+
+    t = np.linspace(samples_bdc.min(), samples_rs.max())
+
+    plt.semilogy(t, 1-cdf_bdc(t), label='bdc')
+    # plt.hist(samples_overall, bins=100, density=True, cumulative=True,
+    #          histtype='stepfilled', alpha=0.3, color='b', label='bdc')
+
+    plt.semilogy(t, 1-cdf_rs(t), label='unified')
+    # plt.hist(samples_overall, bins=100, density=True, cumulative=True,
+    #          histtype='stepfilled', alpha=0.3, color='r', label='rs')
+
+    plt.semilogy(t, 1-cdf_uncoded(t), label='uncoded')
+
+    plt.legend()
+    plt.grid()
+    plt.show()
+    return
+
+    # simulate partition parameters
+    heuristic_partitions = simulation.simulate_parameter_list(
+        parameter_list=partition_parameters,
+        simulate_fun=heuristic_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=complexity.partitioned_encode_delay,
+        reduce_delay_fun=complexity.partitioned_reduce_delay,
+    )
+    rs_partitions = simulation.simulate_parameter_list(
+        parameter_list=partition_parameters,
+        simulate_fun=rs_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=partial(
+            complexity.partitioned_encode_delay,
+            partitions=1
+        ),
+        reduce_delay_fun=partial(
+            complexity.partitioned_reduce_delay,
+            partitions=1,
+        ),
+    )
+    uncoded_partitions = simulation.simulate_parameter_list(
+        parameter_list=partition_parameters,
+        simulate_fun=uncoded_fun,
+        map_complexity_fun=complexity.map_complexity_uncoded,
+        encode_delay_fun=lambda x: 0,
+        reduce_delay_fun=lambda x: 0,
+    )
+    cmapred_partitions = simulation.simulate_parameter_list(
+        parameter_list=partition_parameters,
+        simulate_fun=cmapred_fun,
+        map_complexity_fun=complexity.map_complexity_cmapred,
+        encode_delay_fun=lambda x: 0,
+        reduce_delay_fun=lambda x: 0,
+    )
+    stragglerc_partitions = simulation.simulate_parameter_list(
+        parameter_list=partition_parameters,
+        simulate_fun=stragglerc_fun,
+        map_complexity_fun=complexity.map_complexity_stragglerc,
+        encode_delay_fun=complexity.stragglerc_encode_delay,
+        reduce_delay_fun=complexity.stragglerc_reduce_delay,
+    )
+    lt_partitions = simulation.simulate_parameter_list(
+        parameter_list=partition_parameters,
+        simulate_fun=lt_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=False,
+        reduce_delay_fun=False,
+    )
 
     # Simulate partition parameters
     heuristic_partitions = heuristic_sim.simulate_parameter_list(partition_parameters)
@@ -465,7 +545,7 @@ def load_delay_plots():
 
     # Get parameters
     partition_parameters = get_parameters_partitioning_2()
-    size_parameters = plot.get_parameters_size_2()[0:-4] # -2
+    size_parameters = plot.get_parameters_size_2()[0:-2] # -2
 
     # setup the partial functions that handles running the simulations
     heuristic_fun = partial(
@@ -521,26 +601,18 @@ def load_delay_plots():
         parameter_eval=analytic.mds_performance,
     )
 
-    # lt code simulations are handled using the rateless module. the simulation
-    # framework differs from that for the BDC and analytic.
-    # lt_partitions = [rateless.evaluate(
-    #     partition_parameters[0],
-    #     target_overhead=1.3,
-    #     target_failure_probability=1e-1,
-    # )] * len(partition_parameters)
-    # lt_partitions = pd.DataFrame(lt_partitions)
-    # lt_partitions['partitions'] = [parameters.num_partitions
-    #                                for parameters in partition_parameters]
+    lt_fun = partial(
+        simulation.simulate,
+        directory='./results/LT_3_1/',
+        samples=1,
+        parameter_eval=partial(
+            rateless.evaluate,
+            target_overhead=1.3,
+            target_failure_probability=1e-1,
+        ),
+    )
 
-    # lt_size = rateless.evaluate_parameter_list(
-    #     size_parameters,
-    #     target_overhead=1.3,
-    #     target_failure_probability=1e-1,
-    # )
-    # lt_size['servers'] = [parameters.num_servers
-    #                      for parameters in size_parameters]
-
-    # Simulate partition parameters
+    # simulate partition parameters
     heuristic_partitions = simulation.simulate_parameter_list(
         parameter_list=partition_parameters,
         simulate_fun=heuristic_fun,
@@ -596,29 +668,15 @@ def load_delay_plots():
         encode_delay_fun=complexity.stragglerc_encode_delay,
         reduce_delay_fun=complexity.stragglerc_reduce_delay,
     )
+    lt_partitions = simulation.simulate_parameter_list(
+        parameter_list=partition_parameters,
+        simulate_fun=lt_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=False,
+        reduce_delay_fun=False,
+    )
 
-    # # include encoding delay
-    # heuristic_partitions.set_encode_delay(function=complexity.partitioned_encode_delay)
-    # hybrid_partitions.set_encode_delay(function=complexity.partitioned_encode_delay)
-    # random_partitions.set_encode_delay(function=complexity.partitioned_encode_delay)
-    # rs_partitions.set_encode_delay(
-    #     function=partial(complexity.partitioned_encode_delay, partitions=1)
-    # )
-    # stragglerc_partitions.set_encode_delay(function=complexity.stragglerc_encode_delay)
-
-    # # Include the reduce delay
-    # heuristic_partitions.set_reduce_delay(function=complexity.partitioned_reduce_delay)
-    # hybrid_partitions.set_reduce_delay(function=complexity.partitioned_reduce_delay)
-    # random_partitions.set_reduce_delay(function=complexity.partitioned_reduce_delay)
-    # rs_partitions.set_reduce_delay(
-    #     function=partial(complexity.partitioned_reduce_delay, partitions=1)
-    # )
-    # uncoded_partitions.set_uncoded(enable=True)
-    # cmapred_partitions.set_cmapred(enable=True)
-    # stragglerc_partitions.set_reduce_delay(function=complexity.stragglerc_reduce_delay)
-    # stragglerc_partitions.set_stragglerc(enable=True)
-
-    # Simulate size parameters
+    # simulate size parameters
     heuristic_size = simulation.simulate_parameter_list(
         parameter_list=size_parameters,
         simulate_fun=heuristic_fun,
@@ -667,28 +725,13 @@ def load_delay_plots():
         encode_delay_fun=complexity.stragglerc_encode_delay,
         reduce_delay_fun=complexity.stragglerc_reduce_delay,
     )
-
-    print(heuristic_size)
-
-
-    # # include encoding delay
-    # heuristic_size.set_encode_delay(function=complexity.partitioned_encode_delay)
-    # random_size.set_encode_delay(function=complexity.partitioned_encode_delay)
-    # rs_size.set_encode_delay(
-    #     function=partial(complexity.partitioned_encode_delay, partitions=1)
-    # )
-    # stragglerc_size.set_encode_delay(function=complexity.stragglerc_encode_delay)
-
-    # # Include the reduce delay
-    # heuristic_size.set_reduce_delay(function=complexity.partitioned_reduce_delay)
-    # random_size.set_reduce_delay(function=complexity.partitioned_reduce_delay)
-    # rs_size.set_reduce_delay(
-    #     function=partial(complexity.partitioned_reduce_delay, partitions=1)
-    # )
-    # uncoded_size.set_uncoded(enable=True)
-    # cmapred_size.set_cmapred(enable=True)
-    # stragglerc_size.set_reduce_delay(function=complexity.stragglerc_reduce_delay)
-    # stragglerc_size.set_stragglerc(enable=True)
+    lt_size = simulation.simulate_parameter_list(
+        parameter_list=size_parameters,
+        simulate_fun=lt_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=False,
+        reduce_delay_fun=False,
+    )
 
     # plot settings
     heuristic_plot_settings = {
@@ -761,12 +804,12 @@ def load_delay_plots():
     # load/delay as function of num_partitions
     plot.load_delay_plot(
         [heuristic_partitions,
-         # lt_partitions,
+         lt_partitions,
          cmapred_partitions,
          stragglerc_partitions,
          rs_partitions],
         [heuristic_plot_settings,
-         # lt_plot_settings,
+         lt_plot_settings,
          cmapred_plot_settings,
          stragglerc_plot_settings,
          rs_plot_settings],
@@ -781,12 +824,12 @@ def load_delay_plots():
     # load/delay as function of system size
     plot.load_delay_plot(
         [heuristic_size,
-         # lt_size,
+         lt_size,
          cmapred_size,
          stragglerc_size,
          rs_size],
         [heuristic_plot_settings,
-         # lt_plot_settings,
+         lt_plot_settings,
          cmapred_plot_settings,
          stragglerc_plot_settings,
          rs_plot_settings],
@@ -833,7 +876,7 @@ def load_delay_plots():
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
-    # deadline_plots()
+    deadline_plots()
     # encode_decode_plots()
     # lt_plots()
-    load_delay_plots()
+    # load_delay_plots()
