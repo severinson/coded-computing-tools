@@ -97,13 +97,6 @@ def evaluate(parameters, target_overhead=None, target_failure_probability=None):
         parameter=result['decoding_multiplications'],
     )
 
-    # compute the complexity of the map computation (the matrix multiplication)
-    rows_per_server = parameters.server_storage * parameters.num_source_rows
-    map_complexity = complexity.matrix_vector_complexity(
-        rows=rows_per_server,
-        cols=parameters.num_columns,
-    ) * parameters.num_outputs
-
     # simulate the map phase load/delay
     simulated = performance_integral(
         parameters=parameters,
@@ -113,24 +106,6 @@ def evaluate(parameters, target_overhead=None, target_failure_probability=None):
     )
     result['delay'] = simulated['delay']
     result['load'] = simulated['load']
-
-    # scale the map delay by its complexity
-    result['delay'] *= map_complexity
-
-    # add encoding/decoding to the overall delay
-    result['delay'] += result['encode']
-    result['delay'] += result['reduce']
-
-    # normalize
-    result['delay'] /= parameters.num_source_rows
-    result['encode'] /= parameters.num_source_rows
-    result['reduce'] /= parameters.num_source_rows
-
-    # store some parameters to plot against
-    result['servers'] = parameters.num_servers
-    result['partitions'] = parameters.num_partitions
-    result['num_inputs'] = parameters.num_outputs
-    result['num_columns'] = parameters.num_columns
 
     return result
 
@@ -149,7 +124,7 @@ def performance_integral(parameters=None, target_overhead=None,
 
     # create a distribution object
     soliton = pyrateless.Soliton(
-        symbols=parameters.num_source_rows,
+    symbols=parameters.num_source_rows,
         mode=mode,
         failure_prob=delta,
     )
@@ -163,10 +138,6 @@ def performance_integral(parameters=None, target_overhead=None,
             overhead=x) for x in overhead_levels
         ], dtype=float)
     decoding_pdf = np.diff(decoding_cdf)
-
-    # print('cdf', decoding_cdf, len(decoding_cdf))
-    # print('pdf', decoding_pdf, len(decoding_pdf))
-    # print('overhead', overhead_levels, len(overhead_levels))
 
     # compute load/delay at the levels of overhead
     results = list()
