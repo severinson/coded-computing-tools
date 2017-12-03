@@ -132,7 +132,8 @@ def get_parameters_partitioning_2():
 
 
 def load_delay_plot(results, plot_settings, xdata, xlabel='',
-                    normalize=None, legend='load', show=True):
+                    normalize=None, legend='load', ncol=1, loc='best',
+                    show=True):
     '''Create a plot with two subplots for load and delay respectively.
 
     Args:
@@ -151,6 +152,10 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
     legend: Place the legend in the load or delay plot by setting this
     argument to 'load' or 'delay'.
 
+    ncol: number of legend columns.
+
+    loc: legend location.
+
     show: show the plots if True.
 
     '''
@@ -163,7 +168,7 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
     plt.rc('text', usetex=True)
     # plt.rc('font', family='serif')
     plt.rcParams['text.latex.preamble'] = [r'\usepackage{lmodern}']
-    _ = plt.figure(figsize=(10,8))
+    _ = plt.figure(figsize=(10,9))
 
     # Plot load
     plt.autoscale(enable=True)
@@ -172,9 +177,15 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
     plt.setp(ax1.get_xticklabels(), fontsize=25, visible=False)
     plt.setp(ax1.get_yticklabels(), fontsize=25)
     for result, plot_setting in zip(results, plot_settings):
-        plot_result(result, plot_setting, xdata, 'load',
-                    ylabel=r'$L$',
-                    subplot=True, normalize=normalize)
+        plot_result(
+            result,
+            plot_setting,
+            xdata,
+            'load',
+            ylabel=r'$L$',
+            subplot=True,
+            normalize=normalize
+        )
 
     plt.margins(y=0.1)
     if legend == 'load':
@@ -182,12 +193,12 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
             numpoints=1,
             shadow=True,
             labelspacing=0,
-            columnspacing=0,
+            columnspacing=0.05,
             fontsize=22,
-            loc='best',
+            loc=loc,
             fancybox=False,
             borderaxespad=0.1,
-            ncol=1,
+            ncol=ncol,
         )
 
     # Plot delay
@@ -195,21 +206,28 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
     plt.setp(ax2.get_xticklabels(), fontsize=25)
     plt.setp(ax2.get_yticklabels(), fontsize=25)
     for result, plot_setting in zip(results, plot_settings):
-        plot_result(result, plot_setting, xdata, 'delay', xlabel=xlabel,
-                    ylabel=r'$D$',
-                    subplot=True, normalize=normalize)
+        plot_result(
+            result,
+            plot_setting,
+            xdata,
+            'overall_delay',
+            xlabel=xlabel,
+            ylabel=r'$D$',
+            subplot=True,
+            normalize=normalize
+        )
 
     if legend == 'delay':
         plt.legend(
             numpoints=1,
             shadow=True,
             labelspacing=0,
-            columnspacing=0,
+            columnspacing=0.05,
             fontsize=22,
-            loc='best',
+            loc=loc,
             fancybox=False,
             borderaxespad=0.1,
-            ncol=1,
+            ncol=ncol,
         )
 
     plt.autoscale(enable=True)
@@ -221,7 +239,8 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
     return
 
 def encode_decode_plot(results, plot_settings, xdata, xlabel='',
-                       normalize=None, legend='load', show=True):
+                       normalize=None, legend='load', ncol=1, loc='best',
+                       show=True):
     '''Create a plot with two subplots for encoding and decoding delay respectively.
 
     args:
@@ -249,9 +268,8 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
 
     plt.rc('pgf',  texsystem='pdflatex')
     plt.rc('text', usetex=True)
-    # plt.rc('font', family='serif')
     plt.rcParams['text.latex.preamble'] = [r'\usepackage{lmodern}']
-    _ = plt.figure(figsize=(10,6))
+    _ = plt.figure(figsize=(10,9))
 
     # Plot load
     plt.autoscale(enable=True)
@@ -265,7 +283,7 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
             plot_setting,
             xdata,
             'encode',
-            ylabel='Encoding',
+            ylabel='Encoding complexity',
             subplot=True,
             normalize=normalize
         )
@@ -277,10 +295,10 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
             shadow=True,
             labelspacing=0,
             fontsize=24,
-            loc='best',
+            loc=loc,
             fancybox=False,
             borderaxespad=0.1,
-            ncol=2,
+            ncol=ncol,
         )
 
     # Plot delay
@@ -294,7 +312,7 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
             xdata,
             'reduce',
             xlabel=xlabel,
-            ylabel='Decode',
+            ylabel='Decoding complexity',
             subplot=True,
             normalize=normalize
         )
@@ -305,10 +323,10 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
             shadow=True,
             labelspacing=0,
             fontsize=24,
-            loc='best',
+            loc=loc,
             fancybox=False,
             borderaxespad=0.1,
-            ncol=2,
+            ncol=ncol,
         )
 
     plt.autoscale(enable=True)
@@ -348,14 +366,10 @@ def plot_result(result, plot_settings, xdata, ydata, xlabel='',
     errorbars: Plot error bars.
 
     '''
-    # assert isinstance(result, SimulatorResult)
     assert isinstance(plot_settings, dict)
-    # assert xdata == 'partitions' or xdata == 'servers'
-    assert ydata == 'load' or ydata == 'delay' or ydata == 'reduce' or ydata == 'encode'
     assert isinstance(xlabel, str)
     assert isinstance(ylabel, str)
     assert isinstance(subplot, bool)
-    # assert isinstance(normalize, SimulatorResult) or normalize is None
 
     if not subplot:
         _ = plt.figure()
@@ -384,9 +398,10 @@ def plot_result(result, plot_settings, xdata, ydata, xlabel='',
     yerr[0, :] = ymean - ymin
     yerr[1, :] = ymax - ymean
     if normalize is not None:
-        ymean /= normalize[ydata][0, :]
-        yerr[0, :] /= normalize[ydata][0, :]
-        yerr[1, :] /= normalize[ydata][0, :]
+        ymean /= normalize[ydata]
+        # ymean /= normalize[ydata][0, :]
+        # yerr[0, :] /= normalize[ydata][0, :]
+        # yerr[1, :] /= normalize[ydata][0, :]
 
     if plot_type == 'semilogx':
         plt.semilogx(xarray, ymean, style, label=label,
