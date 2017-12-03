@@ -41,6 +41,21 @@ from evaluation import AssignmentEvaluator
 process_executor = ProcessPoolExecutor()
 thread_executor = ThreadPoolExecutor()
 
+def delay_distribution(dataframe, parameters=None, map_complexity_fun=None,
+                       encode_delay_fun=None, reduce_delay_fun=None):
+    '''find the delay distribution via Monte Carlo simulations
+
+    args:
+
+    dataframe: dataframe of performance samples.
+
+    see simulate_parameter_list()
+
+    returns: array or samples drawn from the overall delay distribution.
+
+    '''
+    pass
+
 def set_load(dataframe, strategy='best'):
     '''compute the communication load for simulated results.
 
@@ -89,12 +104,21 @@ def simulate_parameter_list(parameter_list=None, simulate_fun=None,
     functools.partial to set the arguments to the simulate() function below and
     provide it as this argument.
 
+    map_complexity_fun: function that takes parameters as its single argument
+    and returns the complexity of the map phase.
+
+    encode_delay_fun: function that takes parameters as its single argument and
+    returns the delay of the encode phase.
+
+    reduce_delay_fun: function that takes parameters as its single argument and
+    returns the delay of the reduce phase.
+
     '''
     assert parameter_list is not None
     assert callable(simulate_fun), simulate_fun
     assert callable(map_complexity_fun), map_complexity_fun
-    assert callable(encode_delay_fun), encode_delay_fun
-    assert callable(reduce_delay_fun), reduce_delay_fun
+    assert callable(encode_delay_fun) or encode_delay_fun is False, encode_delay_fun
+    assert callable(reduce_delay_fun) or reduce_delay_fun is False, reduce_delay_fun
     logging.info('Running simulations for %d parameters.', len(parameter_list))
 
     # run simulations for all parameters. we use a thread pool as most of the
@@ -115,17 +139,23 @@ def simulate_parameter_list(parameter_list=None, simulate_fun=None,
     dataframe['delay'] *= map_complexity
 
     #  compute the encoding and reduce (decoding) delay
-    dataframe['encoding'] = np.fromiter(
-        (encode_delay_fun(parameters) for parameters in parameter_list),
-        dtype=float,
-    )
-    dataframe['reduce'] = np.fromiter(
-        (reduce_delay_fun(parameters) for parameters in parameter_list),
-        dtype=float,
-    )
+    if encode_delay_fun:
+        dataframe['encode'] = np.fromiter(
+            (encode_delay_fun(parameters) for parameters in parameter_list),
+            dtype=float,
+        )
+    elif 'encode' not in dataframe:
+        raise ValueError('dataframe must contain encoding delay if encode_delay_fun is False')
+    if reduce_delay_fun:
+        dataframe['reduce'] = np.fromiter(
+            (reduce_delay_fun(parameters) for parameters in parameter_list),
+            dtype=float,
+        )
+    elif 'reduce' not in dataframe:
+        raise ValueError('dataframe must contain reduce delay if reduce_delay_fun is False')
 
     # finally, compute the overall delay
-    dataframe['overall_delay'] = dataframe['delay'] + dataframe['encoding'] + dataframe['reduce']
+    dataframe['overall_delay'] = dataframe['delay'] + dataframe['encode'] + dataframe['reduce']
 
     return dataframe
 
@@ -135,7 +165,7 @@ def parameter_sample(i, parameters=None, parameter_eval=None):
     assert parameter_eval is not None
     result = parameter_eval(parameters)
     if isinstance(result, dict):
-        return pd.DataFrame(result)
+        result = pd.DataFrame([result])
     result['assignment'] = i * np.ones(len(result))
     return result
 
@@ -162,7 +192,7 @@ def assignment_sample(i, parameters=None, solver=None,
     result = assignment_eval.evaluate(parameters, assignment)
 
     if isinstance(result, dict):
-        return pd.DataFrame(result)
+        result = pd.DataFrame([result])
     result['assignment'] = i * np.ones(len(result))
     return result
 
