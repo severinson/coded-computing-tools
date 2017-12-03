@@ -23,8 +23,11 @@ import statistics
 import numpy as np
 import scipy as sp
 import scipy.stats
+import matplotlib.pyplot as plt
 
-def order_sample(icdf, total, order):
+from scipy.special import gamma, gammainc
+
+def order_sample(icdf=None, total=None, order=None):
     '''Sample the order statistic.
 
     Args:
@@ -43,9 +46,11 @@ def order_sample(icdf, total, order):
     assert total >= order, 'order must be less or equal to total.'
     samples = [icdf(random.random()) for _ in range(total)]
     partition = np.partition(np.asarray(samples), order-1)
-    # assert partition[order-1] <= partition[order]
-    # assert partition[order] <= partition[order+1]
     return partition[order-1]
+
+def order_samples(icdf=None, total=None, order=None, samples=None):
+    '''Sample the order statistic of the distribution given by the icdf'''
+    return [order_sample(icdf, total, order) for _ in range(samples)]
 
 def order_mean_empiric(icdf, total, order, samples=1000):
     '''Compute the order static mean numerically.
@@ -115,6 +120,74 @@ def order_variance_shiftexp(total, order, parameter):
     variance *= math.pow(parameter, 2)
     return variance
 
+@functools.lru_cache(maxsize=1024)
+def order_cdf_shiftexp(value, total=None, order=None, parameter=None):
+    '''CDF of the shifted exponential order statistic.
+
+    args:
+
+    value: value to evaluate the CDF at.
+
+    total: Total number of variables.
+
+    order: Statistic order.
+
+    parameter: Distribution parameter.
+
+    returns: the CDF of the shifted exponential order statistic evaluated at
+    value.
+
+    '''
+    assert 0 <= value <= math.inf
+    if value < parameter:
+        return 0
+    a = order_mean_shiftexp(total, order, parameter) - parameter
+    a /= order_variance_shiftexp(total, order, parameter)
+    b = pow(order_mean_shiftexp(total, order, parameter) - parameter, 2)
+    b /= order_variance_shiftexp(total, order, parameter)
+
+    # the CDF is given by the regularized lower incomplete gamma function.
+    return gammainc(b, a*(value-parameter))
+
+def order_aggregate_cdf_shiftexp(value, parameter=None, total=None,
+                                 orders=None, order_probabilities=None):
+    '''aggregate CDF of the shifted exponential order statistic.
+
+    this method aggregates the order statistic CDF when the order is a random
+    variable.
+
+    args:
+
+    value: value to evaluate the aggregate CDF at.
+
+    parameter: shifted exponential distribution parameter.
+
+    total: total number of variables.
+
+    orders: numpy array-like of orders to aggregate the CDF from.
+
+    order_probabilities: numpy array-like with probabilities for each order
+    being active.
+
+    returns: the aggregate CDF evaluated at value.
+
+    '''
+    assert len(orders) == len(order_probabilities)
+    assert np.allclose(order_probabilities.sum(), 1)
+
+    # evaluate the shifted exponential order statistic CDF at each order
+    cdf_values = np.fromiter(
+        (order_cdf_shiftexp(value, total=total, order=i, parameter=parameter) for i in orders),
+        dtype=float,
+    )
+
+    # weigh the results by the probability of the respective order
+    cdf_values *= order_probabilities
+
+    # summing the array gives the weighted average, which is the value of the
+    # aggregate CDF.
+    return cdf_values.sum()
+
 class ShiftexpOrder(object):
     '''Shifted exponential order statistic random variable.'''
 
@@ -132,26 +205,47 @@ class ShiftexpOrder(object):
         self.parameter = parameter
         self.total = total
         self.order = order
-        self.beta = self.mean() / self.variance()
-        self.alpha = self.mean() * self.beta
+
+        # this variable is gamma distributed. compute the distribution
+        # parameters from its mean and variance.
+        self.a = (self.mean()-self.parameter) / self.variance()
+        self.b = pow(self.mean()-self.parameter, 2) / self.variance()
         return
 
     def pdf(self, value):
         '''Probability density function.'''
         assert 0 <= value <= math.inf
-        return scipy.stats.gamma.pdf(value, self.alpha, scale=1/self.beta,
-                                     loc=self.parameter)
+        return scipy.stats.gamma.pdf(
+            value,
+            self.b,
+            scale=1/self.a,
+            loc=self.parameter,
+        )
+
+    def cdf(self, value):
+        '''cumulative distribution function'''
+        return order_cdf_shiftexp(
+            value=value,
+            total=self.total,
+            order=self.order,
+            parameter=self.parameter,
+        )
 
     def mean(self):
         '''Expected value.'''
-        return order_mean_shiftexp(self.total, self.order,
-                                   parameter=self.parameter,
-                                   exact=True)
+        return order_mean_shiftexp(
+            self.total,
+            self.order,
+            parameter=self.parameter,
+        )
 
     def variance(self):
         '''Random variable variance.'''
-        return order_variance_shiftexp(self.total, self.order,
-                                       self.parameter)
+        return order_variance_shiftexp(
+            self.total,
+            self.order,
+            self.parameter,
+        )
 
 class Shiftexp(object):
     '''Shifted exponential distributed random variable.'''
@@ -195,23 +289,45 @@ class Shiftexp(object):
 
 def validate():
     '''Validate the analytic computation of the order stats.'''
-    total = 1000
-    order = 900
+    total = 9
+    order = 6
+    samples = 100000
     mu = 2
-    icdf = lambda x: icdf_shiftexp(x, parameter=mu)
-    mean, variance = order_mean_empiric(icdf, total, order, samples=10000)
+    x = Shiftexp(mu)
+    x_order = ShiftexpOrder(mu, total, order)
+    samples = order_samples(icdf=x.icdf, total=total, order=order, samples=samples)
+    t = np.linspace(min(samples), max(samples), 100)
 
-    # samples = [order_sample(icdf, total, order) for _ in range(100000)]
-    # mean = sum(samples) / len(samples)
-    analytic_mean = order_mean_shiftexp(total, order, parameter=mu)
-    analytic_variance = order_variance_shiftexp(total, order, parameter=mu)
+    print('min:', min(samples), 'max:', max(samples))
 
-    try:
-        fast_analytic = order_mean_shiftexp(total, order, parameter=mu, exact=False)
-    except (ValueError, NotImplementedError):
-        fast_analytic = math.inf
-    print(mean, analytic_mean)
-    print(variance, analytic_variance)
+    # pdf = [x_order.pdf(i) for i in t]
+    # print(pdf)
+    # return
+
+    plt.figure()
+    plt.hist(samples, bins=200, histtype='stepfilled', density=True)
+    pdf = [x_order.pdf(i) for i in t]
+    plt.plot(t, pdf)
+    plt.grid()
+
+    plt.figure()
+    plt.hist(samples, bins=100, cumulative=True, density=True)
+    cdf = [x_order.cdf(i) for i in t]
+    plt.plot(t, cdf)
+    plt.grid()
+
+    plt.figure()
+    plt.hist(samples, bins=100, cumulative=True, density=True)
+    cdf = [order_aggregate_cdf_shiftexp(
+        i,
+        parameter=mu,
+        total=total,
+        orders=np.array([order, order+1]),
+        order_probabilities=np.array([0.75, 0.25])
+    ) for i in t]
+    plt.plot(t, cdf)
+    plt.grid()
+    plt.show()
     return
 
 if __name__ == '__main__':
