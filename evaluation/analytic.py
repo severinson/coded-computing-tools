@@ -36,7 +36,11 @@ def uncoded_performance(parameters, num_samples=1):
     uncoded_storage = 1 / parameters.num_servers
     load = 1 - uncoded_storage
     delay = parameters.computational_delay(q=parameters.num_servers)
-    return pd.DataFrame({'load': [load], 'delay': [delay]})
+    return pd.DataFrame({
+        'load': [load],
+        'delay': [delay],
+        'servers': parameters.num_servers,
+    })
 
 def cmapred_performance(parameters, num_samples=1):
     '''Compute load/delay for the coded MapReduce scheme, i.e., no
@@ -71,25 +75,6 @@ def stragglerc_performance(parameters, num_samples=1):
     load = 1 - server_storage
     delay = parameters.computational_delay()
     return pd.DataFrame({'load': [load], 'delay': [delay]})
-
-def lt_performance(parameters, num_samples=1):
-    '''Compute load and delay for an uncoded scheme.
-
-    Args:
-    parameters: A system parameters object.
-
-    num_samples: Unused
-    '''
-    raise NotImplementedError
-
-    # manually set the LT code overhead
-    overhead = 1.1
-
-    # Compute load and delay.
-    servers = math.ceil(parameters.q * overhead)
-    load = parameters.unpartitioned_load(overhead=overhead)
-    delay = parameters.computational_delay(overhead=overhead)
-    return pd.DataFrame({'load': [load], 'delay': [delay], 'servers': [servers]})
 
 def mds_performance(par, num_samples=1):
     '''Compute load/delay for an MDS code.
