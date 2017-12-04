@@ -36,7 +36,7 @@ from functools import lru_cache
 from scipy.misc import comb as nchoosek
 
 def performance_from_overhead(parameters=None, overhead=1, design_overhead=None,
-                              num_samples=100, cachedir='./results/Overhead'):
+                              num_samples=1000, cachedir='./results/Overhead'):
     '''compute the average performance at some fixed overhead.
 
     args:
@@ -91,10 +91,9 @@ def performance_from_overhead(parameters=None, overhead=1, design_overhead=None,
         )
         results.append(result)
 
-    # cache the simulation
+    # cache the simulation and return
     df = pd.DataFrame(results)
     df.to_csv(filename, index=False)
-
     return df
 
 def random_completion_orders(parameters=None, num_samples=None):
@@ -230,8 +229,11 @@ def delay_from_order(parameters=None, order=None, overhead=None):
     )
     coded_rows_per_server = parameters.num_source_rows * parameters.server_storage
     batches_per_server = coded_rows_per_server / parameters.rows_per_batch
-    return {'servers': required_servers, 'batches': required_servers * batches_per_server,
-            'delay': parameters.computational_delay(q=required_servers)}
+    return {
+        'servers': required_servers,
+        'batches': required_servers * batches_per_server,
+        'delay': parameters.computational_delay(q=required_servers)
+    }
 
 def load_from_order(parameters=None, overhead=None, design_overhead=None):
     '''compute the load for some overhead.'''
