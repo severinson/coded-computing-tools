@@ -10,26 +10,6 @@ import stats
 import complexity
 import overhead
 
-from functools import partial
-from concurrent.futures import ProcessPoolExecutor
-
-def evaluate_parameter_list(parameter_list, target_overhead=None,
-                            target_failure_probability=None, processes=None):
-    '''concurrently evaluate a list of parameters
-
-    returns: dataframe with the results
-
-    '''
-    f = partial(
-        evaluate,
-        target_overhead=target_overhead,
-        target_failure_probability=target_failure_probability,
-    )
-    with ProcessPoolExecutor(max_workers=processes) as executor:
-        results = list(executor.map(f, parameter_list))
-
-    return pd.DataFrame(results)
-
 def evaluate(parameters, target_overhead=None, target_failure_probability=None):
     '''evaluate LT code performance.
 
