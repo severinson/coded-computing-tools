@@ -43,19 +43,53 @@ from evaluation import AssignmentEvaluator
 process_executor = ProcessPoolExecutor()
 thread_executor = ThreadPoolExecutor()
 
-def delay_distribution(dataframe, num_samples=10000, parameters=None, map_complexity_fun=None,
-                       encode_complexity_fun=None, reduce_complexity_fun=None):
+def cdf_from_samples(samples):
+    '''infer the cdf from samples. assumes the samples are gamma distributed.
+
+    returns: lambda expression cdf(t) that gives the probability of the
+    computation completing before time t.
+
+    '''
+
+    # fit a gamma distribution to the samples. we assume that the overall delay
+    # is gamma distributed. we've not shown that this is true, but the results
+    # line up well enough for numerical results.
+    a, loc, scale = scipy.stats.gamma.fit(samples)
+    return lambda t: scipy.stats.gamma.cdf(t, a, loc=loc, scale=scale)
+
+def delay_samples(dataframe, num_samples=10000, parameters=None, map_complexity_fun=None,
+                  encode_complexity_fun=None, reduce_complexity_fun=None):
     '''find the delay distribution via Monte Carlo simulations
 
     args:
 
-    dataframe: dataframe of performance samples.
+    dataframe: dataframe of performance samples. used to infer the PDF over the
+    number of servers needed to decode.
 
-    see simulate_parameter_list()
+    num_sample: number of samples to take.
+
+    parameters: system parameters.
+
+    map_complexity_fun: function that takes parameters as its single argument
+    and returns the complexity of the map phase.
+
+    encode_complexity_fun: function that takes parameters as its single
+    argument and returns the complexity of the encode phase. set to False if
+    not applicable.
+
+    reduce_complexity_fun: function that takes parameters as its single
+    argument and returns the complexity of the reduce phase. set to False if
+    not applicable.
 
     returns: array or samples drawn from the overall delay distribution.
 
     '''
+    assert num_samples > 0 and num_samples % 1 == 0
+    assert isinstance(parameters, SystemParameters)
+    assert callable(map_complexity_fun)
+    assert callable(encode_complexity_fun) or encode_complexity_fun is False
+    assert callable(reduce_complexity_fun) or reduce_complexity_fun is False
+
     samples = np.zeros(num_samples)
 
     # first, sample the encoding and reduce delay
@@ -92,12 +126,7 @@ def delay_distribution(dataframe, num_samples=10000, parameters=None, map_comple
         samples[i:i+num_order_samples] += map_distribution.sample(n=num_order_samples)
         i += num_order_samples
 
-    # fit a gamma distribution to the samples. we assume that the overall delay
-    # is gamma distributed. we've not shown that this is true, but the results
-    # line up well enough for numerical results.
-    a, loc, scale = scipy.stats.gamma.fit(samples)
-    cdf = lambda t: scipy.stats.gamma.cdf(t, a, loc=loc, scale=scale)
-    return samples, cdf
+    return samples
 
 def set_load(dataframe, strategy='best'):
     '''compute the communication load for simulated results.
@@ -151,10 +180,10 @@ def simulate_parameter_list(parameter_list=None, simulate_fun=None,
     and returns the complexity of the map phase.
 
     encode_delay_fun: function that takes parameters as its single argument and
-    returns the delay of the encode phase.
+    returns the delay of the encode phase. set to False if not applicable.
 
     reduce_delay_fun: function that takes parameters as its single argument and
-    returns the delay of the reduce phase.
+    returns the delay of the reduce phase. set to False if not applicable.
 
     '''
     assert parameter_list is not None
