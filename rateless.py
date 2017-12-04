@@ -10,18 +10,13 @@ import stats
 import complexity
 import overhead
 
-def evaluate(parameters, target_overhead=None, target_failure_probability=None):
-    '''evaluate LT code performance.
+def optimize_lt_parameters(parameters=None, target_overhead=None,
+                           target_failure_probability=None):
+    '''find good lt code parameters
 
-    args:
-
-    parameters: system parameters.
-
-    returns: dict with performance results.
+    returns: a tuple (c, delta, mode)
 
     '''
-
-    # find good LT code parameters
     c, delta = pyrateless.heuristic(
         num_inputs=parameters.num_source_rows,
         target_failure_probability=target_failure_probability,
@@ -33,6 +28,27 @@ def evaluate(parameters, target_overhead=None, target_failure_probability=None):
         num_inputs=parameters.num_source_rows,
         delta=delta,
         c=c,
+    )
+    return c, delta, mode
+
+def evaluate(parameters, target_overhead=None, target_failure_probability=None):
+    '''evaluate LT code performance.
+
+    args:
+
+    parameters: system parameters.
+
+    returns: dict with performance results.
+
+    '''
+    assert target_overhead > 1
+    assert 0 < target_failure_probability < 1
+
+    # find good LT code parameters
+    c, delta, mode = optimize_lt_parameters(
+        parameters=parameters,
+        target_overhead=target_overhead,
+        target_failure_probability=target_failure_probability,
     )
 
     logging.debug(
@@ -57,24 +73,24 @@ def evaluate(parameters, target_overhead=None, target_failure_probability=None):
 
     # we encode each column of the input matrix separately
     result['encoding_multiplications'] = mean['encoding_multiplications']
-    result['encoding_multiplications'] *= parameters.num_columns / parameters.num_servers
+    result['encoding_multiplications'] *= parameters.num_columns
 
     # we decode each output vector separately
     result['decoding_multiplications'] = mean['decoding_multiplications']
-    result['decoding_multiplications'] *= parameters.num_outputs / parameters.q
+    result['decoding_multiplications'] *= parameters.num_outputs
 
     # compute encoding delay
     result['encode'] = stats.order_mean_shiftexp(
         parameters.num_servers,
         parameters.num_servers,
-        parameter=result['encoding_multiplications'],
+        parameter=result['encoding_multiplications'] / parameters.num_servers,
     )
 
     # compute decoding delay
     result['reduce'] = stats.order_mean_shiftexp(
         parameters.q,
         parameters.q,
-        parameter=result['decoding_multiplications'],
+        parameter=result['decoding_multiplications'] / parameters.q,
     )
 
     # simulate the map phase load/delay. this simulation takes into account the
@@ -87,25 +103,26 @@ def evaluate(parameters, target_overhead=None, target_failure_probability=None):
     )
     result['delay'] = simulated['delay']
     result['load'] = simulated['load']
-
     return result
 
-def performance_integral(parameters=None, target_overhead=None,
-                         mode=None, delta=None, samples=100):
-    '''compute average performance by taking into account the probability of
-    finishing at different levels of overhead.
+def decoding_success_pdf(overhead_levels, num_inputs=None, mode=None, delta=None):
+    '''evaluate the decoding probability pdf.
+
+    args:
+
+    overhead_levels: levels of overhead to evaluate the PDF at.
+
+    num_inputs: number of input symbols.
+
+    returns: a vector of the same length as overhead_levels, where i-th element
+    is the probability of decoding at an overhead of overhead_levels[i].
 
     '''
 
-    # get the max possible overhead
-    max_overhead = parameters.num_coded_rows / parameters.num_source_rows
-
-    # evaluate the performance at various levels of overhead
-    overhead_levels = np.linspace(target_overhead, max_overhead, samples)
-
-    # create a distribution object
+    # create a distribution object. this is needed for the decoding success
+    # probability estimate.
     soliton = pyrateless.Soliton(
-    symbols=parameters.num_source_rows,
+        symbols=num_inputs,
         mode=mode,
         failure_prob=delta,
     )
@@ -115,14 +132,41 @@ def performance_integral(parameters=None, target_overhead=None,
     decoding_cdf = np.fromiter(
         [0] + [1-pyrateless.optimize.decoding_failure_prob_estimate(
             soliton=soliton,
-            num_inputs=parameters.num_source_rows,
+            num_inputs=num_inputs,
             overhead=x) for x in overhead_levels
         ], dtype=float)
+
+    # differentiate the CDF to obtain the PDF
     decoding_pdf = np.diff(decoding_cdf)
+    return decoding_pdf
+
+def performance_integral(parameters=None, target_overhead=None,
+                         mode=None, delta=None, num_overhead_levels=100):
+    '''compute average performance by taking into account the probability of
+    finishing at different levels of overhead.
+
+    num_overhead_levels: performance is evaluated at num_overhead_levels levels
+    of overhead between target_overhead and the maximum possible overhead.
+
+    '''
+
+    # get the max possible overhead
+    max_overhead = parameters.num_coded_rows / parameters.num_source_rows
+
+    # evaluate the performance at various levels of overhead
+    overhead_levels = np.linspace(target_overhead, max_overhead, num_overhead_levels)
+
+    # compute the probability of decoding at the respective levels of overhead
+    decoding_probabilities = decoding_success_pdf(
+        overhead_levels,
+        num_inputs=parameters.num_source_rows,
+        mode=mode,
+        delta=delta,
+    )
 
     # compute load/delay at the levels of overhead
     results = list()
-    for overhead_level, decoding_probability in zip(overhead_levels, decoding_pdf):
+    for overhead_level, decoding_probability in zip(overhead_levels, decoding_probabilities):
 
         # monte carlo simulation of the load/delay at this overhead
         df = overhead.performance_from_overhead(
@@ -143,3 +187,68 @@ def performance_integral(parameters=None, target_overhead=None,
     # create a dataframe and sum along the columns
     df = pd.DataFrame(results)
     return {label:df[label].sum() for label in df}
+
+def order_pdf(parameters=None, target_overhead=None, target_failure_probability=None,
+              num_overhead_levels=100, num_samples=100000):
+    '''simulate the order PDF, i.e., the PDF over the number of servers needed to
+    decode successfully.
+
+    num_samples: total number of samples to take of the number of servers
+    needed. the PDF is inferred from all samples.
+
+    returns: two arrays (order_values, order_probabilities) with the possible
+    number of servers needed and the probability of needing that number of
+    servers, respectively.
+
+    '''
+
+    # find good LT code parameters
+    c, delta, mode = optimize_lt_parameters(
+        parameters=parameters,
+        target_overhead=target_overhead,
+        target_failure_probability=target_failure_probability,
+    )
+
+    # get the max possible overhead
+    max_overhead = parameters.num_coded_rows / parameters.num_source_rows
+
+    # evaluate the performance at various levels of overhead
+    overhead_levels = np.linspace(target_overhead, max_overhead, num_overhead_levels)
+
+    # compute the probability of decoding at the respective levels of overhead
+    decoding_probabilities = decoding_success_pdf(
+        overhead_levels,
+        num_inputs=parameters.num_source_rows,
+        mode=mode,
+        delta=delta,
+    )
+
+    # simulate the number of servers needed at each level of overhead. the
+    # number of samples taken is weighted by the probability of needing this
+    # overhead.
+    results = list()
+    for overhead_level, decoding_probability in zip(overhead_levels, decoding_probabilities):
+
+        # the number of samples correspond to the probability of decoding at
+        # this level of overhead.
+        overhead_samples = int(round(decoding_probability * num_samples))
+
+        print(overhead_level, decoding_probability, overhead_samples)
+
+        # monte carlo simulation of the load/delay at this overhead
+        df = overhead.performance_from_overhead(
+            parameters=parameters,
+            overhead=overhead_level,
+            design_overhead=target_overhead,
+            num_samples=overhead_samples,
+        )
+        results.append(df)
+
+    # concatenate all samples into a single dataframe
+    samples = pd.concat(results, ignore_index=True)
+
+    # compute the empiric order cdf and return
+    order_count = samples['servers'].value_counts(normalize=True)
+    order_values = np.array(order_count.index)
+    order_probabilities = order_count.values
+    return order_values, order_probabilities
