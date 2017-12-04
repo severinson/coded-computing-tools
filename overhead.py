@@ -60,7 +60,9 @@ def performance_from_overhead(parameters=None, overhead=1, design_overhead=None,
         parameters.identifier() + '_overhead_' + str(overhead) + '.csv',
     )
     try:
-        return pd.read_csv(filename)
+        df = pd.read_csv(filename)
+        if len(df) >= num_samples:
+            return df[:num_samples]
     except FileNotFoundError:
         pass
 
