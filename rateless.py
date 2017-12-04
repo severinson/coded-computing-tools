@@ -60,7 +60,8 @@ def evaluate(parameters, target_overhead=None, target_failure_probability=None):
         mode, delta, parameters.num_source_rows, target_overhead, target_failure_probability,
     )
 
-    # simulate the the code performance
+    # simulate the the code performance. we only extract the number of
+    # multiplications required for encoding and decoding from this simulation.
     df = pyrateless.simulate({
         'num_inputs': parameters.num_source_rows,
         'failure_prob': delta,
@@ -70,9 +71,8 @@ def evaluate(parameters, target_overhead=None, target_failure_probability=None):
     # average the columns of the df
     mean = {label:df[label].mean() for label in df}
 
-    # store the results we return in a new dict. we do not return the mean dict
-    # as we do not scale all of its values correctly when the number of columns
-    # or outputs is not 1.
+    # scale the number of multiplications required for encoding/decoding and
+    # store in a new dict.
     result = dict()
 
     # we encode each column of the input matrix separately
@@ -97,7 +97,8 @@ def evaluate(parameters, target_overhead=None, target_failure_probability=None):
         parameter=result['decoding_multiplications'],
     )
 
-    # simulate the map phase load/delay
+    # simulate the map phase load/delay. this simulation takes into account the
+    # probability of decoding at various levels of overhead.
     simulated = performance_integral(
         parameters=parameters,
         target_overhead=target_overhead,
