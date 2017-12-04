@@ -27,13 +27,12 @@ from assignments.cached import CachedAssignment
 def deadline_plots():
     '''deadline plots'''
 
-    # Setup the evaluators
+    # get system parameters
+    parameters = plot.get_parameters_size_2()[-4]
+
+    # setup the evaluators
     sample_100 = SampleEvaluator(num_samples=100)
     sample_1000 = SampleEvaluator(num_samples=1000)
-
-    # Get parameters
-    partition_parameters = get_parameters_partitioning_2()
-    size_parameters = plot.get_parameters_size_2()[0:-4] # -2
 
     # setup the partial functions that handles running the simulations
     heuristic_fun = partial(
@@ -83,20 +82,20 @@ def deadline_plots():
         ),
     )
 
-    df = heuristic_fun(size_parameters[-1])
-    samples_bdc, cdf_bdc = simulation.delay_distribution(
+    df = heuristic_fun(parameters)
+    samples_bdc = simulation.delay_samples(
         df,
-        parameters=size_parameters[-1],
+        parameters=parameters,
         map_complexity_fun=complexity.map_complexity_unified,
         encode_complexity_fun=complexity.block_diagonal_encoding_complexity,
         reduce_complexity_fun=complexity.partitioned_reduce_complexity,
     )
-    t = np.linspace(samples_bdc.min(), samples_bdc.max())
+    cdf_bdc = simulation.cdf_from_samples(samples_bdc)
 
-    df = rs_fun(size_parameters[-1])
-    samples_rs, cdf_rs = simulation.delay_distribution(
+    df = rs_fun(parameters)
+    samples_rs = simulation.delay_samples(
         df,
-        parameters=size_parameters[-1],
+        parameters=parameters,
         map_complexity_fun=complexity.map_complexity_unified,
         encode_complexity_fun=partial(
             complexity.block_diagonal_encoding_complexity,
@@ -107,28 +106,50 @@ def deadline_plots():
             partitions=1,
         ),
     )
+    cdf_rs = simulation.cdf_from_samples(samples_rs)
 
-    df = uncoded_fun(size_parameters[-1])
-    print(df)
-    samples_uncoded, cdf_uncoded = simulation.delay_distribution(
+    df = uncoded_fun(parameters)
+    samples_uncoded = simulation.delay_samples(
         df,
-        parameters=size_parameters[-1],
+        parameters=parameters,
         map_complexity_fun=complexity.map_complexity_uncoded,
         encode_complexity_fun=False,
         reduce_complexity_fun=False,
     )
+    cdf_uncoded = simulation.cdf_from_samples(samples_uncoded)
 
-    t = np.linspace(samples_bdc.min(), samples_rs.max())
+    # find points to evaluate the cdf at
+    t = np.linspace(samples_uncoded.min(), samples_rs.max())
 
+    # plot 1-cdf with a log y axis
+    plt.figure()
     plt.semilogy(t, 1-cdf_bdc(t), label='bdc')
-    # plt.hist(samples_overall, bins=100, density=True, cumulative=True,
-    #          histtype='stepfilled', alpha=0.3, color='b', label='bdc')
-
     plt.semilogy(t, 1-cdf_rs(t), label='unified')
-    # plt.hist(samples_overall, bins=100, density=True, cumulative=True,
-    #          histtype='stepfilled', alpha=0.3, color='r', label='rs')
-
     plt.semilogy(t, 1-cdf_uncoded(t), label='uncoded')
+    plt.legend()
+    plt.grid()
+
+    # plot 1-cdf normalized
+    plt.figure()
+    normalize = 1-cdf_uncoded(t)
+    plt.semilogy(t, (1-cdf_bdc(t))/normalize, label='bdc')
+    plt.semilogy(t, (1-cdf_rs(t))/normalize, label='unified')
+    plt.legend()
+    plt.grid()
+
+    # plot the empiric and fitted cdf's
+    plt.figure()
+    plt.plot(t, cdf_bdc(t), 'b')
+    plt.hist(samples_bdc, bins=100, density=True, cumulative=True,
+             histtype='stepfilled', alpha=0.3, color='b', label='bdc')
+
+    plt.plot(t, cdf_rs(t), 'r')
+    plt.hist(samples_rs, bins=100, density=True, cumulative=True,
+             histtype='stepfilled', alpha=0.3, color='r', label='rs')
+
+    plt.plot(t, cdf_uncoded(t), 'g')
+    plt.hist(samples_uncoded, bins=100, density=True, cumulative=True,
+             histtype='stepfilled', alpha=0.3, color='g', label='uncoded')
 
     plt.legend()
     plt.grid()
