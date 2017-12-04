@@ -40,7 +40,7 @@ from evaluation import AssignmentEvaluator
 
 # create a process and thread pool executor for this module. these are used to
 # increase computations and I/O throughput, respectively.
-process_executor = ProcessPoolExecutor()
+process_executor = ProcessPoolExecutor(max_workers=1)
 thread_executor = ThreadPoolExecutor()
 
 def cdf_from_samples(samples):
@@ -57,8 +57,9 @@ def cdf_from_samples(samples):
     a, loc, scale = scipy.stats.gamma.fit(samples)
     return lambda t: scipy.stats.gamma.cdf(t, a, loc=loc, scale=scale)
 
-def delay_samples(dataframe, num_samples=10000, parameters=None, map_complexity_fun=None,
-                  encode_complexity_fun=None, reduce_complexity_fun=None):
+def delay_samples(dataframe, num_samples=100000, parameters=None, map_complexity_fun=None,
+                  encode_complexity_fun=None, reduce_complexity_fun=None,
+                  order_values=None, order_probabilities=None):
     '''find the delay distribution via Monte Carlo simulations
 
     args:
@@ -81,6 +82,13 @@ def delay_samples(dataframe, num_samples=10000, parameters=None, map_complexity_
     argument and returns the complexity of the reduce phase. set to False if
     not applicable.
 
+    order_values: array-like with the possible number of servers needed to
+    decode. inferred from the dataframe if None.
+
+    order_probabilities: array-like with probabilities of needing the
+    corresponding number of servers in order_values. inferred from the
+    dataframe if None.
+
     returns: array or samples drawn from the overall delay distribution.
 
     '''
@@ -89,6 +97,16 @@ def delay_samples(dataframe, num_samples=10000, parameters=None, map_complexity_
     assert callable(map_complexity_fun)
     assert callable(encode_complexity_fun) or encode_complexity_fun is False
     assert callable(reduce_complexity_fun) or reduce_complexity_fun is False
+    if order_values is None:
+        assert order_probabilities is None
+    else:
+        assert order_probabilities is not None
+        assert len(order_values) == len(order_probabilities)
+    if order_probabilities is None:
+        assert order_values is None
+    else:
+        assert order_values is not None
+        assert len(order_values) == len(order_probabilities)
 
     samples = np.zeros(num_samples)
 
@@ -109,14 +127,17 @@ def delay_samples(dataframe, num_samples=10000, parameters=None, map_complexity_
         samples += reduce_distribution.sample(n=num_samples)
 
     # next, get the empiric PDF of the number of servers we need to wait for in
-    # the map phase
-    order_counts = dataframe['servers'].value_counts(normalize=True)
+    # the map phase (if it wasn't provided)
+    if order_values is None:
+        order_counts = dataframe['servers'].value_counts(normalize=True)
+        order_values = order_counts.index
+        order_probabilities = order_counts.values
 
     # sample the distribution for each order. the number of samples is given by
     # the probability of needing to wait for that number of servers in the map
     # phase.
     i = 0
-    for order, probability in zip(order_counts.index, order_counts.values):
+    for order, probability in zip(order_values, order_probabilities):
         map_distribution = stats.ShiftexpOrder(
             parameter=map_complexity_fun(parameters),
             total=parameters.num_servers,
