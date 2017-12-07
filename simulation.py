@@ -147,6 +147,9 @@ def delay_samples(dataframe, num_samples=100000, parameters=None, map_complexity
         samples[i:i+num_order_samples] += map_distribution.sample(n=num_order_samples)
         i += num_order_samples
 
+    # normalize the values
+    samples /= parameters.num_source_rows * parameters.num_outputs
+
     return samples
 
 def set_load(dataframe, strategy='best'):
