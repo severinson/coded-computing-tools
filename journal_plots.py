@@ -24,11 +24,63 @@ from solvers.heuristicsolver import HeuristicSolver
 from solvers.assignmentloader import AssignmentLoader
 from assignments.cached import CachedAssignment
 
+# plot settings
+heuristic_plot_settings = {
+    'label': r'BDC, Heuristic',
+    'color': 'r',
+    'marker': 'H-',
+    'linewidth': 2,
+    'size': 7}
+random_plot_settings = {
+    'label': r'BDC, Random',
+    'color': 'b',
+    'marker': '^-',
+    'linewidth': 2,
+    'size': 8}
+hybrid_plot_settings = {
+    'label': r'BDC, Hybrid',
+    'color': 'c',
+    'marker': 'd-',
+    'linewidth': 2,
+    'size': 6}
+lt_plot_settings = {
+    'label': r'LT',
+    'color': 'c',
+    'marker': 'v:',
+    'linewidth': 3,
+    'size': 8
+}
+cmapred_plot_settings = {
+    'label': r'CMR',
+    'color': 'g',
+    'marker': 's--',
+    'linewidth': 2,
+    'size': 7}
+stragglerc_plot_settings = {
+    'label': r'SC',
+    'color': 'k',
+    'marker': 'H',
+    'linewidth': 2,
+    'size': 7}
+rs_plot_settings = {
+    'label': r'Unified',
+    'color': 'k',
+    'marker': 'd--',
+    'linewidth': 2,
+    'size': 7}
+uncoded_plot_settings = {
+    'label': r'UC',
+    'color': 'g',
+    'marker': 'd-',
+    'linewidth': 2,
+    'size': 7}
+
 def deadline_plots():
     '''deadline plots'''
 
     # get system parameters
-    parameters = plot.get_parameters_size_2()[-4]
+    parameters = plot.get_parameters_size_2()[-3]
+    # parameters = plot.get_parameters_size_2()[0]
 
     # setup the evaluators
     sample_100 = SampleEvaluator(num_samples=100)
@@ -108,6 +160,31 @@ def deadline_plots():
     )
     cdf_rs = simulation.cdf_from_samples(samples_rs)
 
+    df = lt_fun(parameters)
+    order_values, order_probabilities = rateless.order_pdf(
+        parameters=parameters,
+        target_overhead=1.3,
+        target_failure_probability=1e-1,
+    )
+
+    samples_lt = simulation.delay_samples(
+        df,
+        parameters=parameters,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_complexity_fun=lambda x: df['encoding_multiplications'].mean(),
+        reduce_complexity_fun=lambda x: df['decoding_multiplications'].mean(),
+        order_values=order_values,
+        order_probabilities=order_probabilities,
+    )
+    cdf_lt = simulation.cdf_from_samples(samples_lt)
+    # cdf_lt_2 = lambda t: stats.order_aggregate_cdf_shiftexp(
+    #     t,
+    #     parameter=complexity.map_complexity_unified(parameters),
+    #     total=parameters.num_servers,
+    #     orders=order_values,
+    #     order_probabilities=order_probabilities,
+    # )
+
     df = uncoded_fun(parameters)
     samples_uncoded = simulation.delay_samples(
         df,
@@ -119,23 +196,70 @@ def deadline_plots():
     cdf_uncoded = simulation.cdf_from_samples(samples_uncoded)
 
     # find points to evaluate the cdf at
-    t = np.linspace(samples_uncoded.min(), samples_rs.max())
+    # t = np.linspace(
+    #     1.5 * complexity.map_complexity_unified(parameters),
+    #     5 * complexity.map_complexity_unified(parameters),
+    # )
+    t = np.linspace(samples_uncoded.min(), 12500)
+    t_norm = t # / parameters.num_columns #  / complexity.map_complexity_unified(parameters)
 
     # plot 1-cdf with a log y axis
-    plt.figure()
-    plt.semilogy(t, 1-cdf_bdc(t), label='bdc')
-    plt.semilogy(t, 1-cdf_rs(t), label='unified')
-    plt.semilogy(t, 1-cdf_uncoded(t), label='uncoded')
-    plt.legend()
+    plt.rc('pgf',  texsystem='pdflatex')
+    plt.rc('text', usetex=True)
+    plt.rcParams['text.latex.preamble'] = [r'\usepackage{lmodern}']
+    _ = plt.figure(figsize=(10,9))
+    plt.autoscale(enable=True)
+    ax1 = plt.gca()
+    plt.setp(ax1.get_xticklabels(), fontsize=25)
+    plt.setp(ax1.get_yticklabels(), fontsize=25)
+    plt.semilogy(
+        t_norm, 1-cdf_bdc(t),
+        heuristic_plot_settings['color'],
+        linewidth=2,
+        label=r'BDC, Heuristic',
+    )
+    plt.semilogy(
+        t_norm, 1-cdf_lt(t),
+        lt_plot_settings['color']+':',
+        linewidth=4,
+        label='LT',
+    )
+    plt.semilogy(
+        t_norm, 1-cdf_uncoded(t),
+        uncoded_plot_settings['color']+'-.',
+        linewidth=2,
+        label='UC',
+    )
+    plt.semilogy(
+        t_norm, 1-cdf_rs(t),
+        rs_plot_settings['color']+'--',
+        linewidth=2,
+        label='Unified',
+    )
+    plt.legend(
+        numpoints=1,
+        shadow=True,
+        labelspacing=0,
+        columnspacing=0.05,
+        fontsize=22,
+        loc='best',
+        fancybox=False,
+        borderaxespad=0.1,
+    )
+    plt.ylabel(r'$\Pr(D > t)$', fontsize=28)
+    plt.xlabel(r'$t$', fontsize=28)
+
+    plt.tight_layout()
     plt.grid()
+    plt.savefig('./plots/journal/deadline.pdf')
 
     # plot 1-cdf normalized
-    plt.figure()
-    normalize = 1-cdf_uncoded(t)
-    plt.semilogy(t, (1-cdf_bdc(t))/normalize, label='bdc')
-    plt.semilogy(t, (1-cdf_rs(t))/normalize, label='unified')
-    plt.legend()
-    plt.grid()
+    # plt.figure()
+    # normalize = 1-cdf_uncoded(t)
+    # plt.semilogy(t, (1-cdf_bdc(t))/normalize, label='bdc')
+    # plt.semilogy(t, (1-cdf_rs(t))/normalize, label='unified')
+    # plt.legend()
+    # plt.grid()
 
     # plot the empiric and fitted cdf's
     plt.figure()
@@ -145,130 +269,20 @@ def deadline_plots():
 
     plt.plot(t, cdf_rs(t), 'r')
     plt.hist(samples_rs, bins=100, density=True, cumulative=True,
-             histtype='stepfilled', alpha=0.3, color='r', label='rs')
+             histtype='stepfilled', alpha=0.3, color='r', label='unified')
 
     plt.plot(t, cdf_uncoded(t), 'g')
     plt.hist(samples_uncoded, bins=100, density=True, cumulative=True,
              histtype='stepfilled', alpha=0.3, color='g', label='uncoded')
 
+    plt.plot(t, cdf_lt(t), 'k')
+    # plt.plot(t, cdf_lt_2(t), 'c')
+    plt.hist(samples_lt, bins=100, density=True, cumulative=True,
+             histtype='stepfilled', alpha=0.3, color='k', label='lt')
+
     plt.legend()
     plt.grid()
     plt.show()
-    return
-
-    # simulate partition parameters
-    heuristic_partitions = simulation.simulate_parameter_list(
-        parameter_list=partition_parameters,
-        simulate_fun=heuristic_fun,
-        map_complexity_fun=complexity.map_complexity_unified,
-        encode_delay_fun=complexity.partitioned_encode_delay,
-        reduce_delay_fun=complexity.partitioned_reduce_delay,
-    )
-    rs_partitions = simulation.simulate_parameter_list(
-        parameter_list=partition_parameters,
-        simulate_fun=rs_fun,
-        map_complexity_fun=complexity.map_complexity_unified,
-        encode_delay_fun=partial(
-            complexity.partitioned_encode_delay,
-            partitions=1
-        ),
-        reduce_delay_fun=partial(
-            complexity.partitioned_reduce_delay,
-            partitions=1,
-        ),
-    )
-    uncoded_partitions = simulation.simulate_parameter_list(
-        parameter_list=partition_parameters,
-        simulate_fun=uncoded_fun,
-        map_complexity_fun=complexity.map_complexity_uncoded,
-        encode_delay_fun=lambda x: 0,
-        reduce_delay_fun=lambda x: 0,
-    )
-    cmapred_partitions = simulation.simulate_parameter_list(
-        parameter_list=partition_parameters,
-        simulate_fun=cmapred_fun,
-        map_complexity_fun=complexity.map_complexity_cmapred,
-        encode_delay_fun=lambda x: 0,
-        reduce_delay_fun=lambda x: 0,
-    )
-    stragglerc_partitions = simulation.simulate_parameter_list(
-        parameter_list=partition_parameters,
-        simulate_fun=stragglerc_fun,
-        map_complexity_fun=complexity.map_complexity_stragglerc,
-        encode_delay_fun=complexity.stragglerc_encode_delay,
-        reduce_delay_fun=complexity.stragglerc_reduce_delay,
-    )
-    lt_partitions = simulation.simulate_parameter_list(
-        parameter_list=partition_parameters,
-        simulate_fun=lt_fun,
-        map_complexity_fun=complexity.map_complexity_unified,
-        encode_delay_fun=False,
-        reduce_delay_fun=False,
-    )
-
-    # Simulate partition parameters
-    heuristic_partitions = heuristic_sim.simulate_parameter_list(partition_parameters)
-    hybrid_partitions = hybrid_sim.simulate_parameter_list(partition_parameters)
-    random_partitions = random_sim.simulate_parameter_list(partition_parameters)
-    rs_partitions = rs_sim.simulate_parameter_list(partition_parameters)
-    uncoded_partitions = uncoded_sim.simulate_parameter_list(partition_parameters)
-    cmapred_partitions = cmapred_sim.simulate_parameter_list(partition_parameters)
-    stragglerc_partitions = stragglerc_sim.simulate_parameter_list(partition_parameters)
-
-    # include encoding delay
-    heuristic_partitions.set_encode_delay(function=complexity.partitioned_encode_delay)
-    hybrid_partitions.set_encode_delay(function=complexity.partitioned_encode_delay)
-    random_partitions.set_encode_delay(function=complexity.partitioned_encode_delay)
-    rs_partitions.set_encode_delay(
-        function=partial(complexity.partitioned_encode_delay, partitions=1)
-    )
-    stragglerc_partitions.set_encode_delay(function=complexity.stragglerc_encode_delay)
-
-    # Include the reduce delay
-    heuristic_partitions.set_reduce_delay(function=complexity.partitioned_reduce_delay)
-    hybrid_partitions.set_reduce_delay(function=complexity.partitioned_reduce_delay)
-    random_partitions.set_reduce_delay(function=complexity.partitioned_reduce_delay)
-    rs_partitions.set_reduce_delay(
-        function=partial(complexity.partitioned_reduce_delay, partitions=1)
-    )
-    uncoded_partitions.set_uncoded(enable=True)
-    cmapred_partitions.set_cmapred(enable=True)
-    stragglerc_partitions.set_reduce_delay(function=complexity.stragglerc_reduce_delay)
-    stragglerc_partitions.set_stragglerc(enable=True)
-
-    # Simulate size parameters
-    heuristic_size = heuristic_sim.simulate_parameter_list(size_parameters)
-    random_size = random_sim.simulate_parameter_list(size_parameters)
-    rs_size = rs_sim.simulate_parameter_list(size_parameters)
-    uncoded_size = uncoded_sim.simulate_parameter_list(size_parameters)
-    cmapred_size = cmapred_sim.simulate_parameter_list(size_parameters)
-    stragglerc_size = stragglerc_sim.simulate_parameter_list(size_parameters)
-
-    # include encoding delay
-    heuristic_size.set_encode_delay(function=complexity.partitioned_encode_delay)
-    random_size.set_encode_delay(function=complexity.partitioned_encode_delay)
-    rs_size.set_encode_delay(
-        function=partial(complexity.partitioned_encode_delay, partitions=1)
-    )
-    stragglerc_size.set_encode_delay(function=complexity.stragglerc_encode_delay)
-
-    # Include the reduce delay
-    heuristic_size.set_reduce_delay(function=complexity.partitioned_reduce_delay)
-    random_size.set_reduce_delay(function=complexity.partitioned_reduce_delay)
-    rs_size.set_reduce_delay(
-        function=partial(complexity.partitioned_reduce_delay, partitions=1)
-    )
-    uncoded_size.set_uncoded(enable=True)
-    cmapred_size.set_cmapred(enable=True)
-    stragglerc_size.set_reduce_delay(function=complexity.stragglerc_reduce_delay)
-    stragglerc_size.set_stragglerc(enable=True)
-
-    i = 0
-    parameters = heuristic_size.parameter_list[i]
-    df = heuristic_size.dataframes[i]
-    df['encode'] = heuristic_size['encode'][i]
-    df['reduce'] = heuristic_size['reduce'][i]
-    deadline.delay_cdf_from_df(parameters, df)
     return
 
 def encode_decode_plots():
@@ -754,51 +768,6 @@ def load_delay_plots():
         reduce_delay_fun=False,
     )
 
-    # plot settings
-    heuristic_plot_settings = {
-        'label': r'BDC, Heuristic',
-        'color': 'r',
-        'marker': 'H-',
-        'linewidth': 2,
-        'size': 7}
-    random_plot_settings = {
-        'label': r'BDC, Random',
-        'color': 'b',
-        'marker': '^-',
-        'linewidth': 2,
-        'size': 8}
-    hybrid_plot_settings = {
-        'label': r'BDC, Hybrid',
-        'color': 'c-',
-        'marker': 'd',
-        'linewidth': 2,
-        'size': 6}
-    lt_plot_settings = {
-        'label': r'LT',
-        'color': 'c',
-        'marker': 'v',
-        'linewidth': 3,
-        'size': 8
-    }
-    cmapred_plot_settings = {
-        'label': r'CMR',
-        'color': 'g',
-        'marker': 's--',
-        'linewidth': 2,
-        'size': 7}
-    stragglerc_plot_settings = {
-        'label': r'SC',
-        'color': 'k',
-        'marker': 'H',
-        'linewidth': 2,
-        'size': 7}
-    rs_plot_settings = {
-        'label': r'Unified',
-        'color': 'k',
-        'marker': 'd--',
-        'linewidth': 2,
-        'size': 7}
-
     # # encoding/decoding complexity as function of num_partitions
     # plot.encode_decode_plot(
     #     [lt_partitions],
@@ -838,9 +807,10 @@ def load_delay_plots():
         xlabel=r'$T$',
         normalize=uncoded_partitions,
         loc=(0.025, 0.125),
+        vline=partition_parameters[0].rows_per_batch,
         show=False,
     )
-    # plt.savefig('./plots/journal/partitions.pdf')
+    plt.savefig('./plots/journal/partitions.pdf')
 
     # load/delay as function of system size
     plot.load_delay_plot(
@@ -861,7 +831,7 @@ def load_delay_plots():
         ncol=2,
         show=False,
     )
-    # plt.savefig('./plots/journal/size.pdf')
+    plt.savefig('./plots/journal/size.pdf')
 
     # load/delay for different solvers as function of num_partitions
     plot.load_delay_plot(
@@ -874,9 +844,10 @@ def load_delay_plots():
         'num_partitions',
         xlabel=r'$T$',
         normalize=uncoded_partitions,
+        vline=partition_parameters[0].rows_per_batch,
         show=False,
     )
-    # plt.savefig('./plots/journal/solvers_partitions.pdf')
+    plt.savefig('./plots/journal/solvers_partitions.pdf')
 
     # load/delay as function of system size
     plot.load_delay_plot(
@@ -890,7 +861,7 @@ def load_delay_plots():
         legend='load',
         show=False,
     )
-    # plt.savefig('./plots/journal/solvers_size.pdf')
+    plt.savefig('./plots/journal/solvers_size.pdf')
 
     plt.show()
     return
