@@ -131,7 +131,7 @@ def get_parameters_partitioning_2():
 
 def load_delay_plot(results, plot_settings, xdata, xlabel='',
                     normalize=None, legend='load', ncol=1, loc='best',
-                    show=True):
+                    vline=None, show=True):
     '''Create a plot with two subplots for load and delay respectively.
 
     Args:
@@ -153,6 +153,8 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
     ncol: number of legend columns.
 
     loc: legend location.
+
+    vline: plot a vertical line at this value.
 
     show: show the plots if True.
 
@@ -184,6 +186,10 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
             subplot=True,
             normalize=normalize
         )
+
+    # plot a vertical bar at the partitioning limit
+    if vline:
+        plt.axvline(x=vline, color='k', linestyle=':', linewidth=3)
 
     plt.margins(y=0.1)
     if legend == 'load':
@@ -227,6 +233,10 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
             borderaxespad=0.1,
             ncol=ncol,
         )
+
+    # plot a vertical bar at the partitioning limit
+    if vline:
+        plt.axvline(x=vline, color='k', linestyle=':', linewidth=3)
 
     plt.autoscale(enable=True)
     plt.tight_layout()
