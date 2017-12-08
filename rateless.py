@@ -10,7 +10,7 @@ import stats
 import complexity
 import overhead
 
-def optimize_lt_parameters(parameters=None, target_overhead=None,
+def optimize_lt_parameters(num_inputs=None, target_overhead=None,
                            target_failure_probability=None):
     '''find good lt code parameters
 
@@ -18,14 +18,14 @@ def optimize_lt_parameters(parameters=None, target_overhead=None,
 
     '''
     c, delta = pyrateless.heuristic(
-        num_inputs=parameters.num_source_rows,
+        num_inputs=num_inputs,
         target_failure_probability=target_failure_probability,
         target_overhead=target_overhead,
     )
 
     # compute the robust Soliton distribution mode
     mode = pyrateless.coding.stats.mode_from_delta_c(
-        num_inputs=parameters.num_source_rows,
+        num_inputs=num_inputs,
         delta=delta,
         c=c,
     )
@@ -46,7 +46,7 @@ def evaluate(parameters, target_overhead=None, target_failure_probability=None):
 
     # find good LT code parameters
     c, delta, mode = optimize_lt_parameters(
-        parameters=parameters,
+        num_inputs=parameters.num_source_rows,
         target_overhead=target_overhead,
         target_failure_probability=target_failure_probability,
     )
@@ -204,7 +204,7 @@ def order_pdf(parameters=None, target_overhead=None, target_failure_probability=
 
     # find good LT code parameters
     c, delta, mode = optimize_lt_parameters(
-        parameters=parameters,
+        num_inputs=parameters.num_source_rows,
         target_overhead=target_overhead,
         target_failure_probability=target_failure_probability,
     )
