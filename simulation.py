@@ -40,7 +40,7 @@ from evaluation import AssignmentEvaluator
 
 # create a process and thread pool executor for this module. these are used to
 # increase computations and I/O throughput, respectively.
-process_executor = ProcessPoolExecutor(max_workers=1)
+process_executor = ProcessPoolExecutor()
 thread_executor = ThreadPoolExecutor()
 
 def cdf_from_samples(samples):
