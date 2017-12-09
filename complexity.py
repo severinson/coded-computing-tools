@@ -48,11 +48,15 @@ def partitioned_encode_delay(parameters, partitions=None):
         parameters.num_servers,
     )
 
-    # Scale by encoding complexity per server
+    # scale by the total encoding complexity
     delay *= block_diagonal_encoding_complexity(
         parameters,
         partitions=partitions,
     )
+
+    # take into account that each coded row is stored at sever_storage*q
+    # servers. each coded row is thus encoded several times.
+    delay *= parameters.muq
 
     # split the work over all servers
     delay /= parameters.num_servers
