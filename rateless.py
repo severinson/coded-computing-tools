@@ -31,35 +31,55 @@ def optimize_lt_parameters(num_inputs=None, target_overhead=None,
     )
     return c, delta, mode
 
-def evaluate(parameters, target_overhead=None, target_failure_probability=None):
+def evaluate(parameters, target_overhead=None,
+             target_failure_probability=None, partitioned=False):
     '''evaluate LT code performance.
 
     args:
 
     parameters: system parameters.
 
+    partitioned: evaluate the performance of the scheme using a partitioned LT
+    code with rows_per_batch number of partitions. this case is easy to
+    evaluate as we will always receive the same coded symbols for each
+    partition. in particular, if it is possible to decode one partition, we can
+    decode all others as well. this is only true for
+    num_partitions=rows_per_batch.
+
     returns: dict with performance results.
 
     '''
     assert target_overhead > 1
     assert 0 < target_failure_probability < 1
+    assert isinstance(partitioned, bool)
+
+    # we support only either no partitioning or exactly rows_per_batch
+    # partitions. this case is much simpler to handle due to all partitions
+    # behaving the same only in this instance.
+    if partitioned:
+        num_partitions = parameters.rows_per_batch
+    else:
+        num_partitions = 1
+    num_inputs = parameters.num_source_rows / num_partitions
 
     # find good LT code parameters
     c, delta, mode = optimize_lt_parameters(
-        num_inputs=parameters.num_source_rows,
+        num_inputs=num_inputs,
         target_overhead=target_overhead,
         target_failure_probability=target_failure_probability,
     )
 
     logging.debug(
-        'LT mode=%d, delta=%f for %d input symbols, target overhead %f, target failure probability %f',
-        mode, delta, parameters.num_source_rows, target_overhead, target_failure_probability,
+        'LT mode=%d, delta=%f for %d input symbols, target overhead %f, target failure probability %f. partitioned: %r',
+        mode, delta, parameters.num_source_rows,
+        target_overhead, target_failure_probability,
+        partitioned,
     )
 
     # simulate the the code performance. we only extract the number of
     # multiplications required for encoding and decoding from this simulation.
     df = pyrateless.simulate({
-        'num_inputs': parameters.num_source_rows,
+        'num_inputs': num_inputs,
         'failure_prob': delta,
         'mode': mode,
     }, overhead=target_overhead)
@@ -79,6 +99,10 @@ def evaluate(parameters, target_overhead=None, target_failure_probability=None):
     result['decoding_multiplications'] = mean['decoding_multiplications']
     result['decoding_multiplications'] *= parameters.num_outputs
 
+    # scale by the number of partitions
+    result['encoding_multiplications'] *= num_partitions
+    result['decoding_multiplications'] *= num_partitions
+
     # compute encoding delay
     result['encode'] = stats.order_mean_shiftexp(
         parameters.num_servers,
@@ -97,6 +121,7 @@ def evaluate(parameters, target_overhead=None, target_failure_probability=None):
     # probability of decoding at various levels of overhead.
     simulated = performance_integral(
         parameters=parameters,
+        num_inputs=num_inputs,
         target_overhead=target_overhead,
         mode=mode,
         delta=delta,
@@ -140,7 +165,7 @@ def decoding_success_pdf(overhead_levels, num_inputs=None, mode=None, delta=None
     decoding_pdf = np.diff(decoding_cdf)
     return decoding_pdf
 
-def performance_integral(parameters=None, target_overhead=None,
+def performance_integral(parameters=None, num_inputs=None, target_overhead=None,
                          mode=None, delta=None, num_overhead_levels=100):
     '''compute average performance by taking into account the probability of
     finishing at different levels of overhead.
@@ -159,7 +184,7 @@ def performance_integral(parameters=None, target_overhead=None,
     # compute the probability of decoding at the respective levels of overhead
     decoding_probabilities = decoding_success_pdf(
         overhead_levels,
-        num_inputs=parameters.num_source_rows,
+        num_inputs=num_inputs,
         mode=mode,
         delta=delta,
     )
