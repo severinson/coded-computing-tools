@@ -60,7 +60,9 @@ def evaluate(parameters, target_overhead=None,
         num_partitions = parameters.rows_per_batch
     else:
         num_partitions = 1
-    num_inputs = parameters.num_source_rows / num_partitions
+
+    # guaranteed to be an integer
+    num_inputs = int(parameters.num_source_rows / num_partitions)
 
     # find good LT code parameters
     c, delta, mode = optimize_lt_parameters(
