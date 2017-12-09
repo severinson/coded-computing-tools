@@ -40,8 +40,10 @@ from evaluation import AssignmentEvaluator
 
 # create a process and thread pool executor for this module. these are used to
 # increase computations and I/O throughput, respectively.
-process_executor = ProcessPoolExecutor()
-thread_executor = ThreadPoolExecutor()
+# there is a bug when using more than 1 worker:
+# https://bitbucket.org/pypy/pypy/issues/2530/segfault-with-threadpool-pandas-when
+process_executor = ProcessPoolExecutor(max_workers=1)
+thread_executor = ThreadPoolExecutor(max_workers=1)
 
 def cdf_from_samples(samples):
     '''infer the cdf from samples. assumes the samples are gamma distributed.
