@@ -54,9 +54,9 @@ def partitioned_encode_delay(parameters, partitions=None):
         partitions=partitions,
     )
 
-    # take into account that each coded row is stored at sever_storage*q
+    # take into account that each coded row is stored at server_storage*q
     # servers. each coded row is thus encoded several times.
-    # delay *= parameters.muq
+    delay *= parameters.muq
 
     # split the work over all servers
     delay /= parameters.num_servers
