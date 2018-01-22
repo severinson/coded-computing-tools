@@ -105,6 +105,9 @@ def evaluate(parameters, target_overhead=None,
     result['encoding_multiplications'] *= num_partitions
     result['decoding_multiplications'] *= num_partitions
 
+    # each coded row is encoded by server_storage * q = muq servers.
+    result['encoding_multiplications'] *= parameters.muq
+
     # compute encoding delay
     result['encode'] = stats.order_mean_shiftexp(
         parameters.num_servers,
@@ -216,7 +219,7 @@ def performance_integral(parameters=None, num_inputs=None, target_overhead=None,
     return {label:df[label].sum() for label in df}
 
 def order_pdf(parameters=None, target_overhead=None, target_failure_probability=None,
-              num_overhead_levels=100, num_samples=100000):
+              partitioned=False, num_overhead_levels=100, num_samples=100000):
     '''simulate the order PDF, i.e., the PDF over the number of servers needed to
     decode successfully.
 
@@ -229,9 +232,20 @@ def order_pdf(parameters=None, target_overhead=None, target_failure_probability=
 
     '''
 
+    # we support only either no partitioning or exactly rows_per_batch
+    # partitions. this case is much simpler to handle due to all partitions
+    # behaving the same only in this instance.
+    if partitioned:
+        num_partitions = parameters.rows_per_batch
+    else:
+        num_partitions = 1
+
+    # guaranteed to be an integer
+    num_inputs = int(parameters.num_source_rows / num_partitions)
+
     # find good LT code parameters
     c, delta, mode = optimize_lt_parameters(
-        num_inputs=parameters.num_source_rows,
+        num_inputs=num_inputs,
         target_overhead=target_overhead,
         target_failure_probability=target_failure_probability,
     )
@@ -245,7 +259,7 @@ def order_pdf(parameters=None, target_overhead=None, target_failure_probability=
     # compute the probability of decoding at the respective levels of overhead
     decoding_probabilities = decoding_success_pdf(
         overhead_levels,
-        num_inputs=parameters.num_source_rows,
+        num_inputs=num_inputs,
         mode=mode,
         delta=delta,
     )
@@ -259,8 +273,6 @@ def order_pdf(parameters=None, target_overhead=None, target_failure_probability=
         # the number of samples correspond to the probability of decoding at
         # this level of overhead.
         overhead_samples = int(round(decoding_probability * num_samples))
-
-        print(overhead_level, decoding_probability, overhead_samples)
 
         # monte carlo simulation of the load/delay at this overhead
         df = overhead.performance_from_overhead(
