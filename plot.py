@@ -247,7 +247,7 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
     return
 
 def encode_decode_plot(results, plot_settings, xdata, xlabel='',
-                       normalize=None, legend='load', ncol=1, loc='best',
+                       normalize=None, legend='encode', ncol=1, loc='best',
                        show=True):
     '''Create a plot with two subplots for encoding and decoding delay respectively.
 
