@@ -28,7 +28,7 @@ from assignments.cached import CachedAssignment
 heuristic_plot_settings = {
     'label': r'BDC, Heuristic',
     'color': 'r',
-    'marker': 'H-',
+    'marker': 'o-',
     'linewidth': 2,
     'size': 7}
 random_plot_settings = {
@@ -39,13 +39,13 @@ random_plot_settings = {
     'size': 8}
 hybrid_plot_settings = {
     'label': r'BDC, Hybrid',
-    'color': 'c',
-    'marker': 'd-',
+    'color': 'g',
+    'marker': 's-',
     'linewidth': 2,
     'size': 6}
 lt_plot_settings = {
     'label': r'LT',
-    'color': 'c',
+    'color': 'b',
     'marker': 'v:',
     'linewidth': 3,
     'size': 8
@@ -65,8 +65,8 @@ cmapred_plot_settings = {
     'size': 7}
 stragglerc_plot_settings = {
     'label': r'SC',
-    'color': 'k',
-    'marker': 'H',
+    'color': 'm',
+    'marker': '*-',
     'linewidth': 2,
     'size': 7}
 rs_plot_settings = {
@@ -86,8 +86,8 @@ def deadline_plots():
     '''deadline plots'''
 
     # get system parameters
-    # parameters = plot.get_parameters_size_2()[-3]
-    parameters = plot.get_parameters_size_2()[0]
+    parameters = plot.get_parameters_size_2()[-3] # -3
+    # parameters = plot.get_parameters_size_2()[0]
 
     # setup the evaluators
     sample_100 = SampleEvaluator(num_samples=100)
@@ -141,6 +141,18 @@ def deadline_plots():
         ),
     )
 
+    lt_fun_partitioned = partial(
+        simulation.simulate,
+        directory='./results/LT_partitioned_3_1/',
+        samples=1,
+        parameter_eval=partial(
+            rateless.evaluate,
+            target_overhead=1.3,
+            target_failure_probability=1e-1,
+            partitioned=True,
+        ),
+    )
+
     df = heuristic_fun(parameters)
     samples_bdc = simulation.delay_samples(
         df,
@@ -184,13 +196,26 @@ def deadline_plots():
         order_probabilities=order_probabilities,
     )
     cdf_lt = simulation.cdf_from_samples(samples_lt)
-    # cdf_lt_2 = lambda t: stats.order_aggregate_cdf_shiftexp(
-    #     t,
-    #     parameter=complexity.map_complexity_unified(parameters),
-    #     total=parameters.num_servers,
-    #     orders=order_values,
+
+    # df = lt_fun_partitioned(parameters)
+    # order_values, order_probabilities = rateless.order_pdf(
+    #     parameters=parameters,
+    #     target_overhead=1.3,
+    #     target_failure_probability=1e-1,
+    #     partitioned=True,
+    # )
+
+    # samples_lt_partitioned = simulation.delay_samples(
+    #     df,
+    #     parameters=parameters,
+    #     map_complexity_fun=complexity.map_complexity_unified,
+    #     encode_complexity_fun=lambda x: df['encoding_multiplications'].mean(),
+    #     reduce_complexity_fun=lambda x: df['decoding_multiplications'].mean(),
+    #     order_values=order_values,
     #     order_probabilities=order_probabilities,
     # )
+    # cdf_lt_partitioned = simulation.cdf_from_samples(samples_lt_partitioned)
+
 
     df = uncoded_fun(parameters)
     samples_uncoded = simulation.delay_samples(
@@ -232,6 +257,12 @@ def deadline_plots():
         linewidth=4,
         label='LT',
     )
+    # plt.semilogy(
+    #     t_norm, 1-cdf_lt_partitioned(t),
+    #     lt_partitioned_plot_settings['color']+':s',
+    #     linewidth=4,
+    #     label='LT, Partitioned',
+    # )
     plt.semilogy(
         t_norm, 1-cdf_uncoded(t),
         uncoded_plot_settings['color']+'-.',
@@ -254,12 +285,13 @@ def deadline_plots():
         fancybox=False,
         borderaxespad=0.1,
     )
-    plt.ylabel(r'$\Pr(D > t)$', fontsize=28)
+    plt.ylabel(r'$\Pr(\rm{Delay} > t)$', fontsize=28)
     plt.xlabel(r'$t$', fontsize=28)
+    plt.ylim(ymin=1e-15)
     plt.tight_layout()
     plt.grid()
-    # plt.savefig('./plots/journal/deadline.pdf')
-    plt.savefig('./plots/meetings/deadline_0.png')
+    plt.savefig('./plots/journal/deadline.pdf')
+    # plt.savefig('./plots/meetings/deadline.png')
 
     # plot 1-cdf normalized
     # plt.figure()
@@ -302,8 +334,16 @@ def deadline_plots():
     )
 
     plt.plot(t, cdf_uncoded(t), uncoded_plot_settings['color'])
-    plt.hist(samples_uncoded, bins=100, density=True, cumulative=True,
-             histtype='stepfilled', alpha=0.3, color=uncoded_plot_settings['color'], label='uncoded')
+    plt.hist(
+        samples_uncoded,
+        bins=100,
+        density=True,
+        cumulative=True,
+        histtype='stepfilled',
+        alpha=0.3,
+        color=uncoded_plot_settings['color'],
+        label='uncoded',
+    )
 
     plt.plot(t, cdf_lt(t), lt_plot_settings['color'])
     # plt.plot(t, cdf_lt_2(t), 'c')
@@ -501,18 +541,18 @@ def lt_plots():
     # parameter_list = plot.get_parameters_size_2()[:-4]
     parameter_list = plot.get_parameters_N()
 
-    rerun = False
-    lt_1_1_fun = partial(
-        simulation.simulate,
-        directory='./results/LT_1_1/',
-        samples=1,
-        parameter_eval=partial(
-            rateless.evaluate,
-            target_overhead=1.1,
-            target_failure_probability=1e-1,
-        ),
-        rerun=rerun,
-    )
+    rerun = True
+    # lt_1_1_fun = partial(
+    #     simulation.simulate,
+    #     directory='./results/LT_1_1/',
+    #     samples=1,
+    #     parameter_eval=partial(
+    #         rateless.evaluate,
+    #         target_overhead=1.1,
+    #         target_failure_probability=1e-1,
+    #     ),
+    #     rerun=rerun,
+    # )
     lt_2_1_fun = partial(
         simulation.simulate,
         directory='./results/LT_2_1/',
@@ -558,13 +598,13 @@ def lt_plots():
         rerun=rerun,
     )
 
-    lt_1_1 = simulation.simulate_parameter_list(
-        parameter_list=parameter_list,
-        simulate_fun=lt_1_1_fun,
-        map_complexity_fun=complexity.map_complexity_unified,
-        encode_delay_fun=False,
-        reduce_delay_fun=False,
-    )
+    # lt_1_1 = simulation.simulate_parameter_list(
+    #     parameter_list=parameter_list,
+    #     simulate_fun=lt_1_1_fun,
+    #     map_complexity_fun=complexity.map_complexity_unified,
+    #     encode_delay_fun=False,
+    #     reduce_delay_fun=False,
+    # )
     lt_2_1 = simulation.simulate_parameter_list(
         parameter_list=parameter_list,
         simulate_fun=lt_2_1_fun,
@@ -628,35 +668,35 @@ def lt_plots():
         reduce_delay_fun=lambda x: 0,
     )
 
-    settings_1_1 = {
-        'label': r'LT $(0.1, 10^{-1})$',
-        'color': 'c',
-        'marker': 'x-',
-        'linewidth': 2,
-        'size': 7}
+    # settings_1_1 = {
+    #     'label': r'LT $(0.1, 10^{-1})$',
+    #     'color': 'c',
+    #     'marker': 'x:',
+    #     'linewidth': 2,
+    #     'size': 7}
     settings_2_1 = {
         'label': r'LT $(0.2, 10^{-1})$',
         'color': 'g',
-        'marker': 'x-',
-        'linewidth': 2,
-        'size': 7}
+        'marker': 's-',
+        'linewidth': 4,
+        'size': 8}
     settings_2_3 = {
         'label': r'LT $(0.2, 10^{-3})$',
-        'color': 'b',
-        'marker': 'd-',
-        'linewidth': 2,
+        'color': 'k',
+        'marker': '^--',
+        'linewidth': 3,
         'size': 7}
     settings_3_1 = {
         'label': r'LT $(0.3, 10^{-1})$',
-        'color': 'k',
-        'marker': 'x--',
-        'linewidth': 2,
-        'size': 7}
-    settings_3_2 = {
+        'color': 'm',
+        'marker': 'o-',
+        'linewidth': 4,
+        'size': 8}
+    settings_3_3 = {
         'label': r'LT $(0.3, 10^{-3})$',
-        'color': 'c',
-        'marker': 'd--',
-        'linewidth': 2,
+        'color': 'b',
+        'marker': 'v--',
+        'linewidth': 3,
         'size': 8}
     settings_heuristic = {
         'label': 'BDC, Heuristic',
@@ -668,17 +708,17 @@ def lt_plots():
 
     load_delay_plot(
         [heuristic,
-         lt_1_1,
+         # lt_1_1,
          lt_2_1,
          lt_2_3,
          lt_3_1,
          lt_3_3],
         [settings_heuristic,
-         settings_1_1,
+         # settings_1_1,
          settings_2_1,
          settings_2_3,
          settings_3_1,
-         settings_3_2],
+         settings_3_3],
         'num_columns',
         xlabel=r'$n$',
         normalize=uncoded,
@@ -686,7 +726,7 @@ def lt_plots():
         loc=(0.025, 0.125),
         show=False,
     )
-    plt.savefig('./plots/journal/lt_simple.png')
+    plt.savefig('./plots/journal/lt.pdf')
     plt.show()
     return
 
@@ -837,9 +877,23 @@ def load_delay_plots():
         encode_delay_fun=complexity.stragglerc_encode_delay,
         reduce_delay_fun=complexity.stragglerc_reduce_delay,
     )
+    _ = simulation.simulate_parameter_list(
+        parameter_list=[partition_parameters[0]],
+        simulate_fun=lt_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=False,
+        reduce_delay_fun=False,
+    )
     lt_partitions = simulation.simulate_parameter_list(
         parameter_list=partition_parameters,
         simulate_fun=lt_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=False,
+        reduce_delay_fun=False,
+    )
+    _ = simulation.simulate_parameter_list(
+        parameter_list=[partition_parameters[0]],
+        simulate_fun=lt_fun_partitioned,
         map_complexity_fun=complexity.map_complexity_unified,
         encode_delay_fun=False,
         reduce_delay_fun=False,
@@ -901,13 +955,13 @@ def load_delay_plots():
         encode_delay_fun=complexity.stragglerc_encode_delay,
         reduce_delay_fun=complexity.stragglerc_reduce_delay,
     )
-    # lt_size = simulation.simulate_parameter_list(
-    #     parameter_list=size_parameters,
-    #     simulate_fun=lt_fun,
-    #     map_complexity_fun=complexity.map_complexity_unified,
-    #     encode_delay_fun=False,
-    #     reduce_delay_fun=False,
-    # )
+    lt_size = simulation.simulate_parameter_list(
+        parameter_list=size_parameters,
+        simulate_fun=lt_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=False,
+        reduce_delay_fun=False,
+    )
     lt_partitioned_size = simulation.simulate_parameter_list(
         parameter_list=size_parameters,
         simulate_fun=lt_fun_partitioned,
@@ -927,7 +981,7 @@ def load_delay_plots():
         normalize=heuristic_partitions,
         show=False,
     )
-    plt.savefig('./plots/journal/complexity_partitions_lt_simple.png')
+    plt.savefig('./plots/journal/complexity_partitions.pdf')
 
     # encoding/decoding complexity as function of system size
     plot.encode_decode_plot(
@@ -941,7 +995,7 @@ def load_delay_plots():
         legend='load',
         show=False,
     )
-    plt.savefig('./plots/journal/complexity_size_lt_simple.png')
+    plt.savefig('./plots/journal/complexity_size.pdf')
 
     # load/delay as function of num_partitions
     plot.load_delay_plot(
@@ -960,22 +1014,23 @@ def load_delay_plots():
         'num_partitions',
         xlabel=r'$T$',
         normalize=uncoded_partitions,
+        ncol=2,
         loc=(0.025, 0.125),
         vline=partition_parameters[0].rows_per_batch,
         show=False,
     )
-    plt.savefig('./plots/journal/partitions_lt_simple.png')
+    plt.savefig('./plots/journal/partitions.pdf')
 
     # load/delay as function of system size
     plot.load_delay_plot(
         [heuristic_size,
-         # lt_size,
+         lt_size,
          lt_partitioned_size,
          cmapred_size,
          stragglerc_size,
          rs_size],
         [heuristic_plot_settings,
-         # lt_plot_settings,
+         lt_plot_settings,
          lt_partitioned_plot_settings,
          cmapred_plot_settings,
          stragglerc_plot_settings,
@@ -987,7 +1042,7 @@ def load_delay_plots():
         ncol=2,
         show=False,
     )
-    plt.savefig('./plots/journal/size_lt_simple.png')
+    plt.savefig('./plots/journal/size.pdf')
 
     # load/delay for different solvers as function of num_partitions
     plot.load_delay_plot(
@@ -1003,7 +1058,7 @@ def load_delay_plots():
         vline=partition_parameters[0].rows_per_batch,
         show=False,
     )
-    # plt.savefig('./plots/journal/solvers_partitions.pdf')
+    plt.savefig('./plots/journal/solvers_partitions.pdf')
 
     # load/delay as function of system size
     plot.load_delay_plot(
@@ -1017,7 +1072,7 @@ def load_delay_plots():
         legend='load',
         show=False,
     )
-    # plt.savefig('./plots/journal/solvers_size.pdf')
+    plt.savefig('./plots/journal/solvers_size.pdf')
 
     plt.show()
     return
@@ -1102,33 +1157,33 @@ def lt_partitioned_plot():
     )
 
     # load/delay as function of system size
-    # plot.load_delay_plot(
-    #     [heuristic,
-    #      lt,
-    #      lt_partitioned],
-    #     [heuristic_plot_settings,
-    #      lt_plot_settings,
-    #      lt_partitioned_plot_settings],
-    #     'num_servers',
-    #     xlabel=r'$K$',
-    #     normalize=uncoded_size,
-    #     legend='load',
-    #     ncol=2,
-    #     show=False,
-    # )
+    plot.load_delay_plot(
+        [heuristic,
+         lt,
+         lt_partitioned],
+        [heuristic_plot_settings,
+         lt_plot_settings,
+         lt_partitioned_plot_settings],
+        'num_servers',
+        xlabel=r'$K$',
+        normalize=uncoded_size,
+        legend='load',
+        ncol=2,
+        show=False,
+    )
 
     # plot encoding/decoding complexity
-    # plot.encode_decode_plot(
-    #     [lt,
-    #      lt_partitioned],
-    #     [lt_plot_settings,
-    #      lt_partitioned_plot_settings],
-    #     'num_servers',
-    #     xlabel=r'$K$',
-    #     normalize=heuristic,
-    #     show=False,
-    # )
-    # plt.show()
+    plot.encode_decode_plot(
+        [lt,
+         lt_partitioned],
+        [lt_plot_settings,
+         lt_partitioned_plot_settings],
+        'num_servers',
+        xlabel=r'$K$',
+        normalize=heuristic,
+        show=False,
+    )
+    plt.show()
     return
 
 def lt_decoding_pdf_plot():
