@@ -63,10 +63,10 @@ class SystemParameters(object):
 
         '''
 
-        assert isinstance(rows_per_batch, int)
-        assert isinstance(num_servers, int)
-        assert isinstance(q, int)
-        assert isinstance(num_outputs, int)
+        assert rows_per_batch % 1 == 0
+        assert num_servers % 1 == 0
+        assert q % 1 == 0
+        assert num_outputs % 1 == 0
         assert 0 < server_storage <= 1, 'Server storage must be >0 and <=1.'
         assert isinstance(num_partitions, int)
         assert isinstance(num_columns, int) or num_columns is None
