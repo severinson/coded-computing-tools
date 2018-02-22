@@ -7,6 +7,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 
+from scipy.special import comb as nchoosek
+
 def get_parameters_size():
     '''Get a list of parameters for the size plot.'''
     rows_per_server = 2000
@@ -48,6 +50,31 @@ def get_parameters_size_2():
             num_columns=num_columns,
             num_outputs_factor=num_outputs_factor
         )
+        parameters.append(par)
+    return parameters
+
+def get_parameters_tradeoff():
+    '''Get a list of parameters for the load-vs-delay plot.'''
+    num_outputs = 840
+    num_servers = 21
+    server_storage = 1/2
+    parameters = list()
+    num_source_rows = 352716
+    for q in range(8, num_servers+1):
+        num_coded_rows = num_source_rows * num_servers / q
+        num_batches = nchoosek(num_servers, int(server_storage*q))
+        rows_per_batch = int(num_coded_rows / num_batches)
+        try:
+            par = model.SystemParameters(
+                rows_per_batch=1,
+                num_servers=num_servers,
+                q=q,
+                num_outputs=q,
+                server_storage=server_storage,
+                num_partitions=1,
+            )
+        except ValueError:
+            continue
         parameters.append(par)
     return parameters
 
@@ -131,6 +158,8 @@ def get_parameters_partitioning_2():
 
 def load_delay_plot(results, plot_settings, xdata, xlabel='',
                     normalize=None, legend='load', ncol=1, loc='best',
+                    ylim_top=None, xlim_top=None,
+                    ylim_bot=None, xlim_bot=None,
                     vline=None, show=True):
     '''Create a plot with two subplots for load and delay respectively.
 
@@ -154,6 +183,10 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
 
     loc: legend location.
 
+    ylim_top, xlim_bot, ylim_bot, xlim_bot: tuples (min, max) used to set axis
+    limits for y/x for the top and bottom plots. Set to None to use default
+    axis limits.
+
     vline: plot a vertical line at this value.
 
     show: show the plots if True.
@@ -168,7 +201,8 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
     plt.rc('text', usetex=True)
     # plt.rc('font', family='serif')
     plt.rcParams['text.latex.preamble'] = [r'\usepackage{lmodern}']
-    _ = plt.figure(figsize=(10,9))
+    # _ = plt.figure(figsize=(10,9))
+    _ = plt.figure(figsize=(11,4))
 
     # Plot load
     plt.autoscale(enable=True)
@@ -182,7 +216,7 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
             plot_setting,
             xdata,
             'load',
-            ylabel=r'$L$',
+            ylabel=r'Load',
             subplot=True,
             normalize=normalize
         )
@@ -216,9 +250,9 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
             xdata,
             'overall_delay',
             xlabel=xlabel,
-            ylabel=r'$D$',
+            ylabel=r'Delay',
             subplot=True,
-            normalize=normalize
+            normalize=normalize,
         )
 
     if legend == 'delay':
@@ -242,12 +276,25 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
     plt.tight_layout()
     plt.subplots_adjust(wspace=0, hspace=0.12)
     plt.margins(y=0.1)
+
+    # set axis limits
+    if ylim_top:
+        ax2.set_ylim(ylim_top)
+    if xlim_top:
+        ax2.set_xlim(xlim_top)
+    if ylim_bot:
+        ax2.set_ylim(ylim_bot)
+    if xlim_bot:
+        ax2.set_xlim(xlim_bot)
+
     if show:
         plt.show()
     return
 
 def encode_decode_plot(results, plot_settings, xdata, xlabel='',
                        normalize=None, legend='encode', ncol=1, loc='best',
+                       ylim_top=None, xlim_top=None,
+                       ylim_bot=None, xlim_bot=None,
                        show=True):
     '''Create a plot with two subplots for encoding and decoding delay respectively.
 
@@ -266,6 +313,10 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
 
     legend: Place the legend in the load or delay plot by setting this
     argument to 'load' or 'delay'.
+
+    ylim_top, xlim_bot, ylim_bot, xlim_bot: tuples (min, max) used to set axis
+    limits for y/x for the top and bottom plots. Set to None to use default
+    axis limits.
 
     show: show the plots if True.
 
@@ -341,6 +392,17 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
     plt.tight_layout()
     plt.subplots_adjust(wspace=0, hspace=0.2)
     plt.margins(y=0.1)
+
+    # set axis limits
+    if ylim_top:
+        ax2.set_ylim(ylim_top)
+    if xlim_top:
+        ax2.set_xlim(xlim_top)
+    if ylim_bot:
+        ax2.set_ylim(ylim_bot)
+    if xlim_bot:
+        ax2.set_xlim(xlim_bot)
+
     if show:
         plt.show()
     return
