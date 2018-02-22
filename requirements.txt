@@ -3,5 +3,6 @@ numpy
 pandas
 diskcache
 matplotlib
+matplotlib2tikz
 https://github.com/severinson/pynumeric/archive/master.zip
 https://github.com/severinson/pyrateless/archive/master.zip
