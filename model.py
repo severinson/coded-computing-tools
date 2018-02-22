@@ -67,8 +67,7 @@ class SystemParameters(object):
         assert isinstance(num_servers, int)
         assert isinstance(q, int)
         assert isinstance(num_outputs, int)
-        assert isinstance(server_storage, float) or server_storage == 1
-        assert server_storage <= 1, 'Server storage must be >0 and <=1.'
+        assert 0 < server_storage <= 1, 'Server storage must be >0 and <=1.'
         assert isinstance(num_partitions, int)
         assert isinstance(num_columns, int) or num_columns is None
         if num_columns:
@@ -81,11 +80,14 @@ class SystemParameters(object):
         self.num_partitions = num_partitions
         self.rows_per_batch = rows_per_batch
 
-        assert num_outputs / q % 1 == 0, 'num_outputs must be divisible by the number of servers.'
-        assert server_storage * q % 1 == 0, 'server_storage * q must be integer.'
+        if num_outputs / q % 1 != 0:
+            raise ValueError('num_outputs must be divisible by the number of servers.')
+        if server_storage * q % 1 != 0:
+            raise ValueError('server_storage * q must be integer.')
 
         num_batches = nchoosek(num_servers, server_storage*q, exact=True)
-        assert num_batches % 1 == 0, 'There must be an integer number of batches.'
+        if num_batches % 1 != 0:
+            raise ValueError('There must be an integer number of batches.')
         num_batches = int(num_batches)
         self.num_batches = num_batches
 
@@ -93,7 +95,8 @@ class SystemParameters(object):
         self.num_coded_rows = num_coded_rows
 
         num_source_rows = q / num_servers * num_coded_rows
-        assert num_source_rows % 1 == 0, 'There must be an integer number of source rows.'
+        if num_source_rows % 1 != 0:
+            raise ValueError('There must be an integer number of source rows.')
         num_source_rows = int(num_source_rows)
         self.num_source_rows = num_source_rows
 
@@ -103,12 +106,14 @@ class SystemParameters(object):
         else:
             self.num_columns = self.num_source_rows
 
-        assert num_source_rows / num_partitions % 1 == 0, \
-            'num_partitions must divide num_source_rows %d, %d' % (num_partitions, num_source_rows)
+        if num_source_rows / num_partitions % 1 != 0:
+            raise ValueError('num_partitions must divide num_source_rows %d, %d' % (num_partitions, num_source_rows))
 
-        assert num_coded_rows / num_partitions % 1 == 0, \
-            'There must be an integer number of coded rows per partition. num_partitions: %d' \
-            % num_partitions
+        if num_coded_rows / num_partitions % 1 != 0:
+            raise ValueError(
+                'There must be an integer number of coded rows per partition. num_partitions: %d',
+                num_partitions,
+            )
 
         rows_per_partition = int(num_source_rows / num_partitions)
         self.rows_per_partition = rows_per_partition
