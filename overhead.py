@@ -118,14 +118,14 @@ def exhaustive_completion_orders(parameters=None):
 
 @lru_cache()
 def _batches_by_server(num_servers=None, servers_per_batch=None):
-    '''compute what server stores what coded rows.
+    '''compute which server stores which batches.
 
     num_servers: total number of servers.
 
     servers_per_batch: number of servers that each batch is stored at.
 
-    returns: list of length num_servers with each element a set containing the
-    indices of the batches stored by that server.
+    returns: list of length num_servers where each element is a set of the
+    indices of the batches stored by the corresponding server.
 
     '''
     assert num_servers is not None
@@ -141,11 +141,9 @@ def _batches_by_server(num_servers=None, servers_per_batch=None):
     )
 
     # add batch indices to servers
-    batch_index = 0
-    for label in labels:
+    for batch_index, label in enumerate(labels):
         for server_index in label:
             storage[server_index].add(batch_index)
-        batch_index += 1
 
     # TODO: We're returning something mutable
     return storage
@@ -205,20 +203,23 @@ def delay_from_order(parameters=None, order=None, overhead=None):
     tentative_x = permanent_x
     permanent = _batches_from_order(storage, order[:parameters.q])
     tentative = set()
+
+    if _rows_from_batches(parameters, permanent) >= required_rows:
+        coded_rows_per_server = parameters.num_source_rows * parameters.server_storage
+        batches_per_server = coded_rows_per_server / parameters.rows_per_batch
+        return {
+            'servers': parameters.q,
+            'batches': parameters.q * batches_per_server,
+            'delay': parameters.computational_delay(q=parameters.q)
+        }
+
     def decodeable(x):
         '''return 1 if decoding is possible with x servers and 0 otherwise'''
+        # TODO: This includes some variables needed to cache previously
+        # computed results. We currently don't do caching, however.
         nonlocal permanent, tentative, permanent_x, tentative_x
         nonlocal parameters, storage, order, required_rows
-
-        # if x is higher than tentative_x, tentative_x servers was not enough
-        # and we can safely update the set of permanent batches.
-        if x > tentative_x:
-            permanent.update(tentative)
-            permanent_x = tentative_x
-            tentative = set()
-
-        tentative = _batches_from_order(storage, order[permanent_x:x])
-        batches = permanent.union(tentative)
+        batches = _batches_from_order(storage, order[:x])
         if _rows_from_batches(parameters, batches) >= required_rows:
             return 1
         return 0
