@@ -1,0 +1,39 @@
+* TODO Clean up RandomSolver.
+* DONE Integrate remaining_unicasts better in the hybrid solver.
+  CLOSED: [2017-10-09 Mon 13:59]
+* DONE More general hybrid solver. Hybrid solver for a more general objective function.
+  CLOSED: [2017-10-09 Mon 13:59]
+* TODO Add tests for the dense assignment.
+Or remove it in favor of using the cached without using the cache.
+* DONE binsearch should evaluate load/delay for the same realization of G
+  CLOSED: [2017-10-09 Mon 14:04]
+  to allow for concatenating the samples.
+* DONE Perhaps parallelize the binsearch sampling.
+  CLOSED: [2017-10-09 Mon 13:58]
+ - Could be implemented by running a few threads that each take some samples.
+ - Or by taking all samples map style.
+* TODO move load_data to the simulator.
+* DONE Assignment type should be an argument to the simulator.
+* TODO Move all evaluators to the new format.
+* DONE Add an evaluator abstract base class.
+- Perhaps differentiate between evaluating parameters and assignments.
+* DONE Allow for passing arbitrary parameters to evaluators.
+- Maybe use a dict or kwargs.
+* DONE Have the simulator save results to disk incrementally.
+- Now it waits for all simulations to complete before saving to disk.
+* DONE Is the order statistic code wrong?
+  CLOSED: [2017-10-09 Mon 13:58]
+- It iterates from 1 to q now. Should it be q+1?
+* DONE LT simulator race condition
+  CLOSED: [2017-10-09 Mon 13:58]
+- There's a race condition when saving the results file in the LT simulator.
+* TODO Clean up stats module
+
+* TODO Deadline parameters
+- Need a set of parameters where the LT code does better.
+- LT codes have lower encoding/decoding complexity.
+- Encoding/decoding complexity needs to be a significant part of the overall
+  complexity for there to be a difference.
+- Encoding complexity is proportional to r*n.
+- Map complexity is proportional to r*n*N.
+- Decoding complexity is proportional to N.
