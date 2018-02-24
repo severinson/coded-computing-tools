@@ -45,7 +45,7 @@ from evaluation import AssignmentEvaluator
 process_executor = ProcessPoolExecutor(max_workers=1)
 thread_executor = ThreadPoolExecutor(max_workers=1)
 
-def cdf_from_samples(samples):
+def cdf_from_samples(samples, loc=None):
     '''infer the cdf from samples. assumes the samples are gamma distributed.
 
     returns: lambda expression cdf(t) that gives the probability of the
@@ -53,10 +53,9 @@ def cdf_from_samples(samples):
 
     '''
 
-    # fit a gamma distribution to the samples. we assume that the overall delay
-    # is gamma distributed. we've not shown that this is true, but the results
-    # line up well enough for numerical results.
-    a, loc, scale = scipy.stats.gamma.fit(samples)
+    # the sum of exponentially distributed random variables is gamma
+    # distributed. fit a CDF accordingly.
+    a, loc, scale = scipy.stats.gamma.fit(samples, loc=samples.min())
     return lambda t: scipy.stats.gamma.cdf(t, a, loc=loc, scale=scale)
 
 def delay_samples(dataframe, num_samples=100000, parameters=None, map_complexity_fun=None,
@@ -145,7 +144,10 @@ def delay_samples(dataframe, num_samples=100000, parameters=None, map_complexity
             total=parameters.num_servers,
             order=order,
         )
-        num_order_samples = int(round(num_samples*probability))
+        num_order_samples = min(
+            num_samples-i,
+            int(round(num_samples*probability)),
+        )
         samples[i:i+num_order_samples] += map_distribution.sample(n=num_order_samples)
         i += num_order_samples
 
