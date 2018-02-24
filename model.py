@@ -172,7 +172,10 @@ class SystemParameters(object):
                 continue
             rows_per_batch = int(rows_per_batch)
 
-            num_partitions = num_source_rows / rows_per_partition
+            if rows_per_partition:
+                num_partitions = num_source_rows / rows_per_partition
+            else:
+                num_partitions = rows_per_batch
             if num_partitions % 1 != 0:
                 continue
             num_partitions = int(num_partitions)
@@ -380,7 +383,7 @@ class SystemParameters(object):
         '''
         assert strategy == 'best' or strategy == '1' or strategy == '2'
         assert design_overhead is None or overhead >= design_overhead, \
-            'design_overhead must be <= overhead'
+            'design_overhead={} must be <= overhead={}'.format(design_overhead, overhead)
         if design_overhead is None:
             design_overhead = overhead
 
