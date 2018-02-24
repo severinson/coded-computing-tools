@@ -37,13 +37,60 @@ def get_parameters_size_2():
     code_rate = 2/3
     muq = 2
     num_columns = None
-    num_outputs_factor = 1000
+    # num_outputs_factor = 1000
+    num_outputs_factor = 10
     parameters = list()
     num_servers = [5, 8, 20, 50, 80, 125, 200, 500, 2000]
     for servers in num_servers:
         par = model.SystemParameters.fixed_complexity_parameters(
             rows_per_server=rows_per_server,
             rows_per_partition=rows_per_partition,
+            min_num_servers=servers,
+            code_rate=code_rate,
+            muq=muq,
+            num_columns=num_columns,
+            num_outputs_factor=num_outputs_factor
+        )
+        parameters.append(par)
+    return parameters
+
+def get_parameters_size_3():
+    '''Get a list of parameters for the size plot.'''
+    rows_per_server = 2000
+    rows_per_partition = 100
+    code_rate = 2/3
+    muq = 2
+    num_columns = None
+    # num_outputs_factor = 1000
+    num_outputs_factor = 10
+    parameters = list()
+    num_servers = [5, 8, 20, 50, 80, 125, 200, 500, 2000]
+    for servers in num_servers:
+        par = model.SystemParameters.fixed_complexity_parameters(
+            rows_per_server=rows_per_server,
+            rows_per_partition=rows_per_partition,
+            min_num_servers=servers,
+            code_rate=code_rate,
+            muq=muq,
+            num_columns=num_columns,
+            num_outputs_factor=num_outputs_factor
+        )
+        parameters.append(par)
+    return parameters
+
+def get_parameters_size_4():
+    '''Get a list of parameters for the size plot.'''
+    rows_per_server = 2000
+    rows_per_partition = 100
+    code_rate = 2/3
+    muq = 2
+    num_columns = None
+    num_outputs_factor = 1000
+    parameters = list()
+    num_servers = [5, 8, 20, 50, 80, 125, 200, 500, 2000]
+    for servers in num_servers:
+        par = model.SystemParameters.fixed_complexity_parameters(
+            rows_per_server=rows_per_server,
             min_num_servers=servers,
             code_rate=code_rate,
             muq=muq,
@@ -105,6 +152,34 @@ def get_parameters_N():
 
     return parameters
 
+def get_parameters_deadline():
+    '''Get a list of parameters for the N to n ratio plot.'''
+    rows_per_batch = 2
+    num_servers = 201
+    q = 134
+    # num_partitions = [
+    #     100, 200, 268,
+    # ]
+    # num_partitions = rows_per_batch
+    num_partitions = rows_per_batch
+
+    # num_columns = 5000
+    # num_columns = 10000
+    num_columns = None
+    # for T in num_partitions:
+    num_outputs = 100*q
+    server_storage = 2/q
+    parameters = model.SystemParameters(
+        rows_per_batch=rows_per_batch,
+        num_servers=num_servers,
+        q=q,
+        num_outputs=num_outputs,
+        server_storage=server_storage,
+        num_partitions=num_partitions,
+        num_columns=num_columns,
+    )
+    return parameters
+
 def get_parameters_partitioning():
     '''Get a list of parameters for the partitioning plot.'''
     rows_per_batch = 250
@@ -141,6 +216,29 @@ def get_parameters_partitioning_2():
                       40, 50, 60, 75, 100, 120, 125, 150, 200, 250,
                       300, 375, 500, 600, 750, 1000, 1500, 3000]
 
+    parameters = list()
+    for partitions in num_partitions:
+        par = model.SystemParameters(
+            rows_per_batch=rows_per_batch,
+            num_servers=num_servers,
+            q=q,
+            num_outputs=num_outputs,
+            server_storage=server_storage,
+            num_partitions=partitions,
+        )
+        parameters.append(par)
+
+    return parameters
+
+def get_parameters_partitioning_3():
+    '''Get a list of parameters for the size plot.'''
+    rows_per_batch = 10
+    num_servers = 201
+    q = 134
+    num_outputs = 1340
+    server_storage = 2 / q
+    num_partitions = [10, 134, 8375, 13400, 16750, 67000]
+    # 26800
     parameters = list()
     for partitions in num_partitions:
         par = model.SystemParameters(
@@ -201,8 +299,8 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
     plt.rc('text', usetex=True)
     # plt.rc('font', family='serif')
     plt.rcParams['text.latex.preamble'] = [r'\usepackage{lmodern}']
-    # _ = plt.figure(figsize=(10,9))
-    _ = plt.figure(figsize=(11,4))
+    _ = plt.figure(figsize=(10,9))
+    # _ = plt.figure(figsize=(11,4))
 
     # Plot load
     plt.autoscale(enable=True)
@@ -279,9 +377,9 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
 
     # set axis limits
     if ylim_top:
-        ax2.set_ylim(ylim_top)
+        ax1.set_ylim(ylim_top)
     if xlim_top:
-        ax2.set_xlim(xlim_top)
+        ax1.set_xlim(xlim_top)
     if ylim_bot:
         ax2.set_ylim(ylim_bot)
     if xlim_bot:
@@ -456,22 +554,14 @@ def plot_result(result, plot_settings, xdata, ydata, xlabel='',
     size = plot_settings['size']
 
     xarray = result[xdata]
-    if np.size(result[ydata], 0) == 3:
-        ymean = result[ydata][0, :].copy()
-        ymin = result[ydata][1, :].copy()
-        ymax = result[ydata][2, :].copy()
-    else:
-        ymean = result[ydata].copy()
-        ymin = ymean.copy()
-        ymax = ymean.copy()
+    ymean = result[ydata].copy()
+    ymin = ymean.copy()
+    ymax = ymean.copy()
     yerr = np.zeros([2, len(ymean)])
     yerr[0, :] = ymean - ymin
     yerr[1, :] = ymax - ymean
     if normalize is not None:
         ymean /= normalize[ydata]
-        # ymean /= normalize[ydata][0, :]
-        # yerr[0, :] /= normalize[ydata][0, :]
-        # yerr[1, :] /= normalize[ydata][0, :]
 
     if plot_type == 'semilogx':
         plt.semilogx(xarray, ymean, style, label=label,
