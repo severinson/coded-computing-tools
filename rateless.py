@@ -9,6 +9,10 @@ import pyrateless
 import stats
 import complexity
 import overhead
+import tempfile
+import subprocess
+
+from os import path
 
 def optimize_lt_parameters(num_inputs=None, target_overhead=None,
                            target_failure_probability=None):
@@ -88,6 +92,30 @@ def evaluate(parameters, target_overhead=None,
 
     # average the columns of the df
     mean = {label:df[label].mean() for label in df}
+
+    # run the simulator written in Julia. this decoder is more optimized in
+    # terms of the number of row operations, but does not yet report encoding
+    # complexity. results are written to disk in Julia and read back here.
+    # with tempfile.TemporaryDirectory() as directory:
+    #     filename = path.join(directory, "output.csv")
+    #     subprocess.run([
+    #         "julia", "rateless.jl",
+    #         "--code", "LT",
+    #         "--num_inputs", str(num_inputs),
+    #         "--mode", str(int(round(mode))),
+    #         "--delta", str(delta),
+    #         "--overhead", str(target_overhead-1),
+    #         "--write", filename,
+    #     ])
+    #     df = pd.read_csv(filename)
+
+    # # filter out decoding failures and average
+    # df = df.loc[df['success'] == 1.0, :]
+    # if not len(df):
+    #     mean['decoding_multiplications'] = float('inf')
+    # else:
+    #     dct = {label:df[label].mean() for label in df}
+    #     mean['decoding_multiplications'] = dct['decoding_multiplications']
 
     # scale the number of multiplications required for encoding/decoding and
     # store in a new dict.
@@ -182,6 +210,9 @@ def performance_integral(parameters=None, num_inputs=None, target_overhead=None,
 
     # get the max possible overhead
     max_overhead = parameters.num_coded_rows / parameters.num_source_rows
+
+    if max_overhead < target_overhead:
+        raise ValueError("target overhead may not exceed the inverse of the code rate")
 
     # evaluate the performance at various levels of overhead
     overhead_levels = np.linspace(target_overhead, max_overhead, num_overhead_levels)
@@ -285,6 +316,8 @@ def order_pdf(parameters=None, target_overhead=None, target_failure_probability=
 
     # concatenate all samples into a single dataframe
     samples = pd.concat(results, ignore_index=True)
+
+    print(samples.head())
 
     # compute the empiric order cdf and return
     order_count = samples['servers'].value_counts(normalize=True)
