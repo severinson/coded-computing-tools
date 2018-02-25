@@ -154,20 +154,20 @@ def get_parameters_N():
 
 def get_parameters_deadline():
     '''Get a list of parameters for the N to n ratio plot.'''
-    rows_per_batch = 2
+    rows_per_batch = 10
     num_servers = 201
     q = 134
     # num_partitions = [
     #     100, 200, 268,
     # ]
     # num_partitions = rows_per_batch
-    num_partitions = rows_per_batch
+    num_partitions = 8375
 
     # num_columns = 5000
     # num_columns = 10000
     num_columns = None
     # for T in num_partitions:
-    num_outputs = 100*q
+    num_outputs = 1340
     server_storage = 2/q
     parameters = model.SystemParameters(
         rows_per_batch=rows_per_batch,
@@ -237,6 +237,7 @@ def get_parameters_partitioning_3():
     q = 134
     num_outputs = 1340
     server_storage = 2 / q
+    # num_partitions = [2]
     num_partitions = [10, 134, 8375, 13400, 16750, 67000]
     # 26800
     parameters = list()
