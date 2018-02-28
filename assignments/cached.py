@@ -10,7 +10,7 @@ import logging
 import random
 import itertools
 import numpy as np
-from scipy.misc import comb as nchoosek
+from scipy.special import comb as nchoosek
 import model
 from assignments import Assignment, AssignmentError
 
