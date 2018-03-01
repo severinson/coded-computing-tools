@@ -16,17 +16,13 @@ logging.basicConfig(level=logging.DEBUG)
 # Get parameters
 
 size_parameters = plot.get_parameters_size_2()[0:-2]
-for p in size_parameters:
-    print(p)
-print()
 size_parameters_3 = plot.get_parameters_size_3()[0:-2]
 size_parameters_4 = plot.get_parameters_size_4()[0:-2]
-# for p in size_parameters:
-#     print(p)
+
 
 partition_parameters = plot.get_parameters_partitioning_3()
 deadline_parameters = plot.get_parameters_deadline()
-print(deadline_parameters)
+
 
 heuristic_settings = {
     'label': r'BDC, $m/T=10$',
@@ -207,7 +203,7 @@ def partition_size_plots():
         encode_delay_fun=lambda x: 0,
         reduce_delay_fun=lambda x: 0,
     )
-    
+
     plot.load_delay_plot(
         [heuristic_partitions,
          # lt_partitions,
