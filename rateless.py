@@ -317,10 +317,9 @@ def order_pdf(parameters=None, target_overhead=None, target_failure_probability=
     # concatenate all samples into a single dataframe
     samples = pd.concat(results, ignore_index=True)
 
-    print(samples.head())
-
     # compute the empiric order cdf and return
     order_count = samples['servers'].value_counts(normalize=True)
+    order_count.sort_index(inplace=True)
     order_values = np.array(order_count.index)
     order_probabilities = order_count.values
     return order_values, order_probabilities
