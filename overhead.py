@@ -33,7 +33,7 @@ import model
 import numtools
 
 from functools import lru_cache
-from scipy.misc import comb as nchoosek
+from scipy.special import comb as nchoosek
 
 def performance_from_overhead(parameters=None, overhead=1, design_overhead=None,
                               num_samples=1000, cachedir='./results/Overhead'):

@@ -32,7 +32,7 @@ import itertools
 import datetime
 import numpy as np
 import pandas as pd
-from scipy.misc import comb as nchoosek
+from scipy.special import comb as nchoosek
 from model import SystemParameters, ModelError
 from assignments import Assignment
 from evaluation import AssignmentEvaluator
