@@ -36,12 +36,15 @@ def optimize_lt_parameters(num_inputs=None, target_overhead=None,
     return c, delta, mode
 
 def evaluate(parameters, target_overhead=None,
-             target_failure_probability=None, partitioned=False):
+             target_failure_probability=None,
+             pdf_fun=None, partitioned=False):
     '''evaluate LT code performance.
 
     args:
 
     parameters: system parameters.
+
+    pdf_fun: see rateless.performance_integral
 
     partitioned: evaluate the performance of the scheme using a partitioned LT
     code with rows_per_batch number of partitions. this case is easy to
@@ -158,12 +161,13 @@ def evaluate(parameters, target_overhead=None,
         target_overhead=target_overhead,
         mode=mode,
         delta=delta,
+        pdf_fun=pdf_fun,
     )
     result['delay'] = simulated['delay']
     result['load'] = simulated['load']
     return result
 
-def decoding_success_pdf(overhead_levels, num_inputs=None, mode=None, delta=None):
+def lt_success_pdf(overhead_levels, num_inputs=None, mode=None, delta=None):
     '''evaluate the decoding probability pdf.
 
     args:
@@ -198,19 +202,23 @@ def decoding_success_pdf(overhead_levels, num_inputs=None, mode=None, delta=None
     decoding_pdf = np.diff(decoding_cdf)
     return decoding_pdf
 
-def random_fountain_pdf(overhead_levels, field_size=2, num_inputs=None, mode=None, delta=None):
+def random_fountain_success_pdf(overhead_levels, field_size=2, num_inputs=None, mode=None, delta=None):
     '''compute the decoding success probability PDF of a random fountain code over
     a field of size field_size.
 
     '''
     assert field_size % 1 == 0, field_size
     absolute_overhead = np.fromiter(
-        (num_inputs*(x-1) for v in x in overhead_levels),
+        (num_inputs*(x-1) for x in overhead_levels),
         dtype=float,
     ).round()
     if absolute_overhead.min() < 0:
         raise ValueError("error for overhead levels {}. overhead must be >=1.".format(overhead_levels))
-    return np.power(field_size, -absolute_overhead)
+    decoding_cdf = 1-np.power(field_size, -absolute_overhead)
+    decoding_pdf = np.zeros(len(decoding_cdf))
+    decoding_pdf[1:] = np.diff(decoding_cdf)
+    decoding_pdf[0] = decoding_cdf[0]
+    return decoding_pdf
 
 def performance_integral(parameters=None, num_inputs=None, target_overhead=None,
                          mode=None, delta=None, pdf_fun=None, num_overhead_levels=100):
@@ -218,7 +226,7 @@ def performance_integral(parameters=None, num_inputs=None, target_overhead=None,
     finishing at different levels of overhead.
 
     pdf_fun: function used to evaluate the decoding success probability.
-    defaults to rateless.decoding_success_pdf if None. a function given here
+    defaults to rateless.lt_success_pdf if None. a function given here
     must have the same signature as this function.
 
     num_overhead_levels: performance is evaluated at num_overhead_levels levels
@@ -226,7 +234,7 @@ def performance_integral(parameters=None, num_inputs=None, target_overhead=None,
 
     '''
     if pdf_fun is None:
-        pdf_fun = decoding_success_pdf
+        pdf_fun = lt_success_pdf
     assert callable(pdf_fun)
 
     # get the max possible overhead
@@ -268,6 +276,7 @@ def performance_integral(parameters=None, num_inputs=None, target_overhead=None,
 
     # create a dataframe and sum along the columns
     df = pd.DataFrame(results)
+    print(df.head())
     return {label:df[label].sum() for label in df}
 
 def order_pdf(parameters=None, target_overhead=None, target_failure_probability=None,
@@ -309,7 +318,7 @@ def order_pdf(parameters=None, target_overhead=None, target_failure_probability=
     overhead_levels = np.linspace(target_overhead, max_overhead, num_overhead_levels)
 
     # compute the probability of decoding at the respective levels of overhead
-    decoding_probabilities = decoding_success_pdf(
+    decoding_probabilities = lt_success_pdf(
         overhead_levels,
         num_inputs=num_inputs,
         mode=mode,
