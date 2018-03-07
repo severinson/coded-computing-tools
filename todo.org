@@ -37,3 +37,4 @@ Or remove it in favor of using the cached without using the cache.
 - Encoding complexity is proportional to r*n.
 - Map complexity is proportional to r*n*N.
 - Decoding complexity is proportional to N.
+* TODO LT code simulations need to be rerun since they're not cached with N

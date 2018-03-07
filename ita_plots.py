@@ -32,16 +32,10 @@ sample_1000 = SampleEvaluator(num_samples=1000)
 # Get parameters
 partition_parameters = get_parameters_partitioning_2()
 size_parameters = plot.get_parameters_size_2()[0:-2] # -2
-for p in size_parameters:
-    print(p)
+
 
 tradeoff_parameters = plot.get_parameters_tradeoff()
-print()
-for p in tradeoff_parameters:
-    print(p)
-#     l = p.unpartitioned_load()
-#     print('l', l)
-# assert False
+
 
 # setup the partial functions that handles running the simulations
 heuristic_fun = partial(
