@@ -10,8 +10,8 @@ import numpy as np
 import stats
 
 # relative cost of encoding and decoding
-ADDITION_COMPLEXITY = 0
-MULTIPLICATION_COMPLEXITY = 1
+ADDITION_COMPLEXITY = 8
+MULTIPLICATION_COMPLEXITY = 8
 
 def partitioned_encode_delay(parameters, partitions=None):
     '''Compute delay incurred by the encoding phase. Assumes a shifted exponential
