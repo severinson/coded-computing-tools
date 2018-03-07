@@ -9,19 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import stats
 
-# Source: http://web.eecs.utk.edu/~plank/plank/papers/FAST-2005.pdf
-LDPC_RATE = 1.0496
-LDPC_XOR_PER_WORD = 30 / 4
-RS_XOR_PER_WORD = 44.6
-
-# Finite field arithmetic complexity for fields of size 2^100
-# Source: Zhi, L., Higgins, J., & Clement, M. (2001).
-# Performance of finite field arithmetic in an elliptic curve cryptosystem.
-
-# Ignore addition cost to simplify analysis
-# ADDITION_COMPLEXITY = 0.13e-6
-# ADDITION_COMPLEXITY = 0
-# MULTIPLICATION_COMPLEXITY = 87e-6
+# relative cost of encoding and decoding
 ADDITION_COMPLEXITY = 0
 MULTIPLICATION_COMPLEXITY = 1
 
