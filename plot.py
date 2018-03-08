@@ -264,7 +264,7 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
 
     Args:
 
-    results: SimulatorResult to plot.
+    results: List of Dataframes.
 
     plot_settings: List of dicts with plot settings.
 
@@ -399,7 +399,7 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
 
     args:
 
-    results: SimulatorResult to plot.
+    results: list of Dataframes.
 
     plot_settings: List of dicts with plot settings.
 
@@ -429,19 +429,26 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
     plt.rcParams['text.latex.preamble'] = [r'\usepackage{lmodern}']
     _ = plt.figure(figsize=(10,9))
 
-    # Plot load
+    if normalize:
+        normalize = normalize.copy()
+        normalize['encode'] /= normalize['overall_delay']
+        normalize['reduce'] /= normalize['overall_delay']
+
+    # encode delay
     plt.autoscale(enable=True)
     plt.tight_layout()
     ax1 = plt.subplot(211)
     plt.setp(ax1.get_xticklabels(), fontsize=25, visible=False)
     plt.setp(ax1.get_yticklabels(), fontsize=25)
-    for result, plot_setting in zip(results, plot_settings):
+    for df, plot_setting in zip(results, plot_settings):
+        df = df.copy()
+        df['encode'] /= df['overall_delay']
         plot_result(
-            result,
+            df,
             plot_setting,
             xdata,
             'encode',
-            ylabel='Encoding complexity',
+            ylabel='Encoding Delay',
             subplot=True,
             normalize=normalize
         )
@@ -463,14 +470,16 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
     ax2 = plt.subplot(212, sharex=ax1)
     plt.setp(ax2.get_xticklabels(), fontsize=25)
     plt.setp(ax2.get_yticklabels(), fontsize=25)
-    for result, plot_setting in zip(results, plot_settings):
+    for df, plot_setting in zip(results, plot_settings):
+        df = df.copy()
+        df['reduce'] /= df['overall_delay']
         plot_result(
-            result,
+            df,
             plot_setting,
             xdata,
             'reduce',
             xlabel=xlabel,
-            ylabel='Decoding complexity',
+            ylabel='Decoding Delay',
             subplot=True,
             normalize=normalize
         )
@@ -494,9 +503,9 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
 
     # set axis limits
     if ylim_top:
-        ax2.set_ylim(ylim_top)
+        ax1.set_ylim(ylim_top)
     if xlim_top:
-        ax2.set_xlim(xlim_top)
+        ax1.set_xlim(xlim_top)
     if ylim_bot:
         ax2.set_ylim(ylim_bot)
     if xlim_bot:
