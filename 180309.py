@@ -1,3 +1,4 @@
+import logging
 import matplotlib.pyplot as plt
 import model
 import simulation
@@ -12,7 +13,30 @@ from evaluation import analytic
 from solvers.heuristicsolver import HeuristicSolver
 from functools import partial
 
-def get_parameters_size():
+def get_parameters_size_10():
+    '''Get a list of parameters for the size plot.'''
+    rows_per_server = 2000
+    rows_per_partition = 10
+    code_rate = 2/3
+    muq = 2
+    num_columns = None
+    num_outputs_factor = 10
+    parameters = list()
+    num_servers = [5, 8, 20, 50, 80, 125, 200]
+    for servers in num_servers:
+        par = model.SystemParameters.fixed_complexity_parameters(
+            rows_per_server=rows_per_server,
+            rows_per_partition=rows_per_partition,
+            min_num_servers=servers,
+            code_rate=code_rate,
+            muq=muq,
+            num_columns=num_columns,
+            num_outputs_factor=num_outputs_factor
+        )
+        parameters.append(par)
+    return parameters
+
+def get_parameters_size_20():
     '''Get a list of parameters for the size plot.'''
     rows_per_server = 2000
     rows_per_partition = 20
@@ -182,7 +206,7 @@ def r10_decoding_complexity(parameters):
     return 25 * parameters.num_source_rows
 
 def size_plot():
-    parameters = get_parameters_size()
+    parameters = get_parameters_size_20()
 
     uncoded = simulation.simulate_parameter_list(
         parameter_list=parameters,
@@ -190,13 +214,6 @@ def size_plot():
         map_complexity_fun=complexity.map_complexity_uncoded,
         encode_delay_fun=lambda x: 0,
         reduce_delay_fun=lambda x: 0,
-    )
-    heuristic = simulation.simulate_parameter_list(
-        parameter_list=parameters,
-        simulate_fun=heuristic_fun,
-        map_complexity_fun=complexity.map_complexity_unified,
-        encode_delay_fun=complexity.partitioned_encode_delay,
-        reduce_delay_fun=complexity.partitioned_reduce_delay,
     )
     lt = simulation.simulate_parameter_list(
         parameter_list=parameters,
@@ -212,6 +229,16 @@ def size_plot():
         encode_delay_fun=False,
         reduce_delay_fun=False,
     )
+    parameters = get_parameters_size_10()
+    parameters[-3:] = get_parameters_size_20()[-3:]
+    heuristic = simulation.simulate_parameter_list(
+        parameter_list=parameters,
+        simulate_fun=heuristic_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=complexity.partitioned_encode_delay,
+        reduce_delay_fun=complexity.partitioned_reduce_delay,
+    )
+
 
     plot.load_delay_plot(
         [heuristic,
@@ -224,9 +251,32 @@ def size_plot():
         xlabel=r'Servers $K$',
         normalize=uncoded,
         show=False,
+        xlim_bot=(6, 201),
+        ylim_top=(0.4, 1),
+        ylim_bot=(0.8, 2.4),
     )
+    plt.savefig("./plots/180309/load_delay.png")
+
+    plot.encode_decode_plot(
+        [heuristic,
+         lt,
+         r10],
+        [ita.heuristic_plot_settings,
+         lt_plot_settings,
+         r10_plot_settings],
+        'num_servers',
+        xlabel=r'Servers $K$',
+        normalize=None,
+        show=False,
+        xlim_bot=(6, 201),
+        ylim_top=(0, 0.3),
+        ylim_bot=(0, 0.001),
+    )
+    plt.savefig("./plots/180309/encode_decode.png")
+
     plt.show()
     return
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG)
     size_plot()
