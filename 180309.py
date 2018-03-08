@@ -59,7 +59,7 @@ def get_parameters_size_20():
         parameters.append(par)
     return parameters
 
-def rateless_evaluate(parameters, pdf_fun=None):
+def rateless_evaluate(parameters, code='R10', pdf_fun=None):
     '''evaluate LT code performance.
 
     args:
@@ -70,14 +70,21 @@ def rateless_evaluate(parameters, pdf_fun=None):
 
     '''
     assert isinstance(parameters, model.SystemParameters)
+    assert code in ['R10', 'RQ']
     result = dict()
 
     # we encode each column of the input matrix separately
-    result['encoding_multiplications'] = r10_encoding_complexity(parameters)
+    if code == 'R10':
+        result['encoding_multiplications'] = r10_encoding_complexity(parameters)
+    elif code == 'RQ':
+        result['encoding_multiplications'] = rq_encoding_complexity(parameters)
     result['encoding_multiplications'] *= parameters.num_columns
 
     # we decode each output vector separately
-    result['decoding_multiplications'] = r10_decoding_complexity(parameters)
+    if code == 'R10':
+        result['decoding_multiplications'] = r10_decoding_complexity(parameters)
+    elif code == 'RQ':
+        result['decoding_multiplications'] = rq_decoding_complexity(parameters)
     result['decoding_multiplications'] *= parameters.num_outputs
 
     # each coded row is encoded by server_storage * q = muq servers.
@@ -149,6 +156,18 @@ r10_fun = partial(
     samples=1,
     parameter_eval=partial(
         rateless_evaluate,
+        code='R10',
+        pdf_fun=rateless.random_fountain_success_pdf,
+    ),
+)
+
+rq_fun = partial(
+    simulation.simulate,
+    directory='./results/RQ/',
+    samples=1,
+    parameter_eval=partial(
+        rateless_evaluate,
+        code='RQ',
         pdf_fun=rateless.random_fountain_success_pdf,
     ),
 )
@@ -157,6 +176,12 @@ r10_plot_settings = {
     'label': r'R10',
     'color': 'g',
     'marker': 's-',
+    'linewidth': 4,
+    'size': 2}
+rq_plot_settings = {
+    'label': r'RQ',
+    'color': 'b',
+    'marker': 'd-',
     'linewidth': 4,
     'size': 2}
 lt_plot_settings = {
@@ -194,9 +219,46 @@ def r10_encoding_complexity(parameters):
     if parameters.num_source_rows not in num_hdpc:
         raise ValueError("parameters.num_source rows must be in {}".format(num_hdpc))
 
-    result = 3 * num_ldpc[parameters.num_source_rows]
-    result += parameters.num_source_rows / 2 * num_hdpc[parameters.num_source_rows]
+    m = parameters.num_source_rows
+    ldpc = num_ldpc[parameters.num_source_rows]
+    hdpc = num_hdpc[parameters.num_source_rows]
+    result = 3 * ldpc
+    result += (m+ldpc) / 2 * hdpc
     result += 4.6 * parameters.num_coded_rows
+    result *= 8
+    return result
+
+def rq_encoding_complexity(parameters):
+    assert isinstance(parameters, model.SystemParameters)
+    num_ldpc = {
+        4000: 131,
+        6000: 173,
+        14000: 311,
+        34000: 607,
+        54000: 877,
+        84000: 1259,
+        134000: 1861,
+    }
+    num_hdpc = {
+        4000: 11,
+        6000: 11,
+        14000: 12,
+        34000: 14,
+        54000: 16,
+        84000: 19,
+        134000: 20,
+    }
+    if parameters.num_source_rows not in num_ldpc:
+        raise ValueError("parameters.num_source rows must be in {}".format(num_ldpc))
+    if parameters.num_source_rows not in num_hdpc:
+        raise ValueError("parameters.num_source rows must be in {}".format(num_hdpc))
+
+    m = parameters.num_source_rows
+    ldpc = num_ldpc[parameters.num_source_rows]
+    hdpc = num_hdpc[parameters.num_source_rows]
+    result = 3 * ldpc
+    result += 2 * (m+ldpc) * hdpc
+    result += 4.82 * parameters.num_coded_rows
     result *= 8
     return result
 
@@ -204,6 +266,9 @@ def r10_decoding_complexity(parameters):
     '''assuming 25 XORs per source symbol'''
     assert isinstance(parameters, model.SystemParameters)
     return 25 * parameters.num_source_rows
+
+def rq_decoding_complexity(parameters):
+    return r10_decoding_complexity()
 
 def size_plot():
     parameters = get_parameters_size_20()
@@ -229,6 +294,13 @@ def size_plot():
         encode_delay_fun=False,
         reduce_delay_fun=False,
     )
+    rq = simulation.simulate_parameter_list(
+        parameter_list=parameters,
+        simulate_fun=rq_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=False,
+        reduce_delay_fun=False,
+    )
     parameters = get_parameters_size_10()
     parameters[-3:] = get_parameters_size_20()[-3:]
     heuristic = simulation.simulate_parameter_list(
@@ -243,10 +315,12 @@ def size_plot():
     plot.load_delay_plot(
         [heuristic,
          lt,
-         r10],
+         r10,
+         rq],
         [ita.heuristic_plot_settings,
          lt_plot_settings,
-         r10_plot_settings],
+         r10_plot_settings,
+         rq_plot_settings],
         'num_servers',
         xlabel=r'Servers $K$',
         normalize=uncoded,
@@ -260,10 +334,12 @@ def size_plot():
     plot.encode_decode_plot(
         [heuristic,
          lt,
-         r10],
+         r10,
+         rq],
         [ita.heuristic_plot_settings,
          lt_plot_settings,
-         r10_plot_settings],
+         r10_plot_settings,
+         rq_plot_settings],
         'num_servers',
         xlabel=r'Servers $K$',
         normalize=None,
