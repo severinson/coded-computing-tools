@@ -127,10 +127,12 @@ def evaluate(parameters, target_overhead=None,
     # we encode each column of the input matrix separately
     result['encoding_multiplications'] = mean['encoding_multiplications']
     result['encoding_multiplications'] *= parameters.num_columns
+    result['encoding_multiplications'] *= 8
 
     # we decode each output vector separately
     result['decoding_multiplications'] = mean['decoding_multiplications']
     result['decoding_multiplications'] *= parameters.num_outputs
+    result['decoding_multiplications'] *= 8
 
     # scale by the number of partitions
     result['encoding_multiplications'] *= num_partitions
