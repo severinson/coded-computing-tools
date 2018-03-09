@@ -37,7 +37,8 @@ def optimize_lt_parameters(num_inputs=None, target_overhead=None,
 
 def evaluate(parameters, target_overhead=None,
              target_failure_probability=None,
-             pdf_fun=None, partitioned=False):
+             pdf_fun=None, partitioned=False,
+             cachedir=None):
     '''evaluate LT code performance.
 
     args:
@@ -164,6 +165,7 @@ def evaluate(parameters, target_overhead=None,
         mode=mode,
         delta=delta,
         pdf_fun=pdf_fun,
+        cachedir=cachedir,
     )
     result['delay'] = simulated['delay']
     result['load'] = simulated['load']
@@ -223,7 +225,8 @@ def random_fountain_success_pdf(overhead_levels, field_size=2, num_inputs=None, 
     return decoding_pdf
 
 def performance_integral(parameters=None, num_inputs=None, target_overhead=None,
-                         mode=None, delta=None, pdf_fun=None, num_overhead_levels=100):
+                         mode=None, delta=None, pdf_fun=None, num_overhead_levels=100,
+                         cachedir=None):
     '''compute average performance by taking into account the probability of
     finishing at different levels of overhead.
 
@@ -265,6 +268,7 @@ def performance_integral(parameters=None, num_inputs=None, target_overhead=None,
             parameters=parameters,
             overhead=overhead_level,
             design_overhead=target_overhead,
+            cachedir=cachedir,
         )
 
         # average the columns of the df
