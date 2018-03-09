@@ -36,7 +36,7 @@ from functools import lru_cache
 from scipy.special import comb as nchoosek
 
 def performance_from_overhead(parameters=None, overhead=1, design_overhead=None,
-                              num_samples=1000, cachedir='./results/Overhead'):
+                              num_samples=1000, cachedir=None):
     '''compute the average performance at some fixed overhead.
 
     args:
@@ -53,18 +53,19 @@ def performance_from_overhead(parameters=None, overhead=1, design_overhead=None,
     '''
 
     # returned a cached simulation if available
-    if not os.path.exists(cachedir):
-        os.makedirs(cachedir)
-    filename = os.path.join(
-        cachedir,
-        parameters.identifier() + '_overhead_' + str(overhead) + '.csv',
-    )
-    try:
-        df = pd.read_csv(filename)
-        if len(df) >= num_samples:
-            return df[:num_samples]
-    except FileNotFoundError:
-        pass
+    if cachedir:
+        if not os.path.exists(cachedir):
+            os.makedirs(cachedir)
+        filename = os.path.join(
+            cachedir,
+            parameters.identifier() + '_overhead_' + str(overhead) + '.csv',
+        )
+        try:
+            df = pd.read_csv(filename)
+            if len(df) >= num_samples:
+                return df[:num_samples]
+        except FileNotFoundError:
+            pass
 
     # check all possible completion orders or num_samples randomly selected
     # orders, whichever is smaller.
@@ -95,7 +96,8 @@ def performance_from_overhead(parameters=None, overhead=1, design_overhead=None,
 
     # cache the simulation and return
     df = pd.DataFrame(results)
-    df.to_csv(filename, index=False)
+    if cachedir:
+        df.to_csv(filename, index=False)
     return df
 
 def random_completion_orders(parameters=None, num_samples=None):
