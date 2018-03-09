@@ -393,6 +393,7 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
 def encode_decode_plot(results, plot_settings, xdata, xlabel='',
                        normalize=None, legend='encode', ncol=1, loc='best',
                        ylim_top=None, xlim_top=None,
+                       ylim_mid=None, xlim_mid=None,
                        ylim_bot=None, xlim_bot=None,
                        show=True):
     '''Create a plot with two subplots for encoding and decoding delay respectively.
@@ -429,20 +430,18 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
     plt.rcParams['text.latex.preamble'] = [r'\usepackage{lmodern}']
     _ = plt.figure(figsize=(10,9))
 
-    if normalize:
-        normalize = normalize.copy()
-        normalize['encode'] /= normalize['overall_delay']
-        normalize['reduce'] /= normalize['overall_delay']
-
     # encode delay
     plt.autoscale(enable=True)
     plt.tight_layout()
-    ax1 = plt.subplot(211)
+    ax1 = plt.subplot(311)
     plt.setp(ax1.get_xticklabels(), fontsize=25, visible=False)
     plt.setp(ax1.get_yticklabels(), fontsize=25)
     for df, plot_setting in zip(results, plot_settings):
         df = df.copy()
-        df['encode'] /= df['overall_delay']
+        if normalize is not None:
+            df['encode'] /= normalize['overall_delay']
+        else:
+            df['encode'] /= df['overall_delay']
         plot_result(
             df,
             plot_setting,
@@ -450,7 +449,6 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
             'encode',
             ylabel='Encoding Delay',
             subplot=True,
-            normalize=normalize
         )
 
     plt.margins(y=0.1)
@@ -466,13 +464,16 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
             ncol=ncol,
         )
 
-    # Plot delay
-    ax2 = plt.subplot(212, sharex=ax1)
+    # reduce/decode delay
+    ax2 = plt.subplot(312, sharex=ax1)
     plt.setp(ax2.get_xticklabels(), fontsize=25)
     plt.setp(ax2.get_yticklabels(), fontsize=25)
     for df, plot_setting in zip(results, plot_settings):
         df = df.copy()
-        df['reduce'] /= df['overall_delay']
+        if normalize is not None:
+            df['reduce'] /= normalize['overall_delay']
+        else:
+            df['reduce'] /= df['overall_delay']
         plot_result(
             df,
             plot_setting,
@@ -481,10 +482,41 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
             xlabel=xlabel,
             ylabel='Decoding Delay',
             subplot=True,
-            normalize=normalize
         )
 
     if legend == 'decode':
+        plt.legend(
+            numpoints=1,
+            shadow=True,
+            labelspacing=0,
+            fontsize=24,
+            loc=loc,
+            fancybox=False,
+            borderaxespad=0.1,
+            ncol=ncol,
+        )
+
+    # map delay
+    ax3 = plt.subplot(313, sharex=ax1)
+    plt.setp(ax3.get_xticklabels(), fontsize=25)
+    plt.setp(ax3.get_yticklabels(), fontsize=25)
+    for df, plot_setting in zip(results, plot_settings):
+        df = df.copy()
+        if normalize is not None:
+            df['delay'] /= normalize['overall_delay']
+        else:
+            df['delay'] /= df['overall_delay']
+        plot_result(
+            df,
+            plot_setting,
+            xdata,
+            'delay',
+            xlabel=xlabel,
+            ylabel='Map Delay',
+            subplot=True,
+        )
+
+    if legend == 'delay':
         plt.legend(
             numpoints=1,
             shadow=True,
@@ -506,10 +538,14 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
         ax1.set_ylim(ylim_top)
     if xlim_top:
         ax1.set_xlim(xlim_top)
+    if ylim_mid:
+        ax2.set_ylim(ylim_mid)
+    if xlim_mid:
+        ax2.set_xlim(xlim_mid)
     if ylim_bot:
-        ax2.set_ylim(ylim_bot)
+        ax3.set_ylim(ylim_bot)
     if xlim_bot:
-        ax2.set_xlim(xlim_bot)
+        ax3.set_xlim(xlim_bot)
 
     if show:
         plt.show()
