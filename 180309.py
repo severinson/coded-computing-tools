@@ -59,7 +59,7 @@ def get_parameters_size_20():
         parameters.append(par)
     return parameters
 
-def rateless_evaluate(parameters, code='R10', pdf_fun=None):
+def rateless_evaluate(parameters, code='R10', pdf_fun=None, cachedir=None):
     '''evaluate LT code performance.
 
     args:
@@ -113,6 +113,7 @@ def rateless_evaluate(parameters, code='R10', pdf_fun=None):
         mode=0,
         delta=0,
         pdf_fun=pdf_fun,
+        cachedir=cachedir,
     )
     result['delay'] = simulated['delay']
     result['load'] = simulated['load']
@@ -147,6 +148,7 @@ lt_fun = partial(
         rateless.evaluate,
         target_overhead=1.3,
         target_failure_probability=1e-1,
+        cachedir='./results/LT',
     ),
 )
 
@@ -158,6 +160,7 @@ r10_fun = partial(
         rateless_evaluate,
         code='R10',
         pdf_fun=rateless.random_fountain_success_pdf,
+        cachedir='./results/R10',
     ),
 )
 
@@ -169,6 +172,7 @@ rq_fun = partial(
         rateless_evaluate,
         code='RQ',
         pdf_fun=rateless.random_fountain_success_pdf,
+        cachedir='./results/RQ',
     ),
 )
 
@@ -181,7 +185,7 @@ r10_plot_settings = {
 rq_plot_settings = {
     'label': r'RQ',
     'color': 'b',
-    'marker': 'd-',
+    'marker': 'd--',
     'linewidth': 4,
     'size': 2}
 lt_plot_settings = {
@@ -268,7 +272,7 @@ def r10_decoding_complexity(parameters):
     return 25 * parameters.num_source_rows
 
 def rq_decoding_complexity(parameters):
-    return r10_decoding_complexity()
+    return r10_decoding_complexity(parameters)
 
 def size_plot():
     parameters = get_parameters_size_20()
@@ -311,7 +315,6 @@ def size_plot():
         reduce_delay_fun=complexity.partitioned_reduce_delay,
     )
 
-
     plot.load_delay_plot(
         [heuristic,
          lt,
@@ -346,9 +349,30 @@ def size_plot():
         show=False,
         xlim_bot=(6, 201),
         ylim_top=(0, 0.3),
-        ylim_bot=(0, 0.001),
+        ylim_mid=(0, 0.001),
+        ylim_bot=(0.7, 1),
     )
-    plt.savefig("./plots/180309/encode_decode.png")
+    plt.savefig("./plots/180309/phase.png")
+
+    plot.encode_decode_plot(
+        [heuristic,
+         lt,
+         r10,
+         rq],
+        [ita.heuristic_plot_settings,
+         lt_plot_settings,
+         r10_plot_settings,
+         rq_plot_settings],
+        'num_servers',
+        xlabel=r'Servers $K$',
+        normalize=uncoded,
+        show=False,
+        xlim_bot=(6, 201),
+        ylim_top=(0, 0.8),
+        ylim_mid=(0, 0.0025),
+        ylim_bot=(0.8, 1.8),
+    )
+    plt.savefig("./plots/180309/abs_phase.png")
 
     plt.show()
     return
