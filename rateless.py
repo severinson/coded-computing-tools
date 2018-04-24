@@ -226,7 +226,7 @@ def random_fountain_success_pdf(overhead_levels, field_size=2, num_inputs=None, 
 
 def performance_integral(parameters=None, num_inputs=None, target_overhead=None,
                          mode=None, delta=None, pdf_fun=None, num_overhead_levels=100,
-                         cachedir=None):
+                         max_overhead=None, cachedir=None):
     '''compute average performance by taking into account the probability of
     finishing at different levels of overhead.
 
@@ -243,7 +243,8 @@ def performance_integral(parameters=None, num_inputs=None, target_overhead=None,
     assert callable(pdf_fun)
 
     # get the max possible overhead
-    max_overhead = parameters.num_coded_rows / parameters.num_source_rows
+    if max_overhead is None:
+        max_overhead = parameters.num_coded_rows / parameters.num_source_rows
 
     if max_overhead < target_overhead:
         raise ValueError("target overhead may not exceed the inverse of the code rate")
