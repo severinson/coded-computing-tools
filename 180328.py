@@ -27,7 +27,6 @@ r10_plot_settings = {
     'size': 2}
 
 def r10_decoding_complexity(parameters):
-    '''assuming 25 XORs per source symbol'''
     assert isinstance(parameters, model.SystemParameters)
     # linear regression of complexity at failure probability 1e-1
     a = 2.22413913e+02
