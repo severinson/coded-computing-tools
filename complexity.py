@@ -11,9 +11,11 @@ import stats
 
 # relative cost of encoding and decoding
 ADDITION_COMPLEXITY = 8
-MULTIPLICATION_COMPLEXITY = 8
+MULTIPLICATION_COMPLEXITY = 24 # n logn
+# ADDITION_COMPLEXITY = 64
+# MULTIPLICATION_COMPLEXITY = 64*math.log2(64) # n logn
 
-def partitioned_encode_delay(parameters, partitions=None):
+def partitioned_encode_delay(parameters, partitions=None, algorithm='fft'):
     '''Compute delay incurred by the encoding phase. Assumes a shifted exponential
     distribution.
 
@@ -24,10 +26,14 @@ def partitioned_encode_delay(parameters, partitions=None):
     partitions: The number of partitions. If None, the value in parameters is
     used.
 
+    algorithm: 'bm' for Berlekamp-Massey and 'fft' for one based on the fast
+    Fourier transform.
+
     Returns: The reduce delay.
 
     '''
     assert partitions is None or partitions % 1 == 0
+    assert algorithm in ['bm', 'fft']
     if partitions is None:
         partitions = parameters.num_partitions
 
@@ -37,10 +43,17 @@ def partitioned_encode_delay(parameters, partitions=None):
     )
 
     # scale by the total encoding complexity
-    delay *= block_diagonal_encoding_complexity(
-        parameters,
-        partitions=partitions,
-    )
+    if algorithm == 'bm':
+        delay *= block_diagonal_encoding_complexity(
+            parameters,
+            partitions=partitions,
+        )
+    elif algorithm == 'fft':
+        partition_length = parameters.num_coded_rows / partitions
+        delay *= rs_decoding_complexity_fft(partition_length)*partitions
+        delay *= parameters.num_columns
+    else:
+        raise ValueError('algorithm must be either "bm" or "fft"')
 
     # take into account that each coded row is stored at server_storage*q
     # servers. each coded row is thus encoded several times.
@@ -75,7 +88,7 @@ def stragglerc_encode_delay(parameters):
     partitions = parameters.num_source_rows / parameters.q
     return partitioned_encode_delay(parameters, partitions=partitions)
 
-def partitioned_reduce_delay(parameters, partitions=None):
+def partitioned_reduce_delay(parameters, partitions=None, algorithm='fft'):
     '''Compute delay incurred by the reduce phase. Assumes a shifted
     exponential distribution.
 
@@ -86,10 +99,14 @@ def partitioned_reduce_delay(parameters, partitions=None):
     partitions: The number of partitions. If None, the value in
     parameters is used.
 
+    algorithm: 'bm' for Berlekamp-Massey and 'fft' for one based on the fast
+    Fourier transform.
+
     Returns: The reduce delay.
 
     '''
     assert partitions is None or (isinstance(partitions, int) and partitions > 0)
+    assert algorithm in ['bm', 'fft']
     if partitions is None:
         partitions = parameters.num_partitions
 
@@ -99,12 +116,19 @@ def partitioned_reduce_delay(parameters, partitions=None):
     )
 
     # scale by the decoding complexity per server
-    delay *= block_diagonal_decoding_complexity(
-        parameters.num_coded_rows,
-        1,
-        1 - parameters.q / parameters.num_servers,
-        partitions,
-    )
+    if algorithm == 'bm':
+        delay *= block_diagonal_decoding_complexity(
+            parameters.num_coded_rows,
+            1,
+            1 - parameters.q / parameters.num_servers,
+            partitions,
+        )
+    elif algorithm == 'fft':
+        partition_length = parameters.num_coded_rows / partitions
+        delay *= rs_decoding_complexity_fft(partition_length)*partitions
+    else:
+        raise ValueError('algorithm must be either "bm" or "fft"')
+
     delay *= parameters.num_outputs / parameters.q
     return delay
 
@@ -225,12 +249,34 @@ def rs_decoding_complexity(code_length, packet_size, erasure_prob):
 
     erasure_prob: The erasure probability of the packet erasure channel.
 
-    Returns: The total complexity of decoding.
+    Returns: tuple (additions, multiplications)
 
     '''
     additions = code_length * (erasure_prob * code_length - 1) * packet_size
     multiplications = pow(code_length, 2) * erasure_prob * packet_size;
     return additions * ADDITION_COMPLEXITY + multiplications * MULTIPLICATION_COMPLEXITY
+
+def rs_decoding_complexity_fft(code_length):
+    '''Compute the decoding complexity of Reed-Solomon codes
+
+    Return the number of operations (additions and multiplications) required to
+    decode a Reed-Solomon code over the packet erasure channel, and using the
+    FFT-based algorithm in the paper "Novel Polynomial Basis With Fast Fourier
+    Transform and its Application to Reed-Solomon Erasure Codes".
+
+    Parameters are curve-fit to empiric values.
+
+    Args:
+
+    code_length: The length of the code in number of coded symbols.
+
+    Returns: tuple (additions, multiplications)
+
+    '''
+    f = lambda x, a, b, c: a+b*x*np.log2(c*x)
+    additions = f(code_length, 2, 8.5, 0.86700826)
+    multiplications = f(code_length, 2, 1, 4)
+    return additions*ADDITION_COMPLEXITY + multiplications*MULTIPLICATION_COMPLEXITY
 
 def block_diagonal_decoding_complexity(code_length, packet_size, erasure_prob, partitions):
     '''Compute the decoding complexity of a block-diagonal code
