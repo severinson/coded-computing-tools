@@ -296,19 +296,18 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
     # assert isinstance(normalize, SimulatorResult) or normalize is None
     assert isinstance(show, bool)
 
-    plt.rc('pgf',  texsystem='pdflatex')
-    plt.rc('text', usetex=True)
-    # plt.rc('font', family='serif')
-    plt.rcParams['text.latex.preamble'] = [r'\usepackage{lmodern}']
-    _ = plt.figure(figsize=(10,9))
+    # plt.rc('pgf',  texsystem='pdflatex')
+    # plt.rc('text', usetex=True)
+    # plt.rcParams['text.latex.preamble'] = [r'\usepackage{lmodern}']
+    # _ = plt.figure(figsize=(10,9))
     # _ = plt.figure(figsize=(11,4))
+    plt.figure()
 
     # Plot load
     plt.autoscale(enable=True)
     plt.tight_layout()
     ax1 = plt.subplot(211)
-    plt.setp(ax1.get_xticklabels(), fontsize=25, visible=False)
-    plt.setp(ax1.get_yticklabels(), fontsize=25)
+    plt.setp(ax1.get_xticklabels(), visible=False)
     for result, plot_setting in zip(results, plot_settings):
         plot_result(
             result,
@@ -319,6 +318,7 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
             subplot=True,
             normalize=normalize
         )
+    plt.title('Load (top) / Delay (bottom)')
 
     # plot a vertical bar at the partitioning limit
     if vline:
@@ -331,7 +331,6 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
             shadow=True,
             labelspacing=0,
             columnspacing=0.05,
-            fontsize=22,
             loc=loc,
             fancybox=False,
             borderaxespad=0.1,
@@ -340,8 +339,6 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
 
     # Plot delay
     ax2 = plt.subplot(212, sharex=ax1)
-    plt.setp(ax2.get_xticklabels(), fontsize=25)
-    plt.setp(ax2.get_yticklabels(), fontsize=25)
     for result, plot_setting in zip(results, plot_settings):
         plot_result(
             result,
@@ -360,7 +357,6 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
             shadow=True,
             labelspacing=0,
             columnspacing=0.05,
-            fontsize=22,
             loc=loc,
             fancybox=False,
             borderaxespad=0.1,
@@ -425,17 +421,17 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
     assert isinstance(plot_settings, list)
     assert isinstance(show, bool)
 
-    plt.rc('pgf',  texsystem='pdflatex')
-    plt.rc('text', usetex=True)
-    plt.rcParams['text.latex.preamble'] = [r'\usepackage{lmodern}']
-    _ = plt.figure(figsize=(10,9))
+    # plt.rc('pgf',  texsystem='pdflatex')
+    # plt.rc('text', usetex=True)
+    # plt.rcParams['text.latex.preamble'] = [r'\usepackage{lmodern}']
+    # _ = plt.figure(figsize=(10,9))
+    plt.figure()
 
     # encode delay
     plt.autoscale(enable=True)
     plt.tight_layout()
     ax1 = plt.subplot(311)
-    plt.setp(ax1.get_xticklabels(), fontsize=25, visible=False)
-    plt.setp(ax1.get_yticklabels(), fontsize=25)
+    plt.setp(ax1.get_xticklabels(), visible=False)
     for df, plot_setting in zip(results, plot_settings):
         df = df.copy()
         if normalize is not None:
@@ -452,12 +448,12 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
         )
 
     plt.margins(y=0.1)
+    plt.title("encode / reduce / map")
     if legend == 'encode':
         plt.legend(
             numpoints=1,
             shadow=True,
             labelspacing=0,
-            fontsize=24,
             loc=loc,
             fancybox=False,
             borderaxespad=0.1,
@@ -466,8 +462,6 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
 
     # reduce/decode delay
     ax2 = plt.subplot(312, sharex=ax1)
-    plt.setp(ax2.get_xticklabels(), fontsize=25)
-    plt.setp(ax2.get_yticklabels(), fontsize=25)
     for df, plot_setting in zip(results, plot_settings):
         df = df.copy()
         if normalize is not None:
@@ -489,7 +483,6 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
             numpoints=1,
             shadow=True,
             labelspacing=0,
-            fontsize=24,
             loc=loc,
             fancybox=False,
             borderaxespad=0.1,
@@ -498,8 +491,6 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
 
     # map delay
     ax3 = plt.subplot(313, sharex=ax1)
-    plt.setp(ax3.get_xticklabels(), fontsize=25)
-    plt.setp(ax3.get_yticklabels(), fontsize=25)
     for df, plot_setting in zip(results, plot_settings):
         df = df.copy()
         if normalize is not None:
@@ -521,7 +512,6 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
             numpoints=1,
             shadow=True,
             labelspacing=0,
-            fontsize=24,
             loc=loc,
             fancybox=False,
             borderaxespad=0.1,
@@ -589,15 +579,11 @@ def plot_result(result, plot_settings, xdata, ydata, xlabel='',
         _ = plt.figure()
 
     plt.grid(True, which='both')
-    plt.ylabel(ylabel, fontsize=28)
-    plt.xlabel(xlabel, fontsize=28)
     plt.autoscale()
 
     label = plot_settings['label']
     color = plot_settings['color']
     style = color + plot_settings['marker']
-    linewidth = plot_settings['linewidth']
-    size = plot_settings['size']
 
     xarray = result[xdata]
     ymean = result[ydata].copy()
@@ -610,17 +596,15 @@ def plot_result(result, plot_settings, xdata, ydata, xlabel='',
         ymean /= normalize[ydata]
 
     if plot_type == 'semilogx':
-        plt.semilogx(xarray, ymean, style, label=label,
-                     linewidth=linewidth, markersize=size)
+        plt.semilogx(xarray, ymean, style, label=label)
     elif plot_type == 'loglog':
-        plt.loglog(xarray, ymean, style, label=label,
-                   linewidth=linewidth, markersize=size)
+        plt.loglog(xarray, ymean, style, label=label,)
 
     if errorbars:
         plt.errorbar(xarray, ymean, yerr=yerr, fmt='none', ecolor=color)
 
     if not subplot:
-        plt.legend(numpoints=1, fontsize=25, loc='best', prop={'weight': 'bold'})
+        plt.legend(numpoints=1, loc='best', prop={'weight': 'bold'})
         plt.show()
 
     return
