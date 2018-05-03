@@ -90,6 +90,11 @@ def order_mean_shiftexp(total, order, parameter=1):
     the shifted exponential distribution.
 
     '''
+    if total % 1 != 0:
+        raise ValueError("total={} must be an integer".format(total))
+    if order % 1 != 0:
+        raise ValueError("order={} must be an integer".format(order))
+    total, order = int(total), int(order)
     mean = 1
     for i in range(total-order+1, total+1):
         mean += 1 / i
