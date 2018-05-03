@@ -63,15 +63,27 @@ class SystemParameters(object):
 
         '''
 
-        assert rows_per_batch % 1 == 0
-        assert num_servers % 1 == 0
-        assert q % 1 == 0
-        assert num_outputs % 1 == 0
-        assert 0 < server_storage <= 1, 'Server storage must be >0 and <=1.'
-        assert isinstance(num_partitions, int)
-        assert isinstance(num_columns, int) or num_columns is None
-        if num_columns:
-            assert num_columns > 0
+        if rows_per_batch % 1 != 0:
+            raise ValueError('rows_per_batch={} must be integer'.format(rows_per_batch))
+        rows_per_batch = int(rows_per_batch)
+        if num_servers % 1 != 0:
+            raise ValueError('num_servers must be integer')
+        num_servers = int(num_servers)
+        if q % 1 != 0:
+            raise ValueError('q must be integer')
+        q = int(q)
+        if num_outputs % 1 != 0:
+            raise ValueError('num_outputs={} must be integer'.format(num_outputs))
+        num_outputs = int(num_outputs)
+        if not (0 < server_storage <= 1):
+            raise ValueError('server_storage must be >0 and <=1.')
+        if num_partitions % 1 != 0:
+            raise ValueError('num_partitions must be integer')
+        num_partitions = int(num_partitions)
+        if num_columns is not None:
+            if num_columns % 1 != 0:
+                raise ValueError('num_columns={} must be integer'.format(num_columns))
+            num_columns = int(num_columns)
 
         self.num_servers = num_servers
         self.q = q
@@ -502,4 +514,3 @@ def coded_initialization_load(parameters, multicast_cost=None):
     load /= parameters.num_source_rows
 
     return load
-
