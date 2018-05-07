@@ -603,6 +603,9 @@ def plot_result(result, plot_settings, xdata, ydata, xlabel='',
     if errorbars:
         plt.errorbar(xarray, ymean, yerr=yerr, fmt='none', ecolor=color)
 
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+
     if not subplot:
         plt.legend(numpoints=1, loc='best', prop={'weight': 'bold'})
         plt.show()
