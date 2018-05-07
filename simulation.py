@@ -336,7 +336,7 @@ def simulate(parameters, directory='./results/', rerun=False, samples=None,
     returns: DataFrame with performance samples for all assignments.
 
     '''
-    logging.debug('Running simulations for %s: %s',
+    logging.info('Running simulations for %s: %s',
                   directory, parameters.identifier())
     assert isinstance(parameters, SystemParameters)
     assert isinstance(directory, str)
