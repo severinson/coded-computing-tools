@@ -46,14 +46,18 @@ rs_fun = partial(
 )
 
 # plot settings
-heuristic_plot_settings = {
-    'label': r'BDC',
-    'color': 'r',
-    'marker': 'd-'}
 rs_plot_settings = {
-    'label': r'RS BM',
+    'label': r'RS',
     'color': 'k',
-    'marker': 'v-'}
+    'marker': '-v'}
+heuristic_0_01_plot_settings = {
+    'label': r'BDC $1$\%',
+    'color': 'r',
+    'marker': '-d'}
+heuristic_0_1_plot_settings = {
+    'label': r'BDC $10$\%',
+    'color': 'b',
+    'marker': '-o'}
 
 def get_parameters_workload(num_servers, W=1e8, num_partitions=None, code_rate=2/3, muq=2, tol=0.05):
     '''Get a list of parameters for the size plot.'''
@@ -103,7 +107,7 @@ def get_parameters_constant_workload():
     l = list()
     W_target = 1e8
     min_source_rows = 0 # ensure number of source rows is always increasing
-    for i in range(6, 400):
+    for i in range(6, 301):
         try:
             m = get_parameters_workload(i, W=W_target)
         except ValueError as err:
@@ -130,7 +134,7 @@ def workload(p):
     return p.server_storage*p.num_source_rows*p.num_columns*p.num_outputs
 
 def main():
-    parameters = get_parameters_constant_workload()[:-2]
+    parameters = get_parameters_constant_workload()
     # return
     # [print(p) for p in parameters]
 
@@ -158,40 +162,60 @@ def main():
         parameter_list=parameters,
         simulate_fun=heuristic_fun,
         map_complexity_fun=complexity.map_complexity_unified,
-        encode_delay_fun=complexity.partitioned_encode_delay,
-        reduce_delay_fun=complexity.partitioned_reduce_delay,
+        encode_delay_fun=partial(complexity.partitioned_encode_delay, algorithm='bm'),
+        reduce_delay_fun=partial(complexity.partitioned_reduce_delay, algorithm='bm'),
     )
+    # filter out rows with load above threshold
+    heuristic_0_01 = heuristic.loc[heuristic['load']/rs['load'] <= 1.01, :]
+    heuristic_0_1 = heuristic.loc[heuristic['load']/rs['load'] <= 1.1, :]    
+
+    # find the optimal number of partitions for each value of num_servers
+    heuristic_0_01 = heuristic_0_01.loc[
+        heuristic_0_01.groupby("num_servers")["overall_delay"].idxmin(), :
+    ]
+    heuristic_0_1 = heuristic_0_1.loc[
+        heuristic_0_1.groupby("num_servers")["overall_delay"].idxmin(), :
+    ]
+    
+    # get parameters minimizing delay
     plot.load_delay_plot(
-        [heuristic,
+        [heuristic_0_01,
+         heuristic_0_1,
          rs],
-        [heuristic_plot_settings,
+        [heuristic_0_01_plot_settings,
+         heuristic_0_1_plot_settings,
          rs_plot_settings],
         'num_servers',
         xlabel=r'Servers $K$',
         normalize=uncoded,
         show=False,
-        # xlim_bot=(6, 201),
-        # ylim_top=(0.4, 0.7),
-        # ylim_bot=(0.5, 4.5),
+        xlim_bot=(6, 300),
+        ylim_top=(0.4, 0.7),
+        ylim_bot=(1, 3.5),
     )
-    # plt.savefig("./plots/180419/fft_8_load_delay.png", dpi='figure')
+    # plt.savefig("./plots/180502/constant_workload.png", dpi='figure')
 
     plot.encode_decode_plot(
-        [heuristic,
+        [heuristic_0_01,
+         heuristic_0_1,
          rs],
-        [heuristic_plot_settings,
+        [heuristic_0_01_plot_settings,
+         heuristic_0_1_plot_settings,
          rs_plot_settings],
         'num_servers',
         xlabel=r'Servers $K$',
         normalize=None,
         show=False,
-        # xlim_bot=(6, 201),
-        # ylim_top=(0, 0.3),
-        # ylim_bot=(0, 0.001),
+        legend='delay',
+        xlim_bot=(6, 300),
+        ylim_top=(0, 0.3),
+        ylim_mid=(0, 0.2),
+        ylim_bot=(0.5, 0.9),
     )
+    # plt.savefig("./plots/180502/constant_workload_phases.png", dpi='figure')    
     plt.show()
     return
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
+    # logging.basicConfig(level=logging.DEBUG)
     main()
