@@ -58,6 +58,30 @@ heuristic_0_1_plot_settings = {
     'label': r'BDC $10$\%',
     'color': 'b',
     'marker': '-o'}
+heuristic_bm_bm_settings = {
+    'label': r'BDC bm/bm',
+    'color': 'b',
+    'marker': '-o'}
+heuristic_bm_fft_settings = {
+    'label': r'BDC bm/fft',
+    'color': 'r',
+    'marker': '-o'}
+heuristic_fft_bm_settings = {
+    'label': r'BDC fft/bm',
+    'color': 'k',
+    'marker': '-o'}
+heuristic_fft_fft_settings = {
+    'label': r'BDC fft/fft',
+    'color': 'c',
+    'marker': '-o'}
+heuristic_gen_bm_settings = {
+    'label': r'BDC gen/bm',
+    'color': 'k',
+    'marker': '-s'}
+heuristic_gen_fft_settings = {
+    'label': r'BDC gen/fft',
+    'color': 'c',
+    'marker': '-s'}
 
 def get_parameters_workload(num_servers, W=1e8, num_partitions=None, code_rate=2/3, muq=2, tol=0.05):
     '''Get a list of parameters for the size plot.'''
@@ -151,39 +175,106 @@ def main():
         map_complexity_fun=complexity.map_complexity_unified,
         encode_delay_fun=partial(
             complexity.partitioned_encode_delay,
-            partitions=1
+            partitions=1,
+            algorithm='fft',
         ),
         reduce_delay_fun=partial(
             complexity.partitioned_reduce_delay,
             partitions=1,
+            algorithm='fft',
         ),
     )
-    heuristic = simulation.simulate_parameter_list(
+    heuristic_bm_bm = simulation.simulate_parameter_list(
         parameter_list=parameters,
         simulate_fun=heuristic_fun,
         map_complexity_fun=complexity.map_complexity_unified,
         encode_delay_fun=partial(complexity.partitioned_encode_delay, algorithm='bm'),
         reduce_delay_fun=partial(complexity.partitioned_reduce_delay, algorithm='bm'),
     )
+    heuristic_bm_fft = simulation.simulate_parameter_list(
+        parameter_list=parameters,
+        simulate_fun=heuristic_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=partial(complexity.partitioned_encode_delay, algorithm='bm'),
+        reduce_delay_fun=partial(complexity.partitioned_reduce_delay, algorithm='fft'),
+    )
+    heuristic_fft_bm = simulation.simulate_parameter_list(
+        parameter_list=parameters,
+        simulate_fun=heuristic_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=partial(complexity.partitioned_encode_delay, algorithm='fft'),
+        reduce_delay_fun=partial(complexity.partitioned_reduce_delay, algorithm='bm'),
+    )
+    heuristic_fft_fft = simulation.simulate_parameter_list(
+        parameter_list=parameters,
+        simulate_fun=heuristic_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=partial(complexity.partitioned_encode_delay, algorithm='fft'),
+        reduce_delay_fun=partial(complexity.partitioned_reduce_delay, algorithm='fft'),
+    )
+    heuristic_gen_bm = simulation.simulate_parameter_list(
+        parameter_list=parameters,
+        simulate_fun=heuristic_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=partial(complexity.partitioned_encode_delay, algorithm='gen'),
+        reduce_delay_fun=partial(complexity.partitioned_reduce_delay, algorithm='bm'),
+    )
+    heuristic_gen_fft = simulation.simulate_parameter_list(
+        parameter_list=parameters,
+        simulate_fun=heuristic_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=partial(complexity.partitioned_encode_delay, algorithm='gen'),
+        reduce_delay_fun=partial(complexity.partitioned_reduce_delay, algorithm='fft'),
+    )
+
     # filter out rows with load above threshold
-    heuristic_0_01 = heuristic.loc[heuristic['load']/rs['load'] <= 1.01, :]
-    heuristic_0_1 = heuristic.loc[heuristic['load']/rs['load'] <= 1.1, :]    
+    heuristic_bm_bm_0_01 = heuristic_bm_bm.loc[heuristic_bm_bm['load']/rs['load'] <= 1.01, :]
+    heuristic_bm_fft_0_01 = heuristic_bm_fft.loc[heuristic_bm_fft['load']/rs['load'] <= 1.01, :]
+    heuristic_fft_bm_0_01 = heuristic_fft_bm.loc[heuristic_fft_bm['load']/rs['load'] <= 1.01, :]
+    heuristic_fft_fft_0_01 = heuristic_fft_fft.loc[heuristic_fft_fft['load']/rs['load'] <= 1.01, :]
+    heuristic_gen_bm_0_01 = heuristic_gen_bm.loc[heuristic_gen_bm['load']/rs['load'] <= 1.01, :]
+    heuristic_gen_fft_0_01 = heuristic_gen_fft.loc[heuristic_gen_fft['load']/rs['load'] <= 1.01, :]
+
+    # heuristic_bm_bm_0_1 = heuristic.loc[heuristic['load']/rs['load'] <= 1.1, :]
 
     # find the optimal number of partitions for each value of num_servers
-    heuristic_0_01 = heuristic_0_01.loc[
-        heuristic_0_01.groupby("num_servers")["overall_delay"].idxmin(), :
+    heuristic_bm_bm_0_01 = heuristic_bm_bm_0_01.loc[
+        heuristic_bm_bm_0_01.groupby("num_servers")["overall_delay"].idxmin(), :
     ]
-    heuristic_0_1 = heuristic_0_1.loc[
-        heuristic_0_1.groupby("num_servers")["overall_delay"].idxmin(), :
+    heuristic_bm_fft_0_01 = heuristic_bm_fft_0_01.loc[
+        heuristic_bm_fft_0_01.groupby("num_servers")["overall_delay"].idxmin(), :
     ]
-    
+    heuristic_fft_bm_0_01 = heuristic_fft_bm_0_01.loc[
+        heuristic_fft_bm_0_01.groupby("num_servers")["overall_delay"].idxmin(), :
+    ]
+    heuristic_fft_fft_0_01 = heuristic_fft_fft_0_01.loc[
+        heuristic_fft_fft_0_01.groupby("num_servers")["overall_delay"].idxmin(), :
+    ]
+    heuristic_gen_bm_0_01 = heuristic_gen_bm_0_01.loc[
+        heuristic_gen_bm_0_01.groupby("num_servers")["overall_delay"].idxmin(), :
+    ]
+    heuristic_gen_fft_0_01 = heuristic_gen_fft_0_01.loc[
+        heuristic_gen_fft_0_01.groupby("num_servers")["overall_delay"].idxmin(), :
+    ]
+    # heuristic_0_1 = heuristic_0_1.loc[
+    #     heuristic_0_1.groupby("num_servers")["overall_delay"].idxmin(), :
+    # ]
+
     # get parameters minimizing delay
     plot.load_delay_plot(
-        [heuristic_0_01,
-         heuristic_0_1,
+        [heuristic_bm_bm_0_01,
+         heuristic_bm_fft_0_01,
+         heuristic_fft_bm_0_01,
+         heuristic_fft_fft_0_01,
+         heuristic_gen_bm_0_01,
+         heuristic_gen_fft_0_01,
          rs],
-        [heuristic_0_01_plot_settings,
-         heuristic_0_1_plot_settings,
+        [heuristic_bm_bm_settings,
+         heuristic_bm_fft_settings,
+         heuristic_fft_bm_settings,
+         heuristic_fft_fft_settings,
+         heuristic_gen_bm_settings,
+         heuristic_gen_fft_settings,
          rs_plot_settings],
         'num_servers',
         xlabel=r'Servers $K$',
@@ -191,10 +282,11 @@ def main():
         show=False,
         xlim_bot=(6, 300),
         ylim_top=(0.4, 0.7),
-        ylim_bot=(1, 3.5),
+        ylim_bot=(0, 60),
     )
-    # plt.savefig("./plots/180502/constant_workload.png", dpi='figure')
-
+    plt.savefig("./plots/180508/algorithms.png", dpi='figure')
+    plt.show()
+    return
     plot.encode_decode_plot(
         [heuristic_0_01,
          heuristic_0_1,
@@ -212,7 +304,7 @@ def main():
         ylim_mid=(0, 0.2),
         ylim_bot=(0.5, 0.9),
     )
-    # plt.savefig("./plots/180502/constant_workload_phases.png", dpi='figure')    
+    # plt.savefig("./plots/180502/constant_workload_phases.png", dpi='figure')
     plt.show()
     return
 
