@@ -26,14 +26,15 @@ def partitioned_encode_delay(parameters, partitions=None, algorithm='fft'):
     partitions: The number of partitions. If None, the value in parameters is
     used.
 
-    algorithm: 'bm' for Berlekamp-Massey and 'fft' for one based on the fast
-    Fourier transform.
+    algorithm: 'gen' for generator matrix multiplication, 'bm' for
+    Berlekamp-Massey and 'fft' for one based on the fast Fourier
+    transform.
 
     Returns: The reduce delay.
 
     '''
     assert partitions is None or partitions % 1 == 0
-    assert algorithm in ['bm', 'fft']
+    assert algorithm in ['gen', 'bm', 'fft'], algorithm
     if partitions is None:
         partitions = parameters.num_partitions
 
@@ -43,21 +44,31 @@ def partitioned_encode_delay(parameters, partitions=None, algorithm='fft'):
     )
 
     # scale by the total encoding complexity
-    if algorithm == 'bm':
+    if algorithm == 'gen':
         delay *= block_diagonal_encoding_complexity(
             parameters,
             partitions=partitions,
         )
+        # take into account that each coded row is stored at server_storage*q
+        # servers. each coded row is thus encoded several times.
+        delay *= parameters.muq
+    elif algorithm == 'bm':
+        partition_length = parameters.num_coded_rows / partitions
+        delay *= block_diagonal_decoding_complexity(
+            parameters.num_coded_rows,
+            1,
+            1 - parameters.q / parameters.num_servers,
+            partitions,
+        )
+        delay *= parameters.num_columns
+        delay *= parameters.num_servers
     elif algorithm == 'fft':
         partition_length = parameters.num_coded_rows / partitions
         delay *= rs_decoding_complexity_fft(partition_length)*partitions
         delay *= parameters.num_columns
+        delay *= parameters.num_servers
     else:
-        raise ValueError('algorithm must be either "bm" or "fft"')
-
-    # take into account that each coded row is stored at server_storage*q
-    # servers. each coded row is thus encoded several times.
-    delay *= parameters.muq
+        raise ValueError('algorithm must be either "gen", "bm" or "fft"')
 
     # split the work over all servers
     delay /= parameters.num_servers
@@ -106,7 +117,7 @@ def partitioned_reduce_delay(parameters, partitions=None, algorithm='fft'):
 
     '''
     assert partitions is None or (isinstance(partitions, int) and partitions > 0)
-    assert algorithm in ['bm', 'fft']
+    assert algorithm in ['bm', 'fft'], algorithm
     if partitions is None:
         partitions = parameters.num_partitions
 
@@ -300,7 +311,6 @@ def block_diagonal_decoding_complexity(code_length, packet_size, erasure_prob, p
     Returns: The total complexity of decoding.
 
     '''
-    assert isinstance(code_length, int)
     assert isinstance(packet_size, int) or isinstance(packet_size, float)
     assert isinstance(erasure_prob, float)
     assert isinstance(partitions, int)
