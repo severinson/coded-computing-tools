@@ -10,12 +10,14 @@ import numpy as np
 import stats
 
 # relative cost of encoding and decoding
-ADDITION_COMPLEXITY = 8
-MULTIPLICATION_COMPLEXITY = 24 # n logn
+ADDITION_COMPLEXITY = 0
+MULTIPLICATION_COMPLEXITY = 1
+# ADDITION_COMPLEXITY = 8
+# MULTIPLICATION_COMPLEXITY = 24 # n logn
 # ADDITION_COMPLEXITY = 64
 # MULTIPLICATION_COMPLEXITY = 64*math.log2(64) # n logn
 
-def partitioned_encode_delay(parameters, partitions=None, algorithm='fft'):
+def partitioned_encode_delay(parameters, partitions=None, algorithm='gen'):
     '''Compute delay incurred by the encoding phase. Assumes a shifted exponential
     distribution.
 
@@ -97,7 +99,11 @@ def stragglerc_encode_delay(parameters):
 
     '''
     partitions = parameters.num_source_rows / parameters.q
-    return partitioned_encode_delay(parameters, partitions=partitions)
+    return partitioned_encode_delay(
+        parameters,
+        partitions=partitions,
+        algorithm='gen',
+    )
 
 def partitioned_reduce_delay(parameters, partitions=None, algorithm='fft'):
     '''Compute delay incurred by the reduce phase. Assumes a shifted
@@ -145,6 +151,7 @@ def partitioned_reduce_delay(parameters, partitions=None, algorithm='fft'):
 
 def partitioned_reduce_complexity(parameters, partitions=None):
     '''reduce complexity per server for the partitioned scheme'''
+    assert False, 'marked for removal'
     if partitions is None:
         partitions = parameters.num_partitions
 
@@ -175,10 +182,10 @@ def stragglerc_reduce_delay(parameters):
     # Scale by decoding complexity
     rows_per_server = parameters.num_source_rows / parameters.q
     delay *= block_diagonal_decoding_complexity(
-        parameters.num_servers,
-        rows_per_server,
-        1 - parameters.q / parameters.num_servers,
-        1,
+        code_length=parameters.num_servers,
+        packet_size=rows_per_server,
+        erasure_prob=1 - parameters.q / parameters.num_servers,
+        partitions=1,
     )
     delay *= parameters.num_outputs / parameters.q
     return delay
@@ -289,7 +296,7 @@ def rs_decoding_complexity_fft(code_length):
     multiplications = f(code_length, 2, 1, 4)
     return additions*ADDITION_COMPLEXITY + multiplications*MULTIPLICATION_COMPLEXITY
 
-def block_diagonal_decoding_complexity(code_length, packet_size, erasure_prob, partitions):
+def block_diagonal_decoding_complexity(code_length=None, packet_size=None, erasure_prob=None, partitions=None):
     '''Compute the decoding complexity of a block-diagonal code
 
     Return the number of operations (additions and multiplications)
@@ -335,6 +342,6 @@ def matrix_vector_complexity(rows=None, cols=None):
     Returns: The complexity of the multiplication.
 
     '''
-    additions = cols * rows - 1
+    additions = cols * (rows - 1)
     multiplications = cols * rows
     return additions * ADDITION_COMPLEXITY + multiplications * MULTIPLICATION_COMPLEXITY
