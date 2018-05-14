@@ -318,7 +318,6 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
             subplot=True,
             normalize=normalize
         )
-    plt.title('Load (top) / Delay (bottom)')
 
     # plot a vertical bar at the partitioning limit
     if vline:
