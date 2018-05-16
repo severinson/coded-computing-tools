@@ -36,7 +36,7 @@ def optimize_lt_parameters(num_inputs=None, target_overhead=None,
     return c, delta, mode
 
 def lt_decoding_complexity(num_inputs=None, failure_prob=None,
-                           target_overhead=None, avg_degree=None):
+                           target_overhead=None):
     '''Return the decoding complexity of LT codes. Data is manually
     entered from simulations carried out using
     https://github.com/severinson/RaptorCodes
@@ -55,6 +55,20 @@ def lt_decoding_complexity(num_inputs=None, failure_prob=None,
     df = df.loc[df['num_inputs'] == num_inputs]
     if len(df) != 1:
         logging.error('did not find exactly 1 row: '.format(df))
+
+    a = df['diagonalize_decoding_additions']
+    a += df['diagonalize_rowadds']
+    a += df['solve_dense_decoding_additions']
+    a += df['solve_dense_rowadds']    
+    a += df['backsolve_decoding_additions']
+    a += df['backsolve_rowadds']    
+    m = df['diagonalize_decoding_multiplications']
+    m += df['diagonalize_rowmuls']
+    m += df['solve_dense_decoding_multiplications']
+    m += df['solve_dense_rowmuls']    
+    m += df['backsolve_decoding_multiplications']
+    p += df['backsolve_rowmuls']
+    return a*complexity.ADDITION_COMPLEXITY + m*complexity.MULTIPLICATION_COMPLEXITY
 
     # table = {
     #     (10, 1e-1, 1.3): (0.4493, 1.39178),
@@ -75,28 +89,28 @@ def lt_decoding_complexity(num_inputs=None, failure_prob=None,
     #     return math.inf
     # raise ValueError('no results for key {}'.format(key))
 
-    num_inactivations = df['inactivations'].values[0]
-    num_rowops = df['rowmuls'].values[0]
-    num_rowops *= num_inputs # undo normalization
-    # num_rowops += avg_degree + pow(num_inactivations, 2)
-    c = num_rowops * complexity.ADDITION_COMPLEXITY
-    c += num_rowops * complexity.MULTIPLICATION_COMPLEXITY
-    c += pyrateless.optimize.complexity._optimal_decoding_additions(
-        avg_degree, # assume density 1
-        num_inactivations,
-        num_inputs,
-        num_inputs*target_overhead,
-        1, # packet size
-    ) * complexity.ADDITION_COMPLEXITY
-    c += pyrateless.optimize.complexity._optimal_decoding_multiplications(
-        avg_degree, # assume density 1
-        num_inactivations,
-        num_inputs,
-        num_inputs*target_overhead,
-        1, # packet size
-    ) * complexity.MULTIPLICATION_COMPLEXITY
-    print('returning c={}'.format(c))
-    return c
+    # num_inactivations = df['inactivations'].values[0]
+    # num_rowops = df['rowmuls'].values[0]
+    # num_rowops *= num_inputs # undo normalization
+    # # num_rowops += avg_degree + pow(num_inactivations, 2)
+    # c = num_rowops * complexity.ADDITION_COMPLEXITY
+    # c += num_rowops * complexity.MULTIPLICATION_COMPLEXITY
+    # c += pyrateless.optimize.complexity._optimal_decoding_additions(
+    #     avg_degree, # assume density 1
+    #     num_inactivations,
+    #     num_inputs,
+    #     num_inputs*target_overhead,
+    #     1, # packet size
+    # ) * complexity.ADDITION_COMPLEXITY
+    # c += pyrateless.optimize.complexity._optimal_decoding_multiplications(
+    #     avg_degree, # assume density 1
+    #     num_inactivations,
+    #     num_inputs,
+    #     num_inputs*target_overhead,
+    #     1, # packet size
+    # ) * complexity.MULTIPLICATION_COMPLEXITY
+    # print('returning c={}'.format(c))
+    # return c
 
 def evaluate(parameters, target_overhead=None,
              target_failure_probability=None,
@@ -167,7 +181,6 @@ def evaluate(parameters, target_overhead=None,
         num_inputs=num_inputs,
         failure_prob=target_failure_probability,
         target_overhead=target_overhead,
-        avg_degree=avg_degree,
     )
     decoding_complexity *= num_partitions
     decoding_complexity *= parameters.num_outputs
