@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import pyrateless
 
 from functools import partial
+from scipy.special import comb as nchoosek
 from evaluation import analytic
 from evaluation.binsearch import SampleEvaluator
 from solvers.heuristicsolver import HeuristicSolver
@@ -271,11 +272,12 @@ def get_parameters_workload(num_servers, W=1e8, num_partitions=None,
         raise ValueError("err={} too big".format(err))
     return m
 
-def get_parameters_constant_workload():
+def get_parameters_constant_workload(all_T=False):
     l = list()
     W_target = 1e8
     min_source_rows = 0 # ensure number of source rows is always increasing
-    for i in range(6, 301):
+    # for i in range(6, 301):
+    for i in range(6, 200):
         try:
             m = get_parameters_workload(i, W=W_target)
         except ValueError as err:
@@ -284,12 +286,13 @@ def get_parameters_constant_workload():
             continue
         min_source_rows = m.num_source_rows
         l.append(m)
-        for T in range(m.rows_per_batch+1, m.num_source_rows):
-            try:
-                m = get_parameters_workload(i, W=W_target, num_partitions=T)
-            except ValueError as err:
-                continue
-            l.append(m)
+        if all_T:
+            for T in range(m.rows_per_batch+1, m.num_source_rows):
+                try:
+                    m = get_parameters_workload(i, W=W_target, num_partitions=T)
+                except ValueError as err:
+                    continue
+                l.append(m)
 
     for m in l:
         W = workload(m)
@@ -445,11 +448,32 @@ def partition_plot():
         legend='load',
         ncol=2,
         show=False,
-        ylim_top=(0.5, 1),
+        vline=parameters[0].rows_per_batch,
+        ylim_top=(0.5, 1.1),
         ylim_bot=(0.5,4),
         xlim_bot=(2, 3000),
     )
     plt.savefig('./plots/tcom/partitions.png', dpi='figure')
+
+    plot.load_delay_plot(
+        [heuristic,
+         hybrid,
+         random],
+        [heuristic_plot_settings,
+         hybrid_plot_settings,
+         random_plot_settings],
+        'num_partitions',
+        xlabel=r'$T$',
+        normalize=uncoded,
+        legend='load',
+        ncol=2,
+        show=False,
+        vline=parameters[0].rows_per_batch,
+        ylim_top=(0.5, 0.6),
+        ylim_bot=(1.5, 4),
+        xlim_bot=(2, 3000),
+    )
+    plt.savefig('./plots/tcom/partitions_solvers.png', dpi='figure')
 
     plot.encode_decode_plot(
         [heuristic,
@@ -470,63 +494,6 @@ def partition_plot():
         # xlim_bot=(6, 201),
     )
 
-    plt.show()
-    return
-
-def size_partition_plot():
-    parameters = get_parameters_size_partitions()
-
-    # set arithmetic complexity
-    l = math.log2(parameters[-1].num_coded_rows)
-    complexity.ADDITION_COMPLEXITY = l/64
-    complexity.MULTIPLICATION_COMPLEXITY = l*math.log2(l)
-
-    rs = simulation.simulate_parameter_list(
-        parameter_list=parameters,
-        simulate_fun=rs_fun,
-        map_complexity_fun=complexity.map_complexity_unified,
-        encode_delay_fun=partial(
-            complexity.partitioned_encode_delay,
-            partitions=1,
-            algorithm='fft',
-        ),
-        reduce_delay_fun=partial(
-            complexity.partitioned_reduce_delay,
-            partitions=1,
-            algorithm='fft',
-        ),
-    )
-    heuristic = simulation.simulate_parameter_list(
-        parameter_list=parameters,
-        simulate_fun=heuristic_fun,
-        map_complexity_fun=complexity.map_complexity_unified,
-        encode_delay_fun=partial(
-            complexity.partitioned_encode_delay,
-            algorithm='gen',
-        ),
-        reduce_delay_fun=partial(
-            complexity.partitioned_reduce_delay,
-            algorithm='bm',
-        ),
-    )
-    uncoded = simulation.simulate_parameter_list(
-        parameter_list=parameters,
-        simulate_fun=uncoded_fun,
-        map_complexity_fun=complexity.map_complexity_uncoded,
-        encode_delay_fun=lambda x: 0,
-        reduce_delay_fun=lambda x: 0,
-    )
-    plot.load_delay_plot(
-        [heuristic, rs],
-        [heuristic_plot_settings, rs_plot_settings],
-        'num_servers',
-        xlabel=r'$K$',
-        normalize=uncoded,
-        legend='load',
-        ncol=2,
-        show=False,
-        xlim_bot=(6, 201),
-    )
     plt.show()
     return
 
@@ -603,11 +570,6 @@ def size_plot():
     ]
     heuristic.reset_index(inplace=True)
 
-    print(heuristic)
-    print(heuristic['overall_delay'])
-    print(uncoded['overall_delay'])
-    print(heuristic['overall_delay'] / uncoded['overall_delay'])
-
     random = simulation.simulate_parameter_list(
         parameter_list=parameters,
         simulate_fun=random_fun,
@@ -621,7 +583,6 @@ def size_plot():
             algorithm='bm',
         ),
     )
-    print(random)
     cmapred = simulation.simulate_parameter_list(
         parameter_list=parameters,
         simulate_fun=cmapred_fun,
@@ -640,12 +601,10 @@ def size_plot():
     plot.load_delay_plot(
         [rs,
          heuristic,
-         random,
          cmapred,
          stragglerc],
         [rs_plot_settings,
          heuristic_plot_settings,
-         random_plot_settings,
          cmapred_plot_settings,
          stragglerc_plot_settings],
         'num_servers',
@@ -655,8 +614,27 @@ def size_plot():
         ncol=2,
         show=False,
         xlim_bot=(6, 201),
+        ylim_top=(0.4, 1.1),
+        ylim_bot=(0.25, 2.25),
     )
     plt.savefig('./plots/tcom/size.png', dpi='figure')
+
+    plot.load_delay_plot(
+        [heuristic,
+         random],
+        [heuristic_plot_settings,
+         random_plot_settings],
+        'num_servers',
+        xlabel=r'$K$',
+        normalize=uncoded,
+        legend='load',
+        ncol=2,
+        show=False,
+        xlim_bot=(6, 201),
+        ylim_top=(0.4, 0.7),
+        ylim_bot=(0.8, 2),
+    )
+    plt.savefig('./plots/tcom/size_solvers.png', dpi='figure')
 
     plot.encode_decode_plot(
         [rs,
@@ -680,11 +658,116 @@ def size_plot():
     plt.show()
     return
 
-# size_parameters = plot.get_parameters_size_2()[0:-2] # -2
+def workload_plot():
+    parameters = get_parameters_constant_workload()
+    parameters_all_t = get_parameters_constant_workload(all_T=True)
+
+    # set arithmetic complexity
+    l = math.log2(parameters[-1].num_coded_rows)
+    complexity.ADDITION_COMPLEXITY = l/64
+    complexity.MULTIPLICATION_COMPLEXITY = l*math.log2(l)
+
+    uncoded = simulation.simulate_parameter_list(
+        parameter_list=parameters,
+        simulate_fun=uncoded_fun,
+        map_complexity_fun=complexity.map_complexity_uncoded,
+        encode_delay_fun=lambda x: 0,
+        reduce_delay_fun=lambda x: 0,
+    )
+    rs = simulation.simulate_parameter_list(
+        parameter_list=parameters,
+        simulate_fun=rs_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=partial(
+            complexity.partitioned_encode_delay,
+            partitions=1,
+            algorithm='fft',
+        ),
+        reduce_delay_fun=partial(
+            complexity.partitioned_reduce_delay,
+            partitions=1,
+            algorithm='fft',
+        ),
+    )
+    rs_all_t = simulation.simulate_parameter_list(
+        parameter_list=parameters_all_t,
+        simulate_fun=rs_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=partial(
+            complexity.partitioned_encode_delay,
+            partitions=1,
+            algorithm='fft',
+        ),
+        reduce_delay_fun=partial(
+            complexity.partitioned_reduce_delay,
+            partitions=1,
+            algorithm='fft',
+        ),
+    )
+    heuristic = simulation.simulate_parameter_list(
+        parameter_list=parameters_all_t,
+        simulate_fun=heuristic_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=partial(
+            complexity.partitioned_encode_delay,
+            algorithm='gen',
+        ),
+        reduce_delay_fun=partial(
+            complexity.partitioned_reduce_delay,
+            algorithm='bm',
+        ),
+    )
+
+    # filter out rows with load more than 1% over that of the RS code
+    heuristic_100 = heuristic.loc[
+        heuristic['load']/rs_all_t['load'] <= 1.00000000000000001, :
+    ]
+    heuristic_101 = heuristic.loc[
+        heuristic['load']/rs_all_t['load'] <= 1.01, :
+    ]
+    heuristic_110 = heuristic.loc[
+        heuristic['load']/rs_all_t['load'] <= 1.10, :
+    ]
+
+    # find the optimal partitioning level for each number of servers
+    heuristic_100 = heuristic_100.loc[
+        heuristic_100.groupby("num_servers")["overall_delay"].idxmin(), :
+    ]
+    heuristic_100.reset_index(inplace=True)
+    heuristic_101 = heuristic_101.loc[
+        heuristic_101.groupby("num_servers")["overall_delay"].idxmin(), :
+    ]
+    heuristic_101.reset_index(inplace=True)
+    heuristic_110 = heuristic_110.loc[
+        heuristic_110.groupby("num_servers")["overall_delay"].idxmin(), :
+    ]
+    heuristic_110.reset_index(inplace=True)
+
+    plot.load_delay_plot(
+        [heuristic_100,
+         heuristic_101,
+         heuristic_110,
+         rs],
+        [heuristic_plot_settings,
+         heuristic_plot_settings,
+         heuristic_plot_settings,
+         rs_plot_settings],
+        'num_servers',
+        xlabel=r'$K$',
+        normalize=uncoded,
+        legend='load',
+        ncol=2,
+        show=False,
+        xlim_bot=(6, 300),
+        ylim_top=(0.4, 1),
+        ylim_bot=(0, 60),
+    )
+    # plt.savefig('./plots/tcom/size.png', dpi='figure')
+    plt.show()
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     # lt_parameters()
     # partition_plot()
-    # size_partition_plot()
-    size_plot()
+    # size_plot()
+    workload_plot()
