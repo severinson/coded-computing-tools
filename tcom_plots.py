@@ -1,3 +1,4 @@
+import math
 import logging
 import model
 import plot
@@ -139,6 +140,18 @@ rs_fun = partial(
     samples=1,
     parameter_eval=analytic.mds_performance,
 )
+lt_fun = partial(
+    simulation.simulate,
+    directory='./results/LT_3_1/',
+    samples=1,
+    parameter_eval=partial(
+        rateless.evaluate,
+        target_overhead=1.3,
+        target_failure_probability=1e-1,
+        cachedir='./results/LT_3_1/',
+    ),
+    rerun=True,
+)
 
 def get_parameters_partitioning():
     '''Constant system size, increasing partitions, num_outputs=num_columns'''
@@ -175,7 +188,7 @@ def get_parameters_size():
     num_columns = None
     num_outputs_factor = 1000
     parameters = list()
-    num_servers = [5, 8, 20, 50, 80, 125, 200, 500, 2000]
+    num_servers = [5, 8, 20, 50, 80, 125, 200]
     for servers in num_servers:
         par = model.SystemParameters.fixed_complexity_parameters(
             rows_per_server=rows_per_server,
@@ -188,6 +201,105 @@ def get_parameters_size():
         )
         parameters.append(par)
     return parameters
+
+def get_parameters_size_partitions():
+    '''Get a list of parameters for the size plot.'''
+    rows_per_server = 2000
+    rows_per_partition = 10
+    code_rate = 2/3
+    muq = 2
+    num_columns = None
+    num_outputs_factor = 1000
+    parameters = list()
+    num_servers = [5, 8, 20, 50, 80, 125, 200]
+    for servers in num_servers:
+        par = model.SystemParameters.fixed_complexity_parameters(
+            rows_per_server=rows_per_server,
+            rows_per_partition=rows_per_partition,
+            min_num_servers=servers,
+            code_rate=code_rate,
+            muq=muq,
+            num_columns=num_columns,
+            num_outputs_factor=num_outputs_factor,
+        )
+        for T in range(par.rows_per_batch, par.num_source_rows+1):
+            try:
+                dct = par.asdict()
+                dct['num_partitions'] = T
+                p = model.SystemParameters.fromdct(dct)
+            except ValueError as err:
+                continue
+            parameters.append(p)
+    return parameters
+
+def get_parameters_workload(num_servers, W=1e8, num_partitions=None,
+                            code_rate=2/3, muq=2, tol=0.05):
+    '''Get a list of parameters for the size plot.'''
+    q = code_rate*num_servers
+    server_storage = muq / q
+
+    # assume num_outputs and num_columns is a constant factor of
+    # num_source_rows
+    alpha = 0.01
+    root = (W/(alpha**2*server_storage)) ** (1. / 3)
+    num_source_rows = round(root)
+    num_outputs = round(alpha*num_source_rows / q) * q
+    num_columns = num_outputs
+
+    rows_per_server = num_source_rows * server_storage
+    num_batches = nchoosek(num_servers, muq, exact=True)
+    num_coded_rows = num_source_rows / code_rate
+    rows_per_batch = round(num_coded_rows / num_batches)
+    if not num_partitions:
+        num_partitions = rows_per_batch
+    # print(num_servers, num_coded_rows, num_batches, num_coded_rows/num_batches)
+    if num_coded_rows / num_batches < 1:
+        raise ValueError()
+
+    m = model.SystemParameters(
+        rows_per_batch=rows_per_batch,
+        num_servers=num_servers,
+        q=q,
+        num_outputs=num_outputs,
+        server_storage=server_storage,
+        num_partitions=num_partitions,
+        num_columns=num_columns,
+    )
+    W_emp = workload(m)
+    err = abs((W-W_emp)/W)
+    if err > tol:
+        raise ValueError("err={} too big".format(err))
+    return m
+
+def get_parameters_constant_workload():
+    l = list()
+    W_target = 1e8
+    min_source_rows = 0 # ensure number of source rows is always increasing
+    for i in range(6, 301):
+        try:
+            m = get_parameters_workload(i, W=W_target)
+        except ValueError as err:
+            continue
+        if m.num_source_rows <= min_source_rows:
+            continue
+        min_source_rows = m.num_source_rows
+        l.append(m)
+        for T in range(m.rows_per_batch+1, m.num_source_rows):
+            try:
+                m = get_parameters_workload(i, W=W_target, num_partitions=T)
+            except ValueError as err:
+                continue
+            l.append(m)
+
+    for m in l:
+        W = workload(m)
+        print(m)
+        print(W/W_target)
+        print()
+    return l
+
+def workload(p):
+    return p.server_storage*p.num_source_rows*p.num_columns*p.num_outputs
 
 def lt_parameters():
     # parameters = plot.get_parameters_size()[:-2] # -2
@@ -214,7 +326,7 @@ def lt_parameters():
             target_failure_probability=1e-1,
             target_overhead=1.3,
         )
-        mode = pyrateless.coding.stats.mode_from_delta_c(        
+        mode = pyrateless.coding.stats.mode_from_delta_c(
             num_inputs=m,
             delta=delta,
             c=c,
@@ -226,6 +338,12 @@ def lt_parameters():
 
 def partition_plot():
     parameters = get_parameters_partitioning()
+
+    # set arithmetic complexity
+    l = math.log2(parameters[-1].num_coded_rows)
+    complexity.ADDITION_COMPLEXITY = l/64
+    complexity.MULTIPLICATION_COMPLEXITY = l*math.log2(l)
+
     uncoded = simulation.simulate_parameter_list(
         parameter_list=parameters,
         simulate_fun=uncoded_fun,
@@ -259,45 +377,6 @@ def partition_plot():
         reduce_delay_fun=partial(
             complexity.partitioned_reduce_delay,
             algorithm='bm',
-        ),
-    )    
-    # load/delay as function of system size
-    plot.load_delay_plot(
-        [rs],
-        [rs_plot_settings],
-        'num_partitions',
-        xlabel=r'$T$',
-        normalize=uncoded,
-        legend='load',
-        ncol=2,
-        show=False,
-    )
-    plt.show()
-    return
-
-def size_plot():
-    parameters = get_parameters_size()[:-2] # -2
-    [print(p.num_source_rows) for p in parameters]
-    uncoded = simulation.simulate_parameter_list(
-        parameter_list=parameters,
-        simulate_fun=uncoded_fun,
-        map_complexity_fun=complexity.map_complexity_uncoded,
-        encode_delay_fun=lambda x: 0,
-        reduce_delay_fun=lambda x: 0,
-    )
-    rs = simulation.simulate_parameter_list(
-        parameter_list=parameters,
-        simulate_fun=rs_fun,
-        map_complexity_fun=complexity.map_complexity_unified,
-        encode_delay_fun=partial(
-            complexity.partitioned_encode_delay,
-            partitions=1,
-            algorithm='fft',
-        ),
-        reduce_delay_fun=partial(
-            complexity.partitioned_reduce_delay,
-            partitions=1,
-            algorithm='fft',
         ),
     )
     heuristic = simulation.simulate_parameter_list(
@@ -339,8 +418,225 @@ def size_plot():
         map_complexity_fun=complexity.map_complexity_stragglerc,
         encode_delay_fun=complexity.stragglerc_encode_delay,
         reduce_delay_fun=complexity.stragglerc_reduce_delay,
-    )    
-    
+    )
+    # lt = simulation.simulate_parameter_list(
+    #     parameter_list=parameters,
+    #     simulate_fun=lt_fun,
+    #     map_complexity_fun=complexity.map_complexity_unified,
+    #     encode_delay_fun=False,
+    #     reduce_delay_fun=False,
+    # )
+
+    # load/delay as function of system size
+    plot.load_delay_plot(
+        [heuristic,
+         # lt,
+         cmapred,
+         stragglerc,
+         rs],
+        [heuristic_plot_settings,
+         # lt_plot_settings,
+         cmapred_plot_settings,
+         stragglerc_plot_settings,
+         rs_plot_settings],
+        'num_partitions',
+        xlabel=r'$T$',
+        normalize=uncoded,
+        legend='load',
+        ncol=2,
+        show=False,
+        ylim_top=(0.5, 1),
+        ylim_bot=(0.5,4),
+        xlim_bot=(2, 3000),
+    )
+    plt.savefig('./plots/tcom/partitions.png', dpi='figure')
+
+    plot.encode_decode_plot(
+        [heuristic,
+         # lt,
+         cmapred,
+         stragglerc,
+         rs],
+        [heuristic_plot_settings,
+         # lt_plot_settings,
+         cmapred_plot_settings,
+         stragglerc_plot_settings,
+         rs_plot_settings],
+        'num_partitions',
+        xlabel=r'$T$',
+        legend='load',
+        ncol=2,
+        show=False,
+        # xlim_bot=(6, 201),
+    )
+
+    plt.show()
+    return
+
+def size_partition_plot():
+    parameters = get_parameters_size_partitions()
+
+    # set arithmetic complexity
+    l = math.log2(parameters[-1].num_coded_rows)
+    complexity.ADDITION_COMPLEXITY = l/64
+    complexity.MULTIPLICATION_COMPLEXITY = l*math.log2(l)
+
+    rs = simulation.simulate_parameter_list(
+        parameter_list=parameters,
+        simulate_fun=rs_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=partial(
+            complexity.partitioned_encode_delay,
+            partitions=1,
+            algorithm='fft',
+        ),
+        reduce_delay_fun=partial(
+            complexity.partitioned_reduce_delay,
+            partitions=1,
+            algorithm='fft',
+        ),
+    )
+    heuristic = simulation.simulate_parameter_list(
+        parameter_list=parameters,
+        simulate_fun=heuristic_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=partial(
+            complexity.partitioned_encode_delay,
+            algorithm='gen',
+        ),
+        reduce_delay_fun=partial(
+            complexity.partitioned_reduce_delay,
+            algorithm='bm',
+        ),
+    )
+    uncoded = simulation.simulate_parameter_list(
+        parameter_list=parameters,
+        simulate_fun=uncoded_fun,
+        map_complexity_fun=complexity.map_complexity_uncoded,
+        encode_delay_fun=lambda x: 0,
+        reduce_delay_fun=lambda x: 0,
+    )
+    plot.load_delay_plot(
+        [heuristic, rs],
+        [heuristic_plot_settings, rs_plot_settings],
+        'num_servers',
+        xlabel=r'$K$',
+        normalize=uncoded,
+        legend='load',
+        ncol=2,
+        show=False,
+        xlim_bot=(6, 201),
+    )
+    plt.show()
+    return
+
+def size_plot():
+    parameters = get_parameters_size()
+
+    # same as above but with all possible partitioning levels
+    parameters_all_t = get_parameters_size_partitions()
+
+    # set arithmetic complexity
+    l = math.log2(parameters[-1].num_coded_rows)
+    complexity.ADDITION_COMPLEXITY = l/64
+    complexity.MULTIPLICATION_COMPLEXITY = l*math.log2(l)
+
+    uncoded = simulation.simulate_parameter_list(
+        parameter_list=parameters,
+        simulate_fun=uncoded_fun,
+        map_complexity_fun=complexity.map_complexity_uncoded,
+        encode_delay_fun=lambda x: 0,
+        reduce_delay_fun=lambda x: 0,
+    )
+    rs = simulation.simulate_parameter_list(
+        parameter_list=parameters,
+        simulate_fun=rs_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=partial(
+            complexity.partitioned_encode_delay,
+            partitions=1,
+            algorithm='fft',
+        ),
+        reduce_delay_fun=partial(
+            complexity.partitioned_reduce_delay,
+            partitions=1,
+            algorithm='fft',
+        ),
+    )
+    rs_all_t = simulation.simulate_parameter_list(
+        parameter_list=parameters_all_t,
+        simulate_fun=rs_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=partial(
+            complexity.partitioned_encode_delay,
+            partitions=1,
+            algorithm='fft',
+        ),
+        reduce_delay_fun=partial(
+            complexity.partitioned_reduce_delay,
+            partitions=1,
+            algorithm='fft',
+        ),
+    )
+    heuristic = simulation.simulate_parameter_list(
+        parameter_list=parameters_all_t,
+        simulate_fun=heuristic_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=partial(
+            complexity.partitioned_encode_delay,
+            algorithm='gen',
+        ),
+        reduce_delay_fun=partial(
+            complexity.partitioned_reduce_delay,
+            algorithm='bm',
+        ),
+    )
+
+    # filter out rows with low more than 1% over that of the RS code
+    heuristic = heuristic.loc[
+        heuristic['load']/rs_all_t['load'] <= 1.01, :
+    ]
+
+    # find the optimal partitioning level for each number of servers
+    heuristic = heuristic.loc[
+        heuristic.groupby("num_servers")["overall_delay"].idxmin(), :
+    ]
+    heuristic.reset_index(inplace=True)
+
+    print(heuristic)
+    print(heuristic['overall_delay'])
+    print(uncoded['overall_delay'])
+    print(heuristic['overall_delay'] / uncoded['overall_delay'])
+
+    random = simulation.simulate_parameter_list(
+        parameter_list=parameters,
+        simulate_fun=random_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=partial(
+            complexity.partitioned_encode_delay,
+            algorithm='gen',
+        ),
+        reduce_delay_fun=partial(
+            complexity.partitioned_reduce_delay,
+            algorithm='bm',
+        ),
+    )
+    print(random)
+    cmapred = simulation.simulate_parameter_list(
+        parameter_list=parameters,
+        simulate_fun=cmapred_fun,
+        map_complexity_fun=complexity.map_complexity_cmapred,
+        encode_delay_fun=lambda x: 0,
+        reduce_delay_fun=lambda x: 0,
+    )
+    stragglerc = simulation.simulate_parameter_list(
+        parameter_list=parameters,
+        simulate_fun=stragglerc_fun,
+        map_complexity_fun=complexity.map_complexity_stragglerc,
+        encode_delay_fun=complexity.stragglerc_encode_delay,
+        reduce_delay_fun=complexity.stragglerc_reduce_delay,
+    )
+
     plot.load_delay_plot(
         [rs,
          heuristic,
@@ -360,6 +656,7 @@ def size_plot():
         show=False,
         xlim_bot=(6, 201),
     )
+    plt.savefig('./plots/tcom/size.png', dpi='figure')
 
     plot.encode_decode_plot(
         [rs,
@@ -378,17 +675,16 @@ def size_plot():
         ncol=2,
         show=False,
         xlim_bot=(6, 201),
-    )    
+    )
 
-    
     plt.show()
     return
-    
+
 # size_parameters = plot.get_parameters_size_2()[0:-2] # -2
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     # lt_parameters()
     # partition_plot()
+    # size_partition_plot()
     size_plot()
-    
