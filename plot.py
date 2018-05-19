@@ -314,7 +314,7 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
             plot_setting,
             xdata,
             'load',
-            ylabel=r'Load',
+            ylabel=r'$L$',
             subplot=True,
             normalize=normalize
         )
@@ -345,7 +345,7 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
             xdata,
             'overall_delay',
             xlabel=xlabel,
-            ylabel=r'Delay',
+            ylabel=r'$D$',
             subplot=True,
             normalize=normalize,
         )
@@ -595,9 +595,9 @@ def plot_result(result, plot_settings, xdata, ydata, xlabel='',
         ymean /= normalize[ydata]
 
     if plot_type == 'semilogx':
-        plt.semilogx(xarray, ymean, style, label=label)
+        plt.semilogx(xarray, ymean, style, label=label, markevery=0.2)
     elif plot_type == 'loglog':
-        plt.loglog(xarray, ymean, style, label=label,)
+        plt.loglog(xarray, ymean, style, label=label, markevery=0.2)
 
     if errorbars:
         plt.errorbar(xarray, ymean, yerr=yerr, fmt='none', ecolor=color)
