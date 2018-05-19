@@ -2,6 +2,7 @@
 
 '''
 
+import math
 import logging
 import numpy as np
 import pandas as pd
@@ -35,6 +36,40 @@ def optimize_lt_parameters(num_inputs=None, target_overhead=None,
     )
     return c, delta, mode
 
+def lt_encoding_complexity(num_inputs=None, failure_prob=None,
+                           target_overhead=None, code_rate=None):
+    '''Return the decoding complexity of LT codes. Computed from the
+    average of the degree distribution.
+
+    The number of columns is assumed to be 1. Scale the return value
+    of this function by the actual number of columns to get the
+    correct complexity.
+
+    '''
+    # find good LT code parameters
+    c, delta, mode = optimize_lt_parameters(
+        num_inputs=num_inputs,
+        target_overhead=target_overhead,
+        target_failure_probability=failure_prob,
+    )
+    avg_degree = pyrateless.Soliton(
+        delta=delta,
+        mode=mode,
+        symbols=num_inputs).mean()
+    encoding_complexity = pyrateless.optimize.complexity.encoding_additions(
+        avg_degree,
+        code_rate,
+        num_inputs,
+        1, # number of columns
+    ) * complexity.ADDITION_COMPLEXITY
+    encoding_complexity += pyrateless.optimize.complexity.encoding_multiplications(
+        avg_degree,
+        code_rate,
+        num_inputs,
+        1,
+    ) * complexity.MULTIPLICATION_COMPLEXITY
+    return encoding_complexity
+
 def lt_decoding_complexity(num_inputs=None, failure_prob=None,
                            target_overhead=None):
     '''Return the decoding complexity of LT codes. Data is manually
@@ -54,20 +89,23 @@ def lt_decoding_complexity(num_inputs=None, failure_prob=None,
 
     df = df.loc[df['num_inputs'] == num_inputs]
     if len(df) != 1:
-        logging.error('did not find exactly 1 row: '.format(df))
+        logging.warning('did not find exactly 1 row: '.format(df))
+        return math.inf
 
     a = df['diagonalize_decoding_additions']
     a += df['diagonalize_rowadds']
     a += df['solve_dense_decoding_additions']
-    a += df['solve_dense_rowadds']    
+    a += df['solve_dense_rowadds']
     a += df['backsolve_decoding_additions']
-    a += df['backsolve_rowadds']    
+    a += df['backsolve_rowadds']
+    a = a.values[0]
     m = df['diagonalize_decoding_multiplications']
     m += df['diagonalize_rowmuls']
     m += df['solve_dense_decoding_multiplications']
-    m += df['solve_dense_rowmuls']    
+    m += df['solve_dense_rowmuls']
     m += df['backsolve_decoding_multiplications']
-    p += df['backsolve_rowmuls']
+    m += df['backsolve_rowmuls']
+    m = m.values[0]
     return a*complexity.ADDITION_COMPLEXITY + m*complexity.MULTIPLICATION_COMPLEXITY
 
     # table = {
@@ -149,30 +187,14 @@ def evaluate(parameters, target_overhead=None,
     # guaranteed to be an integer
     num_inputs = int(parameters.num_source_rows / num_partitions)
 
-    # find good LT code parameters
-    c, delta, mode = optimize_lt_parameters(
-        num_inputs=num_inputs,
-        target_overhead=target_overhead,
-        target_failure_probability=target_failure_probability,
-    )
-
     # compute encoding complexity
-    avg_degree = pyrateless.Soliton(
-        delta=delta,
-        mode=mode,
-        symbols=num_inputs).mean()
-    encoding_complexity = pyrateless.optimize.complexity.encoding_additions(
-        avg_degree,
-        parameters.q/parameters.num_servers,
-        num_inputs,
-        parameters.num_columns,
-    ) * complexity.ADDITION_COMPLEXITY
-    encoding_complexity += pyrateless.optimize.complexity.encoding_multiplications(
-        avg_degree,
-        parameters.q/parameters.num_servers,
-        num_inputs,
-        parameters.num_columns,
-    ) * complexity.MULTIPLICATION_COMPLEXITY
+    encoding_complexity = lt_encoding_complexity(
+        num_inputs=num_inputs,
+        failure_prob=target_failure_probability,
+        target_overhead=target_overhead,
+        code_rate=parameters.q/parameters.num_servers,
+    )
+    encoding_complexity *= parameters.num_columns
     encoding_complexity *= num_partitions
     encoding_complexity *= parameters.muq
 
