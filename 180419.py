@@ -687,7 +687,7 @@ def rs_plot():
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     # partitioning_plot()
     # size_plot()
     rs_plot()
