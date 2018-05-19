@@ -46,36 +46,50 @@ def partitioned_encode_delay(parameters, partitions=None, algorithm='gen'):
     )
 
     # scale by the total encoding complexity
-    if algorithm == 'gen':
-        delay *= block_diagonal_encoding_complexity(
-            parameters,
-            partitions=partitions,
-        )
-        # take into account that each coded row is stored at server_storage*q
-        # servers. each coded row is thus encoded several times.
-        delay *= parameters.muq
-    elif algorithm == 'bm':
-        partition_length = parameters.num_coded_rows / partitions
-        delay *= block_diagonal_decoding_complexity(
-            parameters.num_coded_rows,
-            1,
-            1 - parameters.q / parameters.num_servers,
-            partitions,
-        )
-        delay *= parameters.num_columns
-        delay *= parameters.num_servers
-    elif algorithm == 'fft':
-        partition_length = parameters.num_coded_rows / partitions
-        delay *= rs_decoding_complexity_fft(partition_length)*partitions
-        delay *= parameters.num_columns
-        delay *= parameters.num_servers
-    else:
-        raise ValueError('algorithm must be either "gen", "bm" or "fft"')
+    delay *= partitioned_encode_complexity(
+        parameters,
+        partitions=partitions,
+        algorithm=algorithm,
+    )
 
     # split the work over all servers
     delay /= parameters.num_servers
 
     return delay
+
+def partitioned_encode_complexity(parameters, partitions=None, algorithm='gen'):
+    '''return the total encoding complexity'''
+    assert partitions is None or partitions % 1 == 0
+    assert algorithm in ['gen', 'bm', 'fft'], algorithm
+    if partitions is None:
+        partitions = parameters.num_partitions
+
+    if algorithm == 'gen':
+        c = block_diagonal_encoding_complexity(
+            parameters,
+            partitions=partitions,
+        )
+        # take into account that each coded row is stored at server_storage*q
+        # servers. each coded row is thus encoded several times.
+        c *= parameters.muq
+    elif algorithm == 'bm':
+        partition_length = parameters.num_coded_rows / partitions
+        c = block_diagonal_decoding_complexity(
+            parameters.num_coded_rows,
+            1,
+            1 - parameters.q / parameters.num_servers,
+            partitions,
+        )
+        c *= parameters.num_columns
+        c *= parameters.num_servers
+    elif algorithm == 'fft':
+        partition_length = parameters.num_coded_rows / partitions
+        c = rs_decoding_complexity_fft(partition_length)*partitions
+        c *= parameters.num_columns
+        c *= parameters.num_servers
+    else:
+        raise ValueError('algorithm must be either "gen", "bm" or "fft"')
+    return c
 
 def block_diagonal_encoding_complexity(parameters, partitions=None):
     assert partitions is None or partitions % 1 == 0
@@ -132,9 +146,27 @@ def partitioned_reduce_delay(parameters, partitions=None, algorithm='fft'):
         parameters.q,
     )
 
-    # scale by the decoding complexity per server
+    # scale by the total decoding complexity
+    delay *= partitioned_reduce_complexity(
+        parameters,
+        partitions=partitions,
+        algorithm=algorithm,
+    )
+
+    # split the work over all servers
+    delay /= parameters.q
+
+    return delay
+
+def partitioned_reduce_complexity(parameters, partitions=None, algorithm='fft'):
+    '''total reduce complexity for the partitioned scheme'''
+    assert partitions is None or partitions % 1 == 0
+    assert algorithm in ['bm', 'fft'], algorithm
+    if partitions is None:
+        partitions = parameters.num_partitions
+
     if algorithm == 'bm':
-        delay *= block_diagonal_decoding_complexity(
+        c = block_diagonal_decoding_complexity(
             parameters.num_coded_rows,
             1,
             1 - parameters.q / parameters.num_servers,
@@ -142,27 +174,12 @@ def partitioned_reduce_delay(parameters, partitions=None, algorithm='fft'):
         )
     elif algorithm == 'fft':
         partition_length = parameters.num_coded_rows / partitions
-        delay *= rs_decoding_complexity_fft(partition_length)*partitions
+        c = rs_decoding_complexity_fft(partition_length)*partitions
     else:
         raise ValueError('algorithm must be either "bm" or "fft"')
 
-    delay *= parameters.num_outputs / parameters.q
-    return delay
-
-def partitioned_reduce_complexity(parameters, partitions=None):
-    '''reduce complexity per server for the partitioned scheme'''
-    assert False, 'marked for removal'
-    if partitions is None:
-        partitions = parameters.num_partitions
-
-    complexity = block_diagonal_decoding_complexity(
-        parameters.num_coded_rows,
-        1,
-        1 - parameters.q / parameters.num_servers,
-        partitions,
-    )
-    complexity *= parameters.num_outputs / parameters.q
-    return complexity
+    c *= parameters.num_outputs
+    return c
 
 def stragglerc_reduce_delay(parameters):
     '''Compute reduce delay for a system using only straggler coding,
