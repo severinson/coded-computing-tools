@@ -1,6 +1,7 @@
 import math
 import logging
 import numpy as np
+import scipy.stats
 import model
 import plot
 import rateless
@@ -8,6 +9,7 @@ import complexity
 import simulation
 import matplotlib.pyplot as plt
 import pyrateless
+import overhead
 
 from functools import partial
 from scipy.special import comb as nchoosek
@@ -217,6 +219,7 @@ def get_parameters_size():
             num_columns=num_columns,
             num_outputs_factor=num_outputs_factor,
         )
+        par.num_columns *= 100
         parameters.append(par)
     return parameters
 
@@ -244,6 +247,7 @@ def get_parameters_size_partitions():
             try:
                 dct = par.asdict()
                 dct['num_partitions'] = T
+                dct['num_columns'] = 100*par.num_columns
                 p = model.SystemParameters.fromdct(dct)
             except ValueError as err:
                 continue
@@ -346,38 +350,28 @@ def get_parameters_N():
 
     return parameters
 
-def lt_parameters(tfp=1e-1, to=1.3):
+def lt_parameters(tfp=1e-1, to=1.3, partitioned=False):
     parameters = get_parameters_N()
     for p in parameters:
-        m = p.num_source_rows
+        if partitioned:
+            num_inputs = int(p.num_source_rows / p.rows_per_batch)
+        else:
+            num_inputs = p.num_source_rows
+
         c, delta = pyrateless.heuristic(
-            num_inputs=m,
+            num_inputs=num_inputs,
             target_failure_probability=tfp,
             target_overhead=to,
         )
         mode = pyrateless.coding.stats.mode_from_delta_c(
-            num_inputs=m,
+            num_inputs=num_inputs,
             delta=delta,
             c=c,
         )
-        print('m={}, delta={}, mode={}'.format(
-            m, delta, mode,
+        print('num_inputs={}, delta={}, mode={}'.format(
+            num_inputs, delta, mode,
         ))
 
-        m = int(p.num_source_rows / p.rows_per_batch)
-        c, delta = pyrateless.heuristic(
-            num_inputs=m,
-            target_failure_probability=tfp,
-            target_overhead=to,
-        )
-        mode = pyrateless.coding.stats.mode_from_delta_c(
-            num_inputs=m,
-            delta=delta,
-            c=c,
-        )
-        print('m={}, delta={}, mode={}'.format(
-            m, delta, mode,
-        ))
     return
 
 def lt_plots():
@@ -806,6 +800,7 @@ def size_plot():
         heuristic.groupby("num_servers")["overall_delay"].idxmin(), :
     ]
     heuristic.reset_index(inplace=True)
+    print(heuristic['overall_delay'])
 
     random = simulation.simulate_parameter_list(
         parameter_list=parameters,
@@ -841,6 +836,7 @@ def size_plot():
         encode_delay_fun=False,
         reduce_delay_fun=False,
     )
+    print(lt['overall_delay'])
     lt_partitioned = simulation.simulate_parameter_list(
         parameter_list=parameters,
         simulate_fun=lt_partitioned_fun,
@@ -848,6 +844,7 @@ def size_plot():
         encode_delay_fun=False,
         reduce_delay_fun=False,
     )
+    print(lt_partitioned['overall_delay'])
 
     plot.load_delay_plot(
         [heuristic,
@@ -869,11 +866,11 @@ def size_plot():
         ncol=2,
         show=False,
         xlim_bot=(6, 201),
-        ylim_top=(0.4, 1.1),
-        ylim_bot=(0, 6),
+        # ylim_top=(0.4, 1.1),
+        # ylim_bot=(0, 6),
     )
-    plt.savefig('./plots/tcom/size.png', dpi='figure')
-    plt.savefig('./plots/tcom/size.pdf', dpi='figure', bbox_inches='tight')
+    # plt.savefig('./plots/tcom/size.png', dpi='figure')
+    # plt.savefig('./plots/tcom/size.pdf', dpi='figure', bbox_inches='tight')
 
     plot.load_delay_plot(
         [heuristic,
@@ -887,32 +884,31 @@ def size_plot():
         ncol=2,
         show=False,
         xlim_bot=(6, 201),
-        ylim_top=(0.4, 0.7),
-        ylim_bot=(0.5, 3),
+        # ylim_top=(0.4, 0.7),
+        # ylim_bot=(0.5, 3),
     )
-    plt.savefig('./plots/tcom/solvers_size.png', dpi='figure')
-    plt.savefig('./plots/tcom/solvers_size.pdf', dpi='figure', bbox_inches='tight')
+    # plt.savefig('./plots/tcom/solvers_size.png', dpi='figure')
+    # plt.savefig('./plots/tcom/solvers_size.pdf', dpi='figure', bbox_inches='tight')
 
     plot.encode_decode_plot(
         [rs,
          heuristic,
-         random,
-         cmapred,
-         stragglerc],
+         lt,
+         lt_partitioned],
         [rs_plot_settings,
          heuristic_plot_settings,
-         random_plot_settings,
-         cmapred_plot_settings,
-         stragglerc_plot_settings],
+         lt_plot_settings,
+         lt_partitioned_plot_settings],
         'num_servers',
         xlabel=r'$K$',
         legend='load',
         ncol=2,
         show=False,
+        normalize=uncoded,
         xlim_bot=(6, 201),
     )
 
-    # plt.show()
+    plt.show()
     return
 
 def workload_plot():
@@ -1066,20 +1062,130 @@ def workload_plot():
     # plt.show()
     return
 
+def get_lt_cdf(parameters, partitioned=False):
+    assert isinstance(parameters, model.SystemParameters)
+    assert isinstance(partitioned, bool)
+    if partitioned:
+        filename = "lt_samples_partitioned"
+        a=97.80714827099743
+        loc=17005348.58022266
+        scale=148050.2065582715
+        return lambda t: scipy.stats.gamma.cdf(t, a, loc=loc, scale=scale)
+
+        num_partitions = parameters.rows_per_batch
+        df = lt_partitioned_fun(parameters)
+        cachedir='./results/LT_3_1_partitioned/overhead'
+        order_values, order_probabilities = rateless.order_pdf(
+            parameters=parameters,
+            target_overhead=1.3,
+            target_failure_probability=1e-1,
+            partitioned=partitioned,
+        )
+        # order_values = [
+        #     134, 135, 136, 137, 138, 139, 140, 141, 142,
+        #     143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156,
+        #     157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170,
+        #     171, 172, 173, 174, 176, 177, 178, 179, 180, 182, 183, 185, 186, 188,
+        #     191, 194, 200,
+        # ]
+        # order_probabilities = [
+        #     9.95796511e-01, 2.20182752e-04, 3.00249207e-04, 2.00166138e-04,
+        #     1.80149524e-04, 2.70224286e-04, 1.60132910e-04, 1.60132910e-04,
+        #     1.60132910e-04, 1.40116297e-04, 2.10174445e-04, 1.30107990e-04,
+        #     1.20099683e-04, 1.20099683e-04, 1.20099683e-04, 1.10091376e-04,
+        #     5.00415345e-05, 1.00083069e-04, 1.00083069e-04, 1.00083069e-04,
+        #     9.00747621e-05, 4.00332276e-05, 8.00664552e-05, 8.00664552e-05,
+        #     4.00332276e-05, 8.00664552e-05, 4.00332276e-05, 7.00581483e-05,
+        #     3.00249207e-05, 6.00498414e-05, 3.00249207e-05, 3.00249207e-05,
+        #     6.00498414e-05, 3.00249207e-05, 3.00249207e-05, 3.00249207e-05,
+        #     3.00249207e-05, 3.00249207e-05, 6.00498414e-05, 3.00249207e-05,
+        #     2.00166138e-05, 2.00166138e-05, 2.00166138e-05, 2.00166138e-05,
+        #     2.00166138e-05, 2.00166138e-05, 2.00166138e-05, 2.00166138e-05,
+        #     2.00166138e-05, 2.00166138e-05, 2.00166138e-05, 2.00166138e-05,
+        #     2.00166138e-05, 2.00166138e-05,
+        # ]
+    else:
+        filename = "lt_samples"
+        num_partitions = 1
+        df = lt_fun(parameters)
+        cachedir='./results/LT_3_1/overhead'
+        order_values = [
+            134, 135, 136, 137, 138, 139, 140, 141, 142,
+            143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154,
+            155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166,
+            167, 168, 169, 170, 171, 172, 173, 174, 176, 177, 178, 179,
+            180, 182, 183, 185, 186, 188, 191, 194, 200,
+        ]
+        order_probabilities = [
+            9.97919480e-01, 1.20030008e-04,
+            1.80045011e-04, 1.00025006e-04, 1.00025006e-04, 1.50037509e-04,
+            8.00200050e-05, 8.00200050e-05, 8.00200050e-05, 8.00200050e-05,
+            1.10027507e-04, 6.00150038e-05, 6.00150038e-05, 6.00150038e-05,
+            6.00150038e-05, 6.00150038e-05, 3.00075019e-05, 4.00100025e-05,
+            4.00100025e-05, 4.00100025e-05, 4.00100025e-05, 2.00050013e-05,
+            4.00100025e-05, 4.00100025e-05, 2.00050013e-05, 4.00100025e-05,
+            2.00050013e-05, 4.00100025e-05, 1.00025006e-05, 2.00050013e-05,
+            1.00025006e-05, 1.00025006e-05, 2.00050013e-05, 1.00025006e-05,
+            1.00025006e-05, 1.00025006e-05, 1.00025006e-05, 1.00025006e-05,
+            2.00050013e-05, 1.00025006e-05, 1.00025006e-05, 1.00025006e-05,
+            1.00025006e-05, 1.00025006e-05, 1.00025006e-05, 1.00025006e-05,
+            1.00025006e-05, 1.00025006e-05, 1.00025006e-05, 1.00025006e-05,
+            1.00025006e-05, 1.00025006e-05, 1.00025006e-05, 1.00025006e-05,
+        ]
+
+    num_inputs = int(parameters.num_source_rows / num_partitions)
+    encoding_complexity = rateless.lt_encoding_complexity(
+        num_inputs=num_inputs,
+        failure_prob=1e-1,
+        target_overhead=1.3,
+        code_rate=parameters.q/parameters.num_servers,
+    )
+    encoding_complexity *= parameters.num_columns
+    encoding_complexity *= num_partitions
+    encoding_complexity *= parameters.muq
+
+    decoding_complexity = rateless.lt_decoding_complexity(
+        num_inputs=num_inputs,
+        failure_prob=1e-1,
+        target_overhead=1.3,
+    )
+    decoding_complexity *= num_partitions
+    decoding_complexity *= parameters.num_outputs
+
+    samples = simulation.delay_samples(
+        df,
+        parameters=parameters,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_complexity_fun=lambda x: encoding_complexity,
+        reduce_complexity_fun=lambda x: decoding_complexity,
+        order_values=order_values,
+        order_probabilities=order_probabilities,
+    )
+    np.save(filename, samples)
+    print("mean delay is", samples.mean())
+
+    # if partitioned:
+    #     # a=98.82425513382844
+    #     # loc=166048.79856447875
+    #     # scale=1509.6230105368877
+    #     a=38.790654429629505
+    #     loc=221431.70313319447
+    #     scale=2419.151198191416
+    #     return lambda t: scipy.stats.gamma.cdf(t, a, loc=loc, scale=scale), samples
+
+    return simulation.cdf_from_samples(samples, n=100), samples
+
 def deadline_plot():
     '''deadline plots'''
 
     # get system parameters
     parameters = get_parameters_size()[-1]
+    parameters.num_partitions = 6700
 
     # set arithmetic complexity
     l = math.log2(parameters.num_coded_rows)
     complexity.ADDITION_COMPLEXITY = l/64
     complexity.MULTIPLICATION_COMPLEXITY = l*math.log2(l)
-
-    # need the complexity of each operation. this has to be updated.
-    # current system doesn't seem to multiply by muq etc.
-
 
     df = heuristic_fun(parameters)
     samples_bdc = simulation.delay_samples(
@@ -1095,7 +1201,9 @@ def deadline_plot():
             algorithm='bm',
         )
     )
+    np.save('samples_bdc', samples_bdc)
     cdf_bdc = simulation.cdf_from_samples(samples_bdc)
+    print("bdc mean", samples_bdc.mean())
 
     df = rs_fun(parameters)
     samples_rs = simulation.delay_samples(
@@ -1116,73 +1224,9 @@ def deadline_plot():
     cdf_rs = simulation.cdf_from_samples(samples_rs)
 
     # LT codes
-    partitioned = False
-    if partitioned:
-        num_partitions = parameters.rows_per_batch
-    else:
-        num_partitions = 1
-    num_inputs = int(parameters.num_source_rows / num_partitions)
-
-    df = lt_fun(parameters)
-    order_values, order_probabilities = rateless.order_pdf(
-        parameters=parameters,
-        target_overhead=1.3,
-        target_failure_probability=1e-1,
-    )
-    c, delta, mode = rateless.optimize_lt_parameters(
-        num_inputs=num_inputs,
-        target_overhead=1.3,
-        target_failure_probability=1e-1,
-    )
-    encoding_complexity = rateless.lt_encoding_complexity(
-        num_inputs=num_inputs,
-        failure_prob=1e-1,
-        target_overhead=1.3,
-        code_rate=parameters.q/parameters.num_servers,
-    )
-
-    encoding_complexity *= parameters.num_columns
-    encoding_complexity *= num_partitions
-    encoding_complexity *= parameters.muq
-
-    decoding_complexity = rateless.lt_decoding_complexity(
-        num_inputs=num_inputs,
-        failure_prob=1e-1,
-        target_overhead=1.3,
-    )
-    decoding_complexity *= num_partitions
-    decoding_complexity *= parameters.num_outputs
-
-    samples_lt = simulation.delay_samples(
-        df,
-        parameters=parameters,
-        map_complexity_fun=complexity.map_complexity_unified,
-        encode_complexity_fun=lambda x: encoding_complexity,
-        reduce_complexity_fun=lambda x: decoding_complexity,
-        order_values=order_values,
-        order_probabilities=order_probabilities,
-    )
-    cdf_lt = simulation.cdf_from_samples(samples_lt)
-
-    # df = lt_fun_partitioned(parameters)
-    # order_values, order_probabilities = rateless.order_pdf(
-    #     parameters=parameters,
-    #     target_overhead=1.3,
-    #     target_failure_probability=1e-1,
-    #     partitioned=True,
-    # )
-
-    # samples_lt_partitioned = simulation.delay_samples(
-    #     df,
-    #     parameters=parameters,
-    #     map_complexity_fun=complexity.map_complexity_unified,
-    #     encode_complexity_fun=lambda x: df['encoding_multiplications'].mean(),
-    #     reduce_complexity_fun=lambda x: df['decoding_multiplications'].mean(),
-    #     order_values=order_values,
-    #     order_probabilities=order_probabilities,
-    # )
-    # cdf_lt_partitioned = simulation.cdf_from_samples(samples_lt_partitioned)
-
+    # cdf_lt, samples_lt = get_lt_cdf(parameters, partitioned=False)
+    # cdf_lt_partitioned, samples_lt_partitioned = get_lt_cdf(parameters, partitioned=True)
+    cdf_lt_partitioned = get_lt_cdf(parameters, partitioned=True)
 
     df = uncoded_fun(parameters)
     samples_uncoded = simulation.delay_samples(
@@ -1200,73 +1244,63 @@ def deadline_plot():
     #     5 * complexity.map_complexity_unified(parameters),
     # )
     # t = np.linspace(samples_uncoded.min(), 12500)
-    t = np.linspace(samples_uncoded.min(), samples_rs.max())
+    t = np.linspace(samples_uncoded.min(), samples_rs.max(), num=200)
     t_norm = t # / parameters.num_columns #  / complexity.map_complexity_unified(parameters)
 
+    plt.figure()
     # plot 1-cdf with a log y axis
-    plt.rc('pgf',  texsystem='pdflatex')
-    plt.rc('text', usetex=True)
-    plt.rcParams['text.latex.preamble'] = [r'\usepackage{lmodern}']
-    _ = plt.figure(figsize=(10,9))
     plt.autoscale(enable=True)
-    ax1 = plt.gca()
-    plt.setp(ax1.get_xticklabels())
-    plt.setp(ax1.get_yticklabels())
+    print(t_norm)
+    print(cdf_lt_partitioned(t))
     plt.semilogy(
         t_norm, 1-cdf_bdc(t),
-        heuristic_plot_settings['color'],
-        linewidth=2,
+        heuristic_plot_settings['color']+'o-',
         label=r'BDC, Heuristic',
     )
-    plt.semilogy(
-        t_norm, 1-cdf_lt(t),
-        lt_plot_settings['color']+':',
-        linewidth=4,
-        label='LT',
-    )
     # plt.semilogy(
-    #     t_norm, 1-cdf_lt_partitioned(t),
-    #     lt_partitioned_plot_settings['color']+':s',
-    #     linewidth=4,
-    #     label='LT, Partitioned',
+    #     t_norm, 1-cdf_lt(t),
+    #     lt_plot_settings['color']+':',
+    #     label='LT',
     # )
     plt.semilogy(
+        t_norm, 1-cdf_lt_partitioned(t),
+        lt_partitioned_plot_settings['color']+'^-',
+        label='LT, Partitioned',
+    )
+    plt.semilogy(
         t_norm, 1-cdf_uncoded(t),
-        uncoded_plot_settings['color']+'-.',
-        linewidth=2,
+        uncoded_plot_settings['color']+'-',
+        markevery=0.2,
         label='UC',
     )
     plt.semilogy(
         t_norm, 1-cdf_rs(t),
-        rs_plot_settings['color']+'--',
-        linewidth=2,
+        rs_plot_settings['color']+'d--',
+        markevery=0.2,
         label='Unified',
     )
     plt.legend(
         numpoints=1,
         shadow=True,
-        labelspacing=0,
-        columnspacing=0.05,
-        fontsize=22,
+        # labelspacing=0,
+        # columnspacing=0.05,
         loc='best',
         fancybox=False,
         borderaxespad=0.1,
     )
     plt.ylabel(r'$\Pr(\rm{Delay} > t)$')
     plt.xlabel(r'$t$')
-    plt.ylim(ymin=1e-15)
+    # plt.ylim(1e-15, 1)
+    # plt.xlim(0, 2e6)
     plt.tight_layout()
     plt.grid()
-    # plt.savefig('./plots/journal/deadline.pdf')
-    # plt.savefig('./plots/meetings/deadline.png')
-
-
+    plt.savefig('./plots/tcom/deadline.pdf', dpi='figure', bbox_inches='tight')
     plt.show()
     return
 
 
     # plot 1-cdf normalized
-    # plt.figure()
+    plt.figure()
     # normalize = 1-cdf_uncoded(t)
     # plt.semilogy(t, (1-cdf_bdc(t))/normalize, label='bdc')
     # plt.semilogy(t, (1-cdf_rs(t))/normalize, label='unified')
@@ -1274,14 +1308,7 @@ def deadline_plot():
     # plt.grid()
 
     # plot the empiric and fitted cdf's
-    plt.rc('pgf',  texsystem='pdflatex')
-    plt.rc('text', usetex=True)
-    plt.rcParams['text.latex.preamble'] = [r'\usepackage{lmodern}']
-    _ = plt.figure(figsize=(10,9))
     plt.autoscale(enable=True)
-    ax1 = plt.gca()
-    plt.setp(ax1.get_xticklabels(), fontsize=25)
-    plt.setp(ax1.get_yticklabels(), fontsize=25)
     plt.plot(t, cdf_bdc(t), heuristic_plot_settings['color'])
     plt.hist(
         samples_bdc, bins=100,
@@ -1314,22 +1341,32 @@ def deadline_plot():
         histtype='stepfilled',
         alpha=0.3,
         color=uncoded_plot_settings['color'],
-        label='uncoded',
+        label='UC',
     )
 
     plt.plot(t, cdf_lt(t), lt_plot_settings['color'])
-    # plt.plot(t, cdf_lt_2(t), 'c')
     plt.hist(
         samples_lt, bins=100, density=True, cumulative=True,
         histtype='stepfilled',
         alpha=0.3,
-        color=lt_plot_settings['color'], label='lt')
+        color=lt_plot_settings['color'],
+        label='LT',
+    )
+
+    plt.plot(t, cdf_lt_partitioned(t), lt_partitioned_plot_settings['color'])
+    plt.hist(
+        samples_lt_partitioned, bins=100, density=True, cumulative=True,
+        histtype='stepfilled',
+        alpha=0.3,
+        color=lt_partitioned_plot_settings['color'],
+        label='LT, Partitioned',
+    )
+
     plt.legend(
         numpoints=1,
         shadow=True,
         labelspacing=0,
         columnspacing=0.05,
-        fontsize=22,
         loc='best',
         fancybox=False,
         borderaxespad=0.1,
@@ -1338,7 +1375,58 @@ def deadline_plot():
     plt.xlabel(r'$t$')
     plt.tight_layout()
     plt.grid()
-    plt.savefig('./plots/meetings/pdf_0.png')
+    # plt.savefig('./plots/tcom/deadline_cdf.png', dpi='figure', bbox_inches='tight')
+    plt.show()
+    return
+
+def fuck():
+    # samples = np.load('./lt_samples.npy')
+    # plt.hist(
+    #     samples, bins=100, density=True, cumulative=True,
+    #     histtype='stepfilled',
+    #     alpha=0.3,
+    #     color=lt_plot_settings['color'],
+    #     label='LT',
+    # )
+    # cdf = simulation.cdf_from_samples(samples)
+    # t = np.linspace(samples.min(), samples.max(), 200)
+    # plt.plot(t, cdf(t), lt_plot_settings['color'])
+
+    samples_bdc = np.load('./samples_bdc.npy')
+    plt.hist(
+        samples_bdc, bins=100, density=True, cumulative=True,
+        histtype='stepfilled',
+        alpha=0.3,
+        color=heuristic_plot_settings['color'],
+        label='BDC',
+    )
+    cdf = simulation.cdf_from_samples(samples_bdc)
+    t = np.linspace(samples_bdc.min(), samples_bdc.max(), 200)
+    plt.plot(t, cdf(t), heuristic_plot_settings['color'])
+
+    samples = np.load('./lt_samples_partitioned.npy')
+    np.sort(samples)
+    i = np.searchsorted(samples, samples_bdc.max())
+    samples = samples[:i]
+    plt.hist(
+        samples, bins=200, density=True, cumulative=True,
+        histtype='stepfilled',
+        alpha=0.3,
+        color=lt_partitioned_plot_settings['color'],
+        label='LT, Partitioned',
+    )
+    cdf = simulation.cdf_from_samples(samples, n=1)
+    t = np.linspace(samples.min(), samples.max(), 200)
+    plt.plot(t, cdf(t), lt_partitioned_plot_settings['color'])
+
+    # a=32.81815358407226
+    # loc=289874.5292694412
+    # scale=660.0449511451114
+    # mean = scipy.stats.gamma.mean(a, loc=loc, scale=scale)
+    # var = scipy.stats.gamma.var(a, loc=loc, scale=scale)
+    # print(samples.mean(), mean)
+    # print(samples.var(), var)
+
     plt.show()
     return
 
@@ -1349,4 +1437,16 @@ if __name__ == '__main__':
     # partition_plot()
     # size_plot()
     # workload_plot()
-    deadline_plot()
+    # deadline_plot()
+    # fuck()
+
+    print(performance)
+    plt.hist(
+        performance['servers'], bins=200, density=True, cumulative=True,
+        histtype='stepfilled',
+        alpha=0.3,
+        color=lt_partitioned_plot_settings['color'],
+        label='LT, Partitioned',
+    )
+    plt.show()
+    print(samples)
