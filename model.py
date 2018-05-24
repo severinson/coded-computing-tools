@@ -195,6 +195,8 @@ class SystemParameters(object):
 
         if num_columns is None:
             num_columns = num_source_rows
+        if isinstance(num_columns, float):
+            num_columns = int(round(num_columns*num_source_rows))
 
         num_outputs = num_outputs_factor * q
         return cls(rows_per_batch=rows_per_batch, num_servers=num_servers, q=q,
