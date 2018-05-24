@@ -1,4 +1,4 @@
-'''Script to generate plots for the ITA presentation.
+1;5201;0c'''Script to generate plots for the ITA presentation.
 
 '''
 
@@ -889,6 +889,6 @@ def main():
     return
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     main()
     # deadline_plots()
