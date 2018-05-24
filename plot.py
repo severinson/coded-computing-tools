@@ -309,6 +309,10 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
     ax1 = plt.subplot(211)
     plt.setp(ax1.get_xticklabels(), visible=False)
     for result, plot_setting in zip(results, plot_settings):
+        markevery = 0.2
+        if 'markevery' in plot_setting:
+            markevery = plot_setting['markevery']
+
         plot_result(
             result,
             plot_setting,
@@ -316,7 +320,8 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
             'load',
             ylabel=r'$L$',
             subplot=True,
-            normalize=normalize
+            normalize=normalize,
+            markevery=markevery,
         )
 
     # plot a vertical bar at the partitioning limit
@@ -329,7 +334,6 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
             numpoints=1,
             shadow=True,
             labelspacing=0,
-            columnspacing=0.05,
             loc=loc,
             fancybox=False,
             borderaxespad=0.1,
@@ -339,6 +343,10 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
     # Plot delay
     ax2 = plt.subplot(212, sharex=ax1)
     for result, plot_setting in zip(results, plot_settings):
+        markevery = 0.2
+        if 'markevery' in plot_setting:
+            markevery = plot_setting['markevery']
+
         plot_result(
             result,
             plot_setting,
@@ -348,6 +356,7 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
             ylabel=r'$D$',
             subplot=True,
             normalize=normalize,
+            markevery=markevery,
         )
 
     if legend == 'delay':
@@ -355,7 +364,6 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
             numpoints=1,
             shadow=True,
             labelspacing=0,
-            columnspacing=0.05,
             loc=loc,
             fancybox=False,
             borderaxespad=0.1,
@@ -542,7 +550,8 @@ def encode_decode_plot(results, plot_settings, xdata, xlabel='',
 
 def plot_result(result, plot_settings, xdata, ydata, xlabel='',
                 ylabel='', subplot=False, normalize=None,
-                errorbars=False, plot_type='semilogx'):
+                errorbars=False, plot_type='semilogx',
+                markevery=None):
     '''Plot simulated results.
 
     Args:
@@ -595,9 +604,9 @@ def plot_result(result, plot_settings, xdata, ydata, xlabel='',
         ymean /= normalize[ydata]
 
     if plot_type == 'semilogx':
-        plt.semilogx(xarray, ymean, style, label=label, markevery=0.2)
+        plt.semilogx(xarray, ymean, style, label=label, markevery=markevery)
     elif plot_type == 'loglog':
-        plt.loglog(xarray, ymean, style, label=label, markevery=0.2)
+        plt.loglog(xarray, ymean, style, label=label, markevery=markevery)
 
     if errorbars:
         plt.errorbar(xarray, ymean, yerr=yerr, fmt='none', ecolor=color)
