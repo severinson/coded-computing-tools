@@ -32,10 +32,13 @@ import itertools
 import datetime
 import numpy as np
 import pandas as pd
+
+from functools import partial
 from scipy.special import comb as nchoosek
 from model import SystemParameters, ModelError
 from assignments import Assignment
 from evaluation import AssignmentEvaluator
+from multiprocessing import Pool
 
 class SampleEvaluator(AssignmentEvaluator):
     '''This evaluator samples the performance of an assignment. It uses
@@ -107,6 +110,7 @@ class SampleEvaluator(AssignmentEvaluator):
         results = list()
         printout_interval = datetime.timedelta(seconds=10)
         last_printout = datetime.datetime.utcnow()
+        start_time = datetime.datetime.utcnow()
 
         # Check all or num_samples samples. Whichever is smaller.
         exhaustive_samples = nchoosek(parameters.num_servers, parameters.q)
@@ -116,23 +120,44 @@ class SampleEvaluator(AssignmentEvaluator):
         else:
             completion_orders = self.random_completion_orders(parameters)
 
-        i = 0
-        for completion_order in completion_orders:
-            i += 1
+        with Pool(processes=12) as pool:
+            i = 0
+            for dct in pool.imap_unordered(partial(
+                    f,
+                    parameters=parameters,
+                    assignment=assignment,
+            ), completion_orders):
+                results.append(dct)
+                i += 1
 
-            # Print progress periodically
-            if datetime.datetime.utcnow() - last_printout > printout_interval:
-                last_printout = datetime.datetime.utcnow()
-                logging.info('%s %f percent finished.',
-                             parameters.identifier(), i / self.num_samples * 100)
-
-            # Evaluate the order
-            result = dict()
-            result.update(computational_delay_sample(parameters, assignment, completion_order))
-            result.update(communication_load_sample(parameters, assignment, completion_order))
-            results.append(result)
+                # Print progress periodically
+                if datetime.datetime.utcnow() - last_printout > printout_interval:
+                    last_printout = datetime.datetime.utcnow()
+                    elapsed = datetime.datetime.utcnow() - start_time
+                    rate = elapsed / i
+                    remaining = (self.num_samples - i) * rate
+                    logging.info(
+                        '%s %f percent finished. %s remaining.',
+                        parameters.identifier(),
+                        i / self.num_samples * 100,
+                        remaining,
+                    )
 
         return pd.DataFrame(results)
+
+def f(completion_order, parameters=None, assignment=None):
+    result = dict()
+    result.update(computational_delay_sample(
+        parameters,
+        assignment,
+        completion_order,
+    ))
+    result.update(communication_load_sample(
+        parameters,
+        assignment,
+        completion_order,
+    ))
+    return result
 
 def decodeable(parameters, assignment, batches,
                incomplete_partitions, permanent_count):
@@ -203,8 +228,13 @@ def computational_delay_sample(parameters, assignment, completion_order):
         for server in completion_order[min_bound:current]:
             tentatively_added.update(assignment.labels[server])
 
-        can_decode, tentative_count = decodeable(parameters, assignment, tentatively_added,
-                                                 incomplete_partitions, permanent_count)
+        can_decode, tentative_count = decodeable(
+            parameters,
+            assignment,
+            tentatively_added,
+            incomplete_partitions,
+            permanent_count,
+        )
         if can_decode:
             max_bound = current
         else:
