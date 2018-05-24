@@ -35,6 +35,32 @@ import numtools
 from functools import lru_cache
 from scipy.special import comb as nchoosek
 
+def performance_from_overheads(
+        overheads,
+        parameters=None,
+        design_overhead=None):
+    '''sample the performance for each overhead in overheads. returns a
+    dataframe with length equal to that of overheads.
+
+    '''
+    orders = random_completion_orders(parameters, len(overheads))
+    results = list()
+    for (order, overhead) in zip(orders, overheads):
+        result = dict()
+        result.update(
+            delay_from_order(parameters, order, overhead)
+        )
+        result.update(
+            load_from_order(
+                parameters=parameters,
+                overhead=overhead,
+                design_overhead=design_overhead,
+            )
+        )
+        results.append(result)
+
+    return pd.DataFrame(results)
+
 def performance_from_overhead(parameters=None, overhead=1, design_overhead=None,
                               num_samples=1000, cachedir=None):
     '''compute the average performance at some fixed overhead.
