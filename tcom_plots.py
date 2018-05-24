@@ -146,32 +146,75 @@ rs_fun = partial(
 )
 
 # LT code simulations have to be re-run if n or N have been changed.
-rerun = False
+rerun = True
 lt_fun = partial(
     simulation.simulate,
-    directory='./results/LT_3_1/',
+    directory='./results/LT_335_1/',
     samples=1,
     parameter_eval=partial(
         rateless.evaluate,
-        target_overhead=1.3,
+        target_overhead=1.335,
         target_failure_probability=1e-1,
-        cachedir='./results/LT_3_1/overhead',
+        cachedir='./results/LT_335_1/overhead',
     ),
     rerun=rerun,
 )
 lt_partitioned_fun = partial(
     simulation.simulate,
-    directory='./results/LT_3_1_partitioned/',
+    directory='./results/LT_335_1_partitioned/',
     samples=1,
     parameter_eval=partial(
         rateless.evaluate,
-        target_overhead=1.3,
+        target_overhead=1.335,
         target_failure_probability=1e-1,
         partitioned=True,
-        cachedir='./results/LT_3_1_partitioned/overhead',
+        cachedir='./results/LT_335_1_partitioned/overhead',
     ),
     rerun=rerun,
 )
+
+def get_parameters_tradeoff(alpha=0.01, all_T=False):
+    '''Get a list of parameters for the load-vs-delay plot.'''
+    num_outputs = 840
+    num_servers = 14
+    server_storage = 1/2
+    parameters = list()
+    # num_source_rows = 352716
+    num_source_rows = 50000
+    for q in range(1, num_servers):
+        muq = int(round(server_storage*q))
+        num_coded_rows = int(round(num_source_rows * num_servers / q))
+        num_batches = nchoosek(num_servers, muq)
+        rows_per_batch = int(round(num_coded_rows / num_batches))
+        # num_columns = int(round(alpha*num_source_rows))
+
+        try:
+            par = model.SystemParameters(
+                rows_per_batch=rows_per_batch,
+                num_servers=num_servers,
+                q=q,
+                num_outputs=num_outputs,
+                server_storage=server_storage,
+                num_partitions=rows_per_batch,
+                num_columns=None,
+            )
+        except ValueError:
+            continue
+
+        if not all_T:
+            parameters.append(par)
+            continue
+
+        for T in range(par.rows_per_batch, par.num_source_rows+1):
+            try:
+                dct = par.asdict()
+                dct['num_partitions'] = T
+                par = model.SystemParameters.fromdct(dct)
+            except ValueError as err:
+                continue
+            parameters.append(par)
+
+    return parameters
 
 def get_parameters_partitioning():
     '''Constant system size, increasing partitions, num_outputs=num_columns'''
@@ -205,11 +248,12 @@ def get_parameters_size():
     rows_per_partition = 10
     code_rate = 2/3
     muq = 2
-    num_columns = None
-    num_outputs_factor = 10
+    num_columns = 0.01
+    num_outputs_factor = 500
     parameters = list()
     num_servers = [5, 8, 20, 50, 80, 125, 200]
-    for servers in num_servers:
+    num_partitions = [500, 1000, 1750, 3400, 3000, 4200, 6700]
+    for (servers, T) in zip(num_servers, num_partitions):
         par = model.SystemParameters.fixed_complexity_parameters(
             rows_per_server=rows_per_server,
             rows_per_partition=rows_per_partition,
@@ -219,9 +263,26 @@ def get_parameters_size():
             num_columns=num_columns,
             num_outputs_factor=num_outputs_factor,
         )
-        par.num_columns *= 100
+        dct = par.asdict()
+        dct['num_partitions'] = T
+        par = model.SystemParameters.fromdct(dct)
         parameters.append(par)
     return parameters
+
+def get_parameters_deadline():
+    p = model.SystemParameters.fixed_complexity_parameters(
+        rows_per_server=2000,
+        rows_per_partition=10,
+        min_num_servers=200,
+        code_rate=2/3,
+        muq=2,
+        num_columns=0.01,
+        num_outputs_factor=500,
+    )
+    dct = p.asdict()
+    dct['num_partitions'] = 6700
+    p = model.SystemParameters.fromdct(dct)
+    return p
 
 def get_parameters_size_partitions():
     '''Get a list of parameters for the size plot.'''
@@ -229,8 +290,8 @@ def get_parameters_size_partitions():
     rows_per_partition = 10
     code_rate = 2/3
     muq = 2
-    num_columns = None
-    num_outputs_factor = 10
+    num_columns = 0.01
+    num_outputs_factor = 500
     parameters = list()
     num_servers = [5, 8, 20, 50, 80, 125, 200]
     for servers in num_servers:
@@ -247,7 +308,7 @@ def get_parameters_size_partitions():
             try:
                 dct = par.asdict()
                 dct['num_partitions'] = T
-                dct['num_columns'] = 100*par.num_columns
+                # dct['num_columns'] = 100*par.num_columns
                 p = model.SystemParameters.fromdct(dct)
             except ValueError as err:
                 continue
@@ -255,14 +316,13 @@ def get_parameters_size_partitions():
     return parameters
 
 def get_parameters_workload(num_servers, W=1e8, num_partitions=None,
-                            code_rate=2/3, muq=2, tol=0.05):
+                            code_rate=2/3, muq=2, alpha=0.01, tol=0.05):
     '''Get a list of parameters for the size plot.'''
     q = code_rate*num_servers
     server_storage = muq / q
 
     # assume num_outputs and num_columns is a constant factor of
     # num_source_rows
-    alpha = 0.01
     root = (W/(alpha**2*server_storage)) ** (1. / 3)
     num_source_rows = round(root)
     num_outputs = round(alpha*num_source_rows / q) * q
@@ -274,7 +334,7 @@ def get_parameters_workload(num_servers, W=1e8, num_partitions=None,
     rows_per_batch = round(num_coded_rows / num_batches)
     if not num_partitions:
         num_partitions = rows_per_batch
-    # print(num_servers, num_coded_rows, num_batches, num_coded_rows/num_batches)
+
     if num_coded_rows / num_batches < 1:
         raise ValueError()
 
@@ -334,7 +394,7 @@ def get_parameters_N():
     num_partitions = 240
     num_outputs = 10*q
     parameters = list()
-    for i in range(1, 11):
+    for i in range(1, 20):
         # num_outputs = i * q
         num_columns = pow(i, 2) * 200
         par = model.SystemParameters(
@@ -350,7 +410,7 @@ def get_parameters_N():
 
     return parameters
 
-def lt_parameters(tfp=1e-1, to=1.3, partitioned=False):
+def lt_parameters(tfp=None, to=None, partitioned=False):
     parameters = get_parameters_N()
     for p in parameters:
         if partitioned:
@@ -376,35 +436,26 @@ def lt_parameters(tfp=1e-1, to=1.3, partitioned=False):
 
 def lt_plots():
     parameters = get_parameters_N()
-    [print(p) for p in parameters]
-    print()
-    lt_parameters(to=1.2, tfp=1e-1)
-    print()
-    lt_parameters(to=1.3, tfp=1e-1)
-    print()
-    lt_parameters(to=1.2, tfp=1e-3)
-    print()
-    lt_parameters(to=1.3, tfp=1e-3)
-    return
+    # parameters = [parameters[0], parameters[-1]]
+    # [print(p) for p in parameters]
+    # print()
+    # lt_parameters(to=1.3, tfp=1e-1)
+    # print()
+    # lt_parameters(to=1.37, tfp=1e-1)
+    # print()
+    # lt_parameters(to=1.3, tfp=1e-3)
+    # print()
+    # lt_parameters(to=1.37, tfp=1e-3)
+    # return
 
     # set arithmetic complexity
     l = math.log2(parameters[-1].num_coded_rows)
     complexity.ADDITION_COMPLEXITY = l/64
     complexity.MULTIPLICATION_COMPLEXITY = l*math.log2(l)
 
+    # since caching assumes n/N remains constant we have to re-run
+    # each time.
     rerun = True
-    lt_2_1_fun = partial(
-        simulation.simulate,
-        directory='./results/LT_2_1/',
-        samples=1,
-        parameter_eval=partial(
-            rateless.evaluate,
-            target_overhead=1.2,
-            target_failure_probability=1e-1,
-            cacheir='./results/LT_2_1/overhead',
-        ),
-        rerun=rerun,
-    )
     lt_3_1_fun = partial(
         simulation.simulate,
         directory='./results/LT_3_1/',
@@ -413,19 +464,19 @@ def lt_plots():
             rateless.evaluate,
             target_overhead=1.3,
             target_failure_probability=1e-1,
-            cacheir='./results/LT_3_1/overhead',
+            cachedir='./results/LT_3_1/overhead',
         ),
         rerun=rerun,
     )
-    lt_2_3_fun = partial(
+    lt_37_1_fun = partial(
         simulation.simulate,
-        directory='./results/LT_2_3/',
+        directory='./results/LT_37_1/',
         samples=1,
         parameter_eval=partial(
             rateless.evaluate,
-            target_overhead=1.2,
-            target_failure_probability=1e-3,
-            cacheir='./results/LT_2_3/overhead',
+            target_overhead=1.37,
+            target_failure_probability=1e-1,
+            cachedir='./results/LT_37_1/overhead',
         ),
         rerun=rerun,
     )
@@ -437,65 +488,65 @@ def lt_plots():
             rateless.evaluate,
             target_overhead=1.3,
             target_failure_probability=1e-3,
-            cacheir='./results/LT_3_3/overhead',
+            cachedir='./results/LT_3_3/overhead',
+        ),
+        rerun=rerun,
+    )
+    lt_37_3_fun = partial(
+        simulation.simulate,
+        directory='./results/LT_37_3/',
+        samples=1,
+        parameter_eval=partial(
+            rateless.evaluate,
+            target_overhead=1.37,
+            target_failure_probability=1e-3,
+            cachedir='./results/LT_37_3/overhead',
         ),
         rerun=rerun,
     )
 
-    lt_2_1 = simulation.simulate_parameter_list(
-        parameter_list=parameter_list,
-        simulate_fun=lt_2_1_fun,
-        map_complexity_fun=complexity.map_complexity_unified,
-        encode_delay_fun=False,
-        reduce_delay_fun=False,
-    )
     lt_3_1 = simulation.simulate_parameter_list(
-        parameter_list=parameter_list,
+        parameter_list=parameters,
         simulate_fun=lt_3_1_fun,
         map_complexity_fun=complexity.map_complexity_unified,
         encode_delay_fun=False,
         reduce_delay_fun=False,
     )
-    lt_2_3 = simulation.simulate_parameter_list(
-        parameter_list=parameter_list,
-        simulate_fun=lt_2_3_fun,
+    lt_37_1 = simulation.simulate_parameter_list(
+        parameter_list=parameters,
+        simulate_fun=lt_37_1_fun,
         map_complexity_fun=complexity.map_complexity_unified,
         encode_delay_fun=False,
         reduce_delay_fun=False,
     )
     lt_3_3 = simulation.simulate_parameter_list(
-        parameter_list=parameter_list,
+        parameter_list=parameters,
         simulate_fun=lt_3_3_fun,
         map_complexity_fun=complexity.map_complexity_unified,
         encode_delay_fun=False,
         reduce_delay_fun=False,
     )
-
-    # Setup the evaluators
-    sample_1000 = SampleEvaluator(num_samples=1000)
-
-    heuristic_fun = partial(
-        simulation.simulate,
-        directory='./results/Heuristic/',
-        samples=1,
-        solver=HeuristicSolver(),
-        assignment_eval=sample_1000,
-    )
-
-    uncoded_fun = partial(
-        simulation.simulate,
-        directory='./results/Uncoded/',
-        samples=1,
-        parameter_eval=analytic.uncoded_performance,
+    lt_37_3 = simulation.simulate_parameter_list(
+        parameter_list=parameters,
+        simulate_fun=lt_37_3_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=False,
+        reduce_delay_fun=False,
     )
 
     # run simulations
     heuristic = simulation.simulate_parameter_list(
-        parameter_list=parameter,
+        parameter_list=parameters,
         simulate_fun=heuristic_fun,
         map_complexity_fun=complexity.map_complexity_unified,
-        encode_delay_fun=complexity.partitioned_encode_delay,
-        reduce_delay_fun=complexity.partitioned_reduce_delay,
+        encode_delay_fun=partial(
+            complexity.partitioned_encode_delay,
+            algorithm='gen',
+        ),
+        reduce_delay_fun=partial(
+            complexity.partitioned_reduce_delay,
+            algorithm='bm',
+        ),
     )
     uncoded = simulation.simulate_parameter_list(
         parameter_list=parameters,
@@ -505,57 +556,49 @@ def lt_plots():
         reduce_delay_fun=lambda x: 0,
     )
 
-    settings_2_1 = {
-        'label': r'LT $(0.2, 10^{-1})$',
-        'color': 'g',
-        'marker': 's-',
-        'linewidth': 4,
-        'size': 8}
-    settings_2_3 = {
-        'label': r'LT $(0.2, 10^{-3})$',
-        'color': 'k',
-        'marker': '^--',
-        'linewidth': 3,
-        'size': 7}
     settings_3_1 = {
         'label': r'LT $(0.3, 10^{-1})$',
+        'color': 'g',
+        'marker': '^-',
+        'markevery': 0.15}
+    settings_37_1 = {
+        'label': r'LT $(0.37, 10^{-1})$',
         'color': 'm',
-        'marker': 'o-',
-        'linewidth': 4,
-        'size': 8}
+        'marker': 's-',
+        'markevery': 0.2}
     settings_3_3 = {
         'label': r'LT $(0.3, 10^{-3})$',
+        'color': 'k',
+        'marker': '^--',
+        'markevery': 0.25}
+    settings_37_3 = {
+        'label': r'LT $(0.37, 10^{-3})$',
         'color': 'b',
-        'marker': 'v--',
-        'linewidth': 3,
-        'size': 8}
-    settings_heuristic = {
-        'label': 'BDC, Heuristic',
-        'color': 'r',
-        'marker': 'H-',
-        'linewidth': 3,
-        'size': 8
-    }
+        'marker': 's--',
+        'markevery': 0.3}
 
-    load_delay_plot(
+    plot.load_delay_plot(
         [heuristic,
-         lt_2_1,
-         lt_2_3,
          lt_3_1,
-         lt_3_3],
-        [settings_heuristic,
-         settings_2_1,
-         settings_2_3,
+         lt_3_3,
+         lt_37_1,
+         lt_37_3],
+        [heuristic_plot_settings,
          settings_3_1,
-         settings_3_3],
+         settings_3_3,
+         settings_37_1,
+         settings_37_3],
         'num_columns',
         xlabel=r'$n$',
         normalize=uncoded,
         ncol=2,
-        loc=(0.025, 0.125),
+        xlim_bot=(parameters[0].num_columns, parameters[-1].num_columns),
+        ylim_top=(0.5, 1.0),
+        ylim_bot=(2.0, 2.30),
         show=False,
     )
     # plt.savefig('./plots/tcom/lt.pdf')
+    # plt.savefig('./plots/tcom/lt.pdf', dpi='figure', bbox_inches='tight')
     plt.show()
     return
 
@@ -682,8 +725,8 @@ def partition_plot():
         ylim_bot=(0.5,4),
         xlim_bot=(2, 3000),
     )
-    plt.savefig('./plots/tcom/partitions.png', dpi='figure')
-    plt.savefig('./plots/tcom/partitions.pdf', dpi='figure', bbox_inches='tight')
+    # plt.savefig('./plots/tcom/partitions.png', dpi='figure')
+    # plt.savefig('./plots/tcom/partitions.pdf', dpi='figure', bbox_inches='tight')
 
     plot.load_delay_plot(
         [heuristic,
@@ -696,14 +739,14 @@ def partition_plot():
         xlabel=r'$T$',
         normalize=uncoded,
         legend='load',
-        ncol=2,
+        ncol=1,
         show=False,
         vline=parameters[0].rows_per_batch,
         ylim_top=(0.5, 0.6),
         ylim_bot=(1.5, 4),
         xlim_bot=(2, 3000),
     )
-    plt.savefig('./plots/tcom/solvers_partitions.png', dpi='figure')
+    # plt.savefig('./plots/tcom/solvers_partitions.png', dpi='figure')
     plt.savefig('./plots/tcom/solvers_partitions.pdf', dpi='figure', bbox_inches='tight')
 
     plot.encode_decode_plot(
@@ -725,11 +768,11 @@ def partition_plot():
         # xlim_bot=(6, 201),
     )
 
-    # plt.show()
+    plt.show()
     return
 
 def size_plot():
-    parameters = get_parameters_size()
+    parameters = get_parameters_size()[:-3]
 
     # same as above but with all possible partitioning levels
     parameters_all_t = get_parameters_size_partitions()
@@ -800,7 +843,8 @@ def size_plot():
         heuristic.groupby("num_servers")["overall_delay"].idxmin(), :
     ]
     heuristic.reset_index(inplace=True)
-    print(heuristic['overall_delay'])
+    print(heuristic)
+    print(heuristic['num_partitions'])
 
     random = simulation.simulate_parameter_list(
         parameter_list=parameters,
@@ -866,11 +910,11 @@ def size_plot():
         ncol=2,
         show=False,
         xlim_bot=(6, 201),
-        # ylim_top=(0.4, 1.1),
-        # ylim_bot=(0, 6),
+        ylim_top=(0.4, 1.1),
+        ylim_bot=(0.5, 3),
     )
     # plt.savefig('./plots/tcom/size.png', dpi='figure')
-    # plt.savefig('./plots/tcom/size.pdf', dpi='figure', bbox_inches='tight')
+    plt.savefig('./plots/tcom/size.pdf', dpi='figure', bbox_inches='tight')
 
     plot.load_delay_plot(
         [heuristic,
@@ -881,14 +925,14 @@ def size_plot():
         xlabel=r'$K$',
         normalize=uncoded,
         legend='load',
-        ncol=2,
+        ncol=1,
         show=False,
         xlim_bot=(6, 201),
-        # ylim_top=(0.4, 0.7),
-        # ylim_bot=(0.5, 3),
+        ylim_top=(0.4, 0.7),
+        ylim_bot=(0.5, 2.5),
     )
     # plt.savefig('./plots/tcom/solvers_size.png', dpi='figure')
-    # plt.savefig('./plots/tcom/solvers_size.pdf', dpi='figure', bbox_inches='tight')
+    plt.savefig('./plots/tcom/solvers_size.pdf', dpi='figure', bbox_inches='tight')
 
     plot.encode_decode_plot(
         [rs,
@@ -907,6 +951,16 @@ def size_plot():
         normalize=uncoded,
         xlim_bot=(6, 201),
     )
+
+    # # comparison printouts
+    # key = 'overall_delay'
+    # for df in [heuristic, lt, lt_partitioned, rs]:
+    #     df['overall_delay'] /= uncoded['overall_delay']
+    #     df['load'] /= uncoded['load']
+
+    # print('heuristic-rs', 1-heuristic[key]/rs[key])
+    # print('lt-heuristic', 1-lt[key]/heuristic[key])
+    # print('ltp-heuristic', 1-lt_partitioned[key]/heuristic[key])
 
     plt.show()
     return
@@ -996,6 +1050,9 @@ def workload_plot():
     ]
     heuristic_110.reset_index(inplace=True)
 
+    print(heuristic_101)
+    print(heuristic_101['num_partitions'])
+
     lt = simulation.simulate_parameter_list(
         parameter_list=parameters,
         simulate_fun=lt_fun,
@@ -1034,8 +1091,8 @@ def workload_plot():
         ylim_top=(0.4, 1),
         ylim_bot=(0, 25),
     )
-    plt.savefig('./plots/tcom/workload.png', dpi='figure')
-    plt.savefig('./plots/tcom/workload.pdf', dpi='figure', bbox_inches='tight')
+    # plt.savefig('./plots/tcom/workload.png', dpi='figure')
+    # plt.savefig('./plots/tcom/workload.pdf', dpi='figure', bbox_inches='tight')
 
     plot.encode_decode_plot(
         [# heuristic_100,
@@ -1059,85 +1116,67 @@ def workload_plot():
         # ylim_bot=(0, 60),
     )
 
-    # plt.show()
+    plt.show()
     return
 
 def get_lt_cdf(parameters, partitioned=False):
+    '''sample the LT code delay distribution and return a
+    gamma-distributed CDF fit to the samples.
+
+    Fit parameters for TCOM plot:
+    Non-partitioned  a=25.9785443475378, loc=285150.2196003293, scale=4782.081148149096
+    Partitioned a=14.18576693899206, loc=302693.1614997096, scale=6349.8236659845315
+
+    '''
     assert isinstance(parameters, model.SystemParameters)
     assert isinstance(partitioned, bool)
     if partitioned:
-        filename = "lt_samples_partitioned"
-        a=97.80714827099743
-        loc=17005348.58022266
-        scale=148050.2065582715
-        return lambda t: scipy.stats.gamma.cdf(t, a, loc=loc, scale=scale)
+        # a=14.18576693899206
+        # loc=302693.1614997096
+        # scale=6349.8236659845315
+        # return lambda t: scipy.stats.gamma.cdf(t, a, loc=loc, scale=scale)
 
+        filename = "lt_samples_partitioned"
         num_partitions = parameters.rows_per_batch
-        df = lt_partitioned_fun(parameters)
-        cachedir='./results/LT_3_1_partitioned/overhead'
-        order_values, order_probabilities = rateless.order_pdf(
-            parameters=parameters,
-            target_overhead=1.3,
-            target_failure_probability=1e-1,
-            partitioned=partitioned,
-        )
-        # order_values = [
-        #     134, 135, 136, 137, 138, 139, 140, 141, 142,
-        #     143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156,
-        #     157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170,
-        #     171, 172, 173, 174, 176, 177, 178, 179, 180, 182, 183, 185, 186, 188,
-        #     191, 194, 200,
-        # ]
-        # order_probabilities = [
-        #     9.95796511e-01, 2.20182752e-04, 3.00249207e-04, 2.00166138e-04,
-        #     1.80149524e-04, 2.70224286e-04, 1.60132910e-04, 1.60132910e-04,
-        #     1.60132910e-04, 1.40116297e-04, 2.10174445e-04, 1.30107990e-04,
-        #     1.20099683e-04, 1.20099683e-04, 1.20099683e-04, 1.10091376e-04,
-        #     5.00415345e-05, 1.00083069e-04, 1.00083069e-04, 1.00083069e-04,
-        #     9.00747621e-05, 4.00332276e-05, 8.00664552e-05, 8.00664552e-05,
-        #     4.00332276e-05, 8.00664552e-05, 4.00332276e-05, 7.00581483e-05,
-        #     3.00249207e-05, 6.00498414e-05, 3.00249207e-05, 3.00249207e-05,
-        #     6.00498414e-05, 3.00249207e-05, 3.00249207e-05, 3.00249207e-05,
-        #     3.00249207e-05, 3.00249207e-05, 6.00498414e-05, 3.00249207e-05,
-        #     2.00166138e-05, 2.00166138e-05, 2.00166138e-05, 2.00166138e-05,
-        #     2.00166138e-05, 2.00166138e-05, 2.00166138e-05, 2.00166138e-05,
-        #     2.00166138e-05, 2.00166138e-05, 2.00166138e-05, 2.00166138e-05,
-        #     2.00166138e-05, 2.00166138e-05,
-        # ]
+        target_overhead = 1.335
+        cachedir='./results/LT_335_1_partitioned/overhead'
+        # order_values, order_probabilities = rateless.order_pdf(
+        #     parameters=parameters,
+        #     target_overhead=1.3,
+        #     target_failure_probability=1e-1,
+        #     partitioned=partitioned,
+        # )
+
     else:
+        # a=25.9785443475378
+        # loc=285150.2196003293
+        # scale=4782.081148149096
+        # return lambda t: scipy.stats.gamma.cdf(t, a, loc=loc, scale=scale)
+
         filename = "lt_samples"
         num_partitions = 1
-        df = lt_fun(parameters)
-        cachedir='./results/LT_3_1/overhead'
-        order_values = [
-            134, 135, 136, 137, 138, 139, 140, 141, 142,
-            143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154,
-            155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166,
-            167, 168, 169, 170, 171, 172, 173, 174, 176, 177, 178, 179,
-            180, 182, 183, 185, 186, 188, 191, 194, 200,
-        ]
-        order_probabilities = [
-            9.97919480e-01, 1.20030008e-04,
-            1.80045011e-04, 1.00025006e-04, 1.00025006e-04, 1.50037509e-04,
-            8.00200050e-05, 8.00200050e-05, 8.00200050e-05, 8.00200050e-05,
-            1.10027507e-04, 6.00150038e-05, 6.00150038e-05, 6.00150038e-05,
-            6.00150038e-05, 6.00150038e-05, 3.00075019e-05, 4.00100025e-05,
-            4.00100025e-05, 4.00100025e-05, 4.00100025e-05, 2.00050013e-05,
-            4.00100025e-05, 4.00100025e-05, 2.00050013e-05, 4.00100025e-05,
-            2.00050013e-05, 4.00100025e-05, 1.00025006e-05, 2.00050013e-05,
-            1.00025006e-05, 1.00025006e-05, 2.00050013e-05, 1.00025006e-05,
-            1.00025006e-05, 1.00025006e-05, 1.00025006e-05, 1.00025006e-05,
-            2.00050013e-05, 1.00025006e-05, 1.00025006e-05, 1.00025006e-05,
-            1.00025006e-05, 1.00025006e-05, 1.00025006e-05, 1.00025006e-05,
-            1.00025006e-05, 1.00025006e-05, 1.00025006e-05, 1.00025006e-05,
-            1.00025006e-05, 1.00025006e-05, 1.00025006e-05, 1.00025006e-05,
-        ]
+        target_overhead = 1.335
+        cachedir='./results/LT_335_1/overhead'
 
     num_inputs = int(parameters.num_source_rows / num_partitions)
+    overheads = rateless.lt_success_samples(
+        10000,
+        target_overhead=target_overhead,
+        num_inputs=num_inputs,
+        mode=num_inputs-2,
+        delta=0.9999999701976676,
+    )
+    df = overhead.performance_from_overheads(
+        overheads,
+        parameters=parameters,
+        design_overhead=target_overhead,
+    )
+    df.to_csv(filename + '.csv')
+
     encoding_complexity = rateless.lt_encoding_complexity(
         num_inputs=num_inputs,
         failure_prob=1e-1,
-        target_overhead=1.3,
+        target_overhead=target_overhead,
         code_rate=parameters.q/parameters.num_servers,
     )
     encoding_complexity *= parameters.num_columns
@@ -1147,40 +1186,32 @@ def get_lt_cdf(parameters, partitioned=False):
     decoding_complexity = rateless.lt_decoding_complexity(
         num_inputs=num_inputs,
         failure_prob=1e-1,
-        target_overhead=1.3,
+        target_overhead=target_overhead,
     )
     decoding_complexity *= num_partitions
     decoding_complexity *= parameters.num_outputs
 
+    print('LT encoding/decoding complexity: {}/{}'.format(
+        encoding_complexity,
+        decoding_complexity,
+    ))
     samples = simulation.delay_samples(
         df,
         parameters=parameters,
         map_complexity_fun=complexity.map_complexity_unified,
         encode_complexity_fun=lambda x: encoding_complexity,
         reduce_complexity_fun=lambda x: decoding_complexity,
-        order_values=order_values,
-        order_probabilities=order_probabilities,
     )
     np.save(filename, samples)
     print("mean delay is", samples.mean())
 
-    # if partitioned:
-    #     # a=98.82425513382844
-    #     # loc=166048.79856447875
-    #     # scale=1509.6230105368877
-    #     a=38.790654429629505
-    #     loc=221431.70313319447
-    #     scale=2419.151198191416
-    #     return lambda t: scipy.stats.gamma.cdf(t, a, loc=loc, scale=scale), samples
-
-    return simulation.cdf_from_samples(samples, n=100), samples
+    return simulation.cdf_from_samples(samples), samples
 
 def deadline_plot():
     '''deadline plots'''
 
     # get system parameters
-    parameters = get_parameters_size()[-1]
-    parameters.num_partitions = 6700
+    parameters = get_parameters_deadline()
 
     # set arithmetic complexity
     l = math.log2(parameters.num_coded_rows)
@@ -1203,7 +1234,7 @@ def deadline_plot():
     )
     np.save('samples_bdc', samples_bdc)
     cdf_bdc = simulation.cdf_from_samples(samples_bdc)
-    print("bdc mean", samples_bdc.mean())
+    print("BDC mean", samples_bdc.mean())
 
     df = rs_fun(parameters)
     samples_rs = simulation.delay_samples(
@@ -1224,9 +1255,10 @@ def deadline_plot():
     cdf_rs = simulation.cdf_from_samples(samples_rs)
 
     # LT codes
-    # cdf_lt, samples_lt = get_lt_cdf(parameters, partitioned=False)
-    # cdf_lt_partitioned, samples_lt_partitioned = get_lt_cdf(parameters, partitioned=True)
-    cdf_lt_partitioned = get_lt_cdf(parameters, partitioned=True)
+    cdf_lt, samples_lt = get_lt_cdf(parameters, partitioned=False)
+    cdf_lt_partitioned, samples_lt_partitioned = get_lt_cdf(parameters, partitioned=True)
+    # cdf_lt = get_lt_cdf(parameters, partitioned=False)
+    # cdf_lt_partitioned = get_lt_cdf(parameters, partitioned=True)
 
     df = uncoded_fun(parameters)
     samples_uncoded = simulation.delay_samples(
@@ -1236,6 +1268,8 @@ def deadline_plot():
         encode_complexity_fun=False,
         reduce_complexity_fun=False,
     )
+    np.save('samples_uncoded', samples_uncoded)
+    print("Uncoded mean", samples_uncoded.mean())
     cdf_uncoded = simulation.cdf_from_samples(samples_uncoded)
 
     # find points to evaluate the cdf at
@@ -1244,27 +1278,28 @@ def deadline_plot():
     #     5 * complexity.map_complexity_unified(parameters),
     # )
     # t = np.linspace(samples_uncoded.min(), 12500)
-    t = np.linspace(samples_uncoded.min(), samples_rs.max(), num=200)
+    t = np.linspace(0, 2*samples_uncoded.max(), num=200)
     t_norm = t # / parameters.num_columns #  / complexity.map_complexity_unified(parameters)
 
     plt.figure()
     # plot 1-cdf with a log y axis
     plt.autoscale(enable=True)
-    print(t_norm)
-    print(cdf_lt_partitioned(t))
     plt.semilogy(
         t_norm, 1-cdf_bdc(t),
         heuristic_plot_settings['color']+'o-',
+        markevery=0.2,
         label=r'BDC, Heuristic',
     )
-    # plt.semilogy(
-    #     t_norm, 1-cdf_lt(t),
-    #     lt_plot_settings['color']+':',
-    #     label='LT',
-    # )
+    plt.semilogy(
+        t_norm, 1-cdf_lt(t),
+        lt_plot_settings['color']+'v-',
+        markevery=0.2,
+        label='LT',
+    )
     plt.semilogy(
         t_norm, 1-cdf_lt_partitioned(t),
         lt_partitioned_plot_settings['color']+'^-',
+        markevery=0.2,
         label='LT, Partitioned',
     )
     plt.semilogy(
@@ -1290,14 +1325,13 @@ def deadline_plot():
     )
     plt.ylabel(r'$\Pr(\rm{Delay} > t)$')
     plt.xlabel(r'$t$')
-    # plt.ylim(1e-15, 1)
-    # plt.xlim(0, 2e6)
+    plt.ylim(1e-14, 1.13)
+    plt.xlim(2.5e3, 5.5e3)
     plt.tight_layout()
     plt.grid()
-    plt.savefig('./plots/tcom/deadline.pdf', dpi='figure', bbox_inches='tight')
-    plt.show()
-    return
-
+    plt.savefig('./plots/tcom/deadline_500.pdf', dpi='figure', bbox_inches='tight')
+    # plt.show()
+    # return
 
     # plot 1-cdf normalized
     plt.figure()
@@ -1379,20 +1413,130 @@ def deadline_plot():
     plt.show()
     return
 
-def fuck():
-    # samples = np.load('./lt_samples.npy')
-    # plt.hist(
-    #     samples, bins=100, density=True, cumulative=True,
-    #     histtype='stepfilled',
-    #     alpha=0.3,
-    #     color=lt_plot_settings['color'],
-    #     label='LT',
-    # )
-    # cdf = simulation.cdf_from_samples(samples)
-    # t = np.linspace(samples.min(), samples.max(), 200)
-    # plt.plot(t, cdf(t), lt_plot_settings['color'])
+def tradeoff_plot():
+    parameters = get_parameters_tradeoff()
+    parameters_all_T = get_parameters_tradeoff(all_T=True)
+    [print(p) for p in parameters]
+
+    uncoded = simulation.simulate_parameter_list(
+        parameter_list=parameters,
+        simulate_fun=uncoded_fun,
+        map_complexity_fun=complexity.map_complexity_uncoded,
+        encode_delay_fun=lambda x: 0,
+        reduce_delay_fun=lambda x: 0,
+    )
+    print(uncoded)
+    rs = simulation.simulate_parameter_list(
+        parameter_list=parameters,
+        simulate_fun=rs_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=partial(
+            complexity.partitioned_encode_delay,
+            partitions=1,
+            algorithm='fft',
+        ),
+        reduce_delay_fun=partial(
+            complexity.partitioned_reduce_delay,
+            partitions=1,
+            algorithm='fft',
+        ),
+    )
+    print(rs)
+    rs_all_t = simulation.simulate_parameter_list(
+        parameter_list=parameters_all_T,
+        simulate_fun=rs_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=partial(
+            complexity.partitioned_encode_delay,
+            partitions=1,
+            algorithm='fft',
+        ),
+        reduce_delay_fun=partial(
+            complexity.partitioned_reduce_delay,
+            partitions=1,
+            algorithm='fft',
+        ),
+    )
+    heuristic = simulation.simulate_parameter_list(
+        parameter_list=parameters_all_T,
+        simulate_fun=heuristic_fun,
+        map_complexity_fun=complexity.map_complexity_unified,
+        encode_delay_fun=partial(
+            complexity.partitioned_encode_delay,
+            algorithm='fft',
+        ),
+        reduce_delay_fun=partial(
+            complexity.partitioned_reduce_delay,
+            algorithm='fft',
+        ),
+    )
+
+    # filter out rows with load more than 1% over that of the RS code
+    heuristic = heuristic.loc[
+        heuristic['load']/rs_all_t['load'] <= 1.01, :
+    ]
+
+    # find the optimal partitioning level for each number of servers
+    heuristic = heuristic.loc[
+        heuristic.groupby("q")["overall_delay"].idxmin(), :
+    ]
+    heuristic.reset_index(inplace=True)
+    print(heuristic)
+    heuristic['overall_delay'] /= uncoded['overall_delay']
+    heuristic['load'] /= uncoded['load']
+    heuristic['encode'] /= uncoded['overall_delay']
+    heuristic['reduce'] /= uncoded['overall_delay']
+    rs['overall_delay'] /= uncoded['overall_delay']
+    rs['load'] /= uncoded['load']
+    rs['encode'] /= uncoded['overall_delay']
+    rs['reduce'] /= uncoded['overall_delay']
+    plt.figure()
+    plt.plot(
+        heuristic['overall_delay'],
+        heuristic['load'],
+        heuristic_plot_settings['color']+heuristic_plot_settings['marker'],
+        label='BDC, Heuristic',
+    )
+    plt.plot(
+        rs['overall_delay'],
+        rs['load'],
+        rs_plot_settings['color']+rs_plot_settings['marker'],
+        label='Unified',
+    )
+    plt.autoscale(enable=True)
+    plt.tight_layout()
+    plt.margins(y=0.1)
+    plt.xlim(2.5, 5)
+    plt.ylim(0.1, 0.6)
+    plt.grid()
+    plt.xlabel('$D$')
+    plt.ylabel('$L$')
+    # plt.plot(heuristic['encode'], heuristic['load'], label='Encode BDC, Heuristic')
+    # plt.plot(rs['encode'], rs['load'], label='Encode Unified')
+    # plt.plot(heuristic['reduce'], heuristic['load'], label='Reduce BDC, Heuristic')
+    # plt.plot(rs['reduce'], rs['load'], label='Reduce Unified')
+    plt.legend()
+    plt.savefig('./plots/tcom/tradeoff.pdf', dpi='figure', bbox_inches='tight')
+    plt.show()
+    return
+
+def hist_from_samples():
+    '''used for loading delay samples and plotting a histogram'''
+    samples = np.load('./lt_samples.npy')
+    print("LT mean", samples.mean())
+    plt.hist(
+        samples, bins=100, density=True, cumulative=True,
+        histtype='stepfilled',
+        alpha=0.3,
+        color=lt_plot_settings['color'],
+        label='LT',
+    )
+    cdf = simulation.cdf_from_samples(samples)
+    t = np.linspace(samples.min(), samples.max(), 200)
+    plt.plot(t, cdf(t), lt_plot_settings['color'])
 
     samples_bdc = np.load('./samples_bdc.npy')
+    print("BDC mean", samples_bdc.mean())
     plt.hist(
         samples_bdc, bins=100, density=True, cumulative=True,
         histtype='stepfilled',
@@ -1405,9 +1549,7 @@ def fuck():
     plt.plot(t, cdf(t), heuristic_plot_settings['color'])
 
     samples = np.load('./lt_samples_partitioned.npy')
-    np.sort(samples)
-    i = np.searchsorted(samples, samples_bdc.max())
-    samples = samples[:i]
+    print("LT partitioned mean", samples.mean())
     plt.hist(
         samples, bins=200, density=True, cumulative=True,
         histtype='stepfilled',
@@ -1415,17 +1557,9 @@ def fuck():
         color=lt_partitioned_plot_settings['color'],
         label='LT, Partitioned',
     )
-    cdf = simulation.cdf_from_samples(samples, n=1)
+    cdf = simulation.cdf_from_samples(samples)
     t = np.linspace(samples.min(), samples.max(), 200)
     plt.plot(t, cdf(t), lt_partitioned_plot_settings['color'])
-
-    # a=32.81815358407226
-    # loc=289874.5292694412
-    # scale=660.0449511451114
-    # mean = scipy.stats.gamma.mean(a, loc=loc, scale=scale)
-    # var = scipy.stats.gamma.var(a, loc=loc, scale=scale)
-    # print(samples.mean(), mean)
-    # print(samples.var(), var)
 
     plt.show()
     return
@@ -1438,15 +1572,6 @@ if __name__ == '__main__':
     # size_plot()
     # workload_plot()
     # deadline_plot()
-    # fuck()
-
-    print(performance)
-    plt.hist(
-        performance['servers'], bins=200, density=True, cumulative=True,
-        histtype='stepfilled',
-        alpha=0.3,
-        color=lt_partitioned_plot_settings['color'],
-        label='LT, Partitioned',
-    )
-    plt.show()
-    print(samples)
+    # tradeoff_plot()
+    hist_from_samples()
+    # get_parameters_deadline()
