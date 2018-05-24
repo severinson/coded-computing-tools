@@ -3,6 +3,7 @@
 '''
 
 import math
+import random
 import logging
 import numpy as np
 import pandas as pd
@@ -10,10 +11,12 @@ import pyrateless
 import stats
 import complexity
 import overhead
+import pynumeric
 import tempfile
 import subprocess
 
 from os import path
+from multiprocessing import Pool
 
 def optimize_lt_parameters(num_inputs=None, target_overhead=None,
                            target_failure_probability=None):
@@ -81,15 +84,22 @@ def lt_decoding_complexity(num_inputs=None, failure_prob=None,
     # maps a tuple (num_inputs, target_failure_probability,
     # target_overhead) to a tuple (num_inactivations,
     # num_row_operations). contains simulated results.
-    if (failure_prob, target_overhead) == (1e-1, 1.3):
-        try:
-            df = pd.read_csv('./results/LT_1e_3_1_3.csv')
-        except:
-            logging.error('could not load file ./results/LT_1e_3_1_3.csv. make sure to download and extract the results archive.')
+    if failure_prob == 1e-1:
+        filename = './results/LT_1e-1.csv'
+    elif failure_prob == 1e-3:
+        filename = './results/LT_1e-3.csv'
 
+    try:
+        df = pd.read_csv(filename)
+    except:
+        logging.error('could not load file {}.'.format(filename))
+        return math.inf
+
+    overhead = round(num_inputs*(target_overhead-1))
     df = df.loc[df['num_inputs'] == num_inputs]
+    df = df.loc[df['overhead'] == overhead]
     if len(df) != 1:
-        logging.warning('did not find exactly 1 row: '.format(df))
+        logging.warning('did not find exactly 1 row: {}'.format(df))
         return math.inf
 
     a = df['diagonalize_decoding_additions']
@@ -207,6 +217,12 @@ def evaluate(parameters, target_overhead=None,
     decoding_complexity *= num_partitions
     decoding_complexity *= parameters.num_outputs
 
+    # find good code parameters
+    c, delta, mode = optimize_lt_parameters(
+        num_inputs=num_inputs,
+        target_overhead=target_overhead,
+        target_failure_probability=target_failure_probability,
+    )
     logging.debug(
         'LT mode=%d, delta=%f for %d input symbols, target overhead %f, target failure probability %f. partitioned: %r',
         mode, delta, parameters.num_source_rows,
@@ -309,7 +325,37 @@ def lt_success_pdf(overhead_levels, num_inputs=None, mode=None, delta=None):
 
     # differentiate the CDF to obtain the PDF
     decoding_pdf = np.diff(decoding_cdf)
-    return decoding_pdf
+    return decoding_pdf / decoding_pdf.sum()
+
+def lt_success_samples(n, target_overhead=None, num_inputs=None, mode=None, delta=None):
+    '''sample the decoding probability distribution.
+
+    '''
+    assert n > 0
+    assert n % 1 == 0
+    if target_overhead is None:
+        target_overhead = 1
+    # create a distribution object. this is needed for the decoding success
+    # probability estimate.
+    soliton = pyrateless.Soliton(
+        symbols=num_inputs,
+        mode=mode,
+        failure_prob=delta,
+    )
+    cdf = lambda x: 1-pyrateless.optimize.decoding_failure_prob_estimate(
+        soliton=soliton,
+        num_inputs=num_inputs,
+        overhead=x,
+    )
+
+    # with Pool(processes=12) as pool:
+    samples = np.fromiter((
+        pynumeric.cnuminv(
+            fun=cdf,
+            target=random.random(),
+            lower=target_overhead,
+        ) for _ in range(n)), dtype=float)
+    return np.maximum(samples, target_overhead)
 
 def random_fountain_success_pdf(overhead_levels, field_size=2, num_inputs=None, mode=None, delta=None):
     '''compute the decoding success probability PDF of a random fountain code over
@@ -391,7 +437,8 @@ def performance_integral(parameters=None, num_inputs=None, target_overhead=None,
     return {label:df[label].sum() for label in df}
 
 def order_pdf(parameters=None, target_overhead=None, target_failure_probability=None,
-              partitioned=False, num_overhead_levels=100, num_samples=100000):
+              partitioned=False, num_overhead_levels=100, num_samples=100000,
+              cachedir=None):
     '''simulate the order PDF, i.e., the PDF over the number of servers needed to
     decode successfully.
 
@@ -440,6 +487,9 @@ def order_pdf(parameters=None, target_overhead=None, target_failure_probability=
     # number of samples taken is weighted by the probability of needing this
     # overhead.
     results = list()
+    print(overhead_levels)
+    print(decoding_probabilities)
+    print(decoding_probabilities.sum())
     for overhead_level, decoding_probability in zip(overhead_levels, decoding_probabilities):
 
         # the number of samples correspond to the probability of decoding at
