@@ -99,7 +99,9 @@ def lt_decoding_complexity(num_inputs=None, failure_prob=None,
     df = df.loc[df['num_inputs'] == num_inputs]
     df = df.loc[df['overhead'] == overhead]
     if len(df) != 1:
-        logging.warning('did not find exactly 1 row: {}'.format(df))
+        logging.warning(
+            'did not find exactly 1 row for num_inputs={}, failure_prob={}, target_overhead=: {} symbols'.format(
+                num_inputs, failure_prob, overhead, df,))
         return math.inf
 
     a = df['diagonalize_decoding_additions']
