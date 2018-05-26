@@ -120,48 +120,6 @@ def lt_decoding_complexity(num_inputs=None, failure_prob=None,
     m = m.values[0]
     return a*complexity.ADDITION_COMPLEXITY + m*complexity.MULTIPLICATION_COMPLEXITY
 
-    # table = {
-    #     (10, 1e-1, 1.3): (0.4493, 1.39178),
-    #     (24, 1e-1, 1.3): (1.18493333333333, 2.715446875),
-    #     (140, 1e-1, 1.3): (3.8155, 5.716915),
-    #     (850, 1e-1, 1.3): (12.8237, 8.91052611764706),
-    #     (2160, 1e-1, 1.3): (33.9801, 11.6024421296296),
-    #     (4000, 1e-1, 1.3): (89.1511, 15.25142045),
-    #     (5250, 1e-1, 1.3): (145.7618, 17.9338159238095),
-    #     (6000, 1e-1, 1.3): (186.733432835821, 19.6625636401327),
-    #     (13400, 1e-1, 1.3): (932.3553, 34.861085641791),
-    #     (14000, 1e-1, 1.3): (1018.248, 35.8704439047619),
-    #     (134000, 1e-3, 1.3): ()
-    # }
-    # key = (num_inputs, failure_prob, target_overhead)
-    # if key not in table:
-    #     logging.warning("LT decoding complexity key {} not in table".format(key))
-    #     return math.inf
-    # raise ValueError('no results for key {}'.format(key))
-
-    # num_inactivations = df['inactivations'].values[0]
-    # num_rowops = df['rowmuls'].values[0]
-    # num_rowops *= num_inputs # undo normalization
-    # # num_rowops += avg_degree + pow(num_inactivations, 2)
-    # c = num_rowops * complexity.ADDITION_COMPLEXITY
-    # c += num_rowops * complexity.MULTIPLICATION_COMPLEXITY
-    # c += pyrateless.optimize.complexity._optimal_decoding_additions(
-    #     avg_degree, # assume density 1
-    #     num_inactivations,
-    #     num_inputs,
-    #     num_inputs*target_overhead,
-    #     1, # packet size
-    # ) * complexity.ADDITION_COMPLEXITY
-    # c += pyrateless.optimize.complexity._optimal_decoding_multiplications(
-    #     avg_degree, # assume density 1
-    #     num_inactivations,
-    #     num_inputs,
-    #     num_inputs*target_overhead,
-    #     1, # packet size
-    # ) * complexity.MULTIPLICATION_COMPLEXITY
-    # print('returning c={}'.format(c))
-    # return c
-
 def evaluate(parameters, target_overhead=None,
              target_failure_probability=None,
              pdf_fun=None, partitioned=False,
@@ -232,38 +190,9 @@ def evaluate(parameters, target_overhead=None,
         partitioned,
     )
 
-    # simulate the the code performance. we only extract the number of
-    # multiplications required for encoding and decoding from this simulation.
-    # df = pyrateless.simulate({
-    #     'num_inputs': num_inputs,
-    #     'failure_prob': delta,
-    #     'mode': mode,
-    # }, overhead=target_overhead)
-
-
-    # average the columns of the df
-    # mean = {label:df[label].mean() for label in df}
-
     # scale the number of multiplications required for encoding/decoding and
     # store in a new dict.
     result = dict()
-
-    # we encode each column of the input matrix separately
-    # result['encoding_multiplications'] = mean['encoding_multiplications']
-    # result['encoding_multiplications'] *= parameters.num_columns
-    # result['encoding_multiplications'] *= 8
-
-    # we decode each output vector separately
-    # result['decoding_multiplications'] = mean['decoding_multiplications']
-    # result['decoding_multiplications'] *= parameters.num_outputs
-    # result['decoding_multiplications'] *= 8
-
-    # scale by the number of partitions
-    # result['encoding_multiplications'] *= num_partitions
-    # result['decoding_multiplications'] *= num_partitions
-
-    # each coded row is encoded by server_storage * q = muq servers.
-    # result['encoding_multiplications'] *= parameters.muq
 
     # compute encoding delay
     result['encode'] = stats.order_mean_shiftexp(
