@@ -33,6 +33,7 @@ import stats
 
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from multiprocessing import Pool
 from solvers import Solver
 from model import SystemParameters
 from assignments.sparse import SparseAssignment
@@ -42,8 +43,96 @@ from evaluation import AssignmentEvaluator
 # increase computing and I/O throughput, respectively.
 # there is a bug when using more than 1 worker:
 # https://bitbucket.org/pypy/pypy/issues/2530/segfault-with-threadpool-pandas-when
-process_executor = ProcessPoolExecutor(max_workers=8)
+process_pool = Pool(processes=12)
 thread_executor = ThreadPoolExecutor(max_workers=1)
+
+def completion_cdf(x, distributions=None, probabilities=None):
+    '''CDF of the computational delay.
+
+    Args:
+
+    distributions: dict with mapping the number of servers needed to
+    decode to the corresponding probability distribution.
+
+    probabilities: dict mapping the number of servers needed to decode
+    to the probability of needing the number of servers.
+
+    '''
+    assert isinstance(distributions, dict)
+    assert isinstance(probabilities, dict)
+    assert len(distributions) == len(probabilities)
+    result = 0
+    for servers in distributions:
+        server_probability = probabilities[servers]
+        a, loc, scale = distributions[servers]
+        t = scipy.stats.gamma.cdf(x, a, loc, scale)
+        if np.isnan(t):
+            return 1
+        result += server_probability*t
+    return result
+
+def infer_completion_cdf(parameters=None,
+                         order_values=None,
+                         order_probabilities=None,
+                         num_samples=1000,
+                         map_complexity_fun=None,
+                         encode_complexity_fun=None,
+                         reduce_complexity_fun=None):
+    '''Return a CDF of the computational delay inferred from simulations.
+
+    '''
+
+
+    distributions = dict()
+    probabilities = dict()
+    samples = np.zeros(num_samples)
+    if encode_complexity_fun:
+        encoding_distribution = stats.ShiftexpOrder(
+            parameter=encode_complexity_fun(parameters) / parameters.num_servers,
+            total=parameters.num_servers,
+            order=parameters.num_servers,
+        )
+
+    if reduce_complexity_fun:
+        reduce_distribution = stats.ShiftexpOrder(
+            parameter=reduce_complexity_fun(parameters) / parameters.q,
+            total=parameters.q,
+            order=parameters.q,
+        )
+
+    # for each unique number of servers, fit a gamma distribution
+    minv, maxv = 0, 0
+    for order, probability in zip(order_values, order_probabilities):
+        samples[:] = 0
+        if encode_complexity_fun:
+            samples += encoding_distribution.sample(n=num_samples)
+
+        if reduce_complexity_fun:
+            samples += reduce_distribution.sample(n=num_samples)
+
+        map_distribution = stats.ShiftexpOrder(
+            parameter=map_complexity_fun(parameters),
+            total=parameters.num_servers,
+            order=order,
+        )
+        samples += map_distribution.sample(n=num_samples)
+
+        # normalize
+        samples /= parameters.num_source_rows * parameters.num_outputs
+
+        # store the minimum and maximum values
+        minv = min(minv, samples.min())
+        maxv = max(maxv, samples.max())
+
+        # fit a distribution and store the order probability
+        distributions[order] = scipy.stats.gamma.fit(samples, loc=samples.min())
+        probabilities[order] = probability
+
+    return partial(
+        completion_cdf,
+        distributions=distributions,
+        probabilities=probabilities,
+    ), minv, maxv
 
 def cdf_from_samples(samples, loc=None, n=1):
     '''infer the cdf from samples. assumes the samples are gamma distributed.
@@ -58,8 +147,8 @@ def cdf_from_samples(samples, loc=None, n=1):
     a, loc, scale = 0, 0, 0
     for _ in range(n):
         np.random.shuffle(samples)
-        a0, loc0, scale0 = scipy.stats.gamma.fit(samples)
-        # a0, loc0, scale0 = scipy.stats.gamma.fit(samples[:j], loc=samples.min())
+        # a0, loc0, scale0 = scipy.stats.gamma.fit(samples)
+        a0, loc0, scale0 = scipy.stats.gamma.fit(samples, loc=samples.min())
         a += a0
         loc += loc0
         scale += scale0
