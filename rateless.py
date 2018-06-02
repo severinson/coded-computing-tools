@@ -49,12 +49,18 @@ def lt_encoding_complexity(num_inputs=None, failure_prob=None,
     correct complexity.
 
     '''
+
     # find good LT code parameters
-    c, delta, mode = optimize_lt_parameters(
-        num_inputs=num_inputs,
-        target_overhead=target_overhead,
-        target_failure_probability=failure_prob,
-    )
+    if num_inputs == 2:
+        mode = 2
+        delta = 0.9999999701976676
+    else:
+        c, delta, mode = optimize_lt_parameters(
+            num_inputs=num_inputs,
+            target_overhead=target_overhead,
+            target_failure_probability=failure_prob,
+        )
+
     avg_degree = pyrateless.Soliton(
         delta=delta,
         mode=mode,
@@ -88,6 +94,12 @@ def lt_decoding_complexity(num_inputs=None, failure_prob=None,
         filename = './results/LT_1e-1.csv'
     elif failure_prob == 1e-3:
         filename = './results/LT_1e-3.csv'
+    elif failure_prob == 1e-6:
+        filename = './results/LT_1e-6.csv'
+    elif failure_prob == 1e-9:
+        filename = './results/LT_1e-9.csv'
+    else:
+        logging.error('no results for tfp={}'.format(failure_prob))
 
     try:
         df = pd.read_csv(filename)
@@ -178,11 +190,15 @@ def evaluate(parameters, target_overhead=None,
     decoding_complexity *= parameters.num_outputs
 
     # find good code parameters
-    c, delta, mode = optimize_lt_parameters(
-        num_inputs=num_inputs,
-        target_overhead=target_overhead,
-        target_failure_probability=target_failure_probability,
-    )
+    if num_inputs == 2:
+        mode = 2
+        delta = 0.9999999701976676
+    else:
+        c, delta, mode = optimize_lt_parameters(
+            num_inputs=num_inputs,
+            target_overhead=target_overhead,
+            target_failure_probability=target_failure_probability,
+        )
     logging.debug(
         'LT mode=%d, delta=%f for %d input symbols, target overhead %f, target failure probability %f. partitioned: %r',
         mode, delta, parameters.num_source_rows,
@@ -256,7 +272,7 @@ def lt_success_pdf(overhead_levels, num_inputs=None, mode=None, delta=None):
 
     # differentiate the CDF to obtain the PDF
     decoding_pdf = np.diff(decoding_cdf)
-    return decoding_pdf / decoding_pdf.sum()
+    return decoding_pdf
 
 def lt_success_samples(n, target_overhead=None, num_inputs=None, mode=None, delta=None):
     '''sample the decoding probability distribution.
@@ -367,8 +383,12 @@ def performance_integral(parameters=None, num_inputs=None, target_overhead=None,
     df = pd.DataFrame(results)
     return {label:df[label].sum() for label in df}
 
-def order_pdf(parameters=None, target_overhead=None, target_failure_probability=None,
-              partitioned=False, num_overhead_levels=100, num_samples=100000,
+def order_pdf(parameters=None,
+              target_overhead=None,
+              target_failure_probability=None,
+              partitioned=False,
+              num_overhead_levels=100,
+              num_samples=100000,
               cachedir=None):
     '''simulate the order PDF, i.e., the PDF over the number of servers needed to
     decode successfully.
@@ -391,7 +411,7 @@ def order_pdf(parameters=None, target_overhead=None, target_failure_probability=
         num_partitions = 1
 
     # guaranteed to be an integer
-    num_inputs = int(parameters.num_source_rows / num_partitions)
+    num_inputs = int(round(parameters.num_source_rows / num_partitions))
 
     # find good LT code parameters
     c, delta, mode = optimize_lt_parameters(
@@ -418,9 +438,6 @@ def order_pdf(parameters=None, target_overhead=None, target_failure_probability=
     # number of samples taken is weighted by the probability of needing this
     # overhead.
     results = list()
-    print(overhead_levels)
-    print(decoding_probabilities)
-    print(decoding_probabilities.sum())
     for overhead_level, decoding_probability in zip(overhead_levels, decoding_probabilities):
 
         # the number of samples correspond to the probability of decoding at
@@ -433,11 +450,13 @@ def order_pdf(parameters=None, target_overhead=None, target_failure_probability=
             overhead=overhead_level,
             design_overhead=target_overhead,
             num_samples=overhead_samples,
+            cachedir=cachedir,
         )
         results.append(df)
 
     # concatenate all samples into a single dataframe
     samples = pd.concat(results, ignore_index=True)
+    print('rateless samples', samples)
 
     # compute the empiric order cdf and return
     order_count = samples['servers'].value_counts(normalize=True)
