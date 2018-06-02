@@ -90,7 +90,7 @@ def performance_from_overhead(parameters=None, overhead=1, design_overhead=None,
             df = pd.read_csv(filename)
             if len(df) >= num_samples:
                 return df[:num_samples]
-        except FileNotFoundError:
+        except:
             pass
 
     # check all possible completion orders or num_samples randomly selected
