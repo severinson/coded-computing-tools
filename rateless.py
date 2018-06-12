@@ -49,12 +49,18 @@ def lt_encoding_complexity(num_inputs=None, failure_prob=None,
     correct complexity.
 
     '''
+
     # find good LT code parameters
-    c, delta, mode = optimize_lt_parameters(
-        num_inputs=num_inputs,
-        target_overhead=target_overhead,
-        target_failure_probability=failure_prob,
-    )
+    if num_inputs == 2:
+        mode = 2
+        delta = 0.9999999701976676
+    else:
+        c, delta, mode = optimize_lt_parameters(
+            num_inputs=num_inputs,
+            target_overhead=target_overhead,
+            target_failure_probability=failure_prob,
+        )
+
     avg_degree = pyrateless.Soliton(
         delta=delta,
         mode=mode,
@@ -88,6 +94,12 @@ def lt_decoding_complexity(num_inputs=None, failure_prob=None,
         filename = './results/LT_1e-1.csv'
     elif failure_prob == 1e-3:
         filename = './results/LT_1e-3.csv'
+    elif failure_prob == 1e-6:
+        filename = './results/LT_1e-6.csv'
+    elif failure_prob == 1e-9:
+        filename = './results/LT_1e-9.csv'
+    else:
+        logging.error('no results for tfp={}'.format(failure_prob))
 
     try:
         df = pd.read_csv(filename)
@@ -99,7 +111,9 @@ def lt_decoding_complexity(num_inputs=None, failure_prob=None,
     df = df.loc[df['num_inputs'] == num_inputs]
     df = df.loc[df['overhead'] == overhead]
     if len(df) != 1:
-        logging.warning('did not find exactly 1 row: {}'.format(df))
+        logging.warning(
+            'did not find exactly 1 row for num_inputs={}, failure_prob={}, target_overhead=: {} symbols'.format(
+                num_inputs, failure_prob, overhead, df,))
         return math.inf
 
     a = df['diagonalize_decoding_additions']
@@ -117,48 +131,6 @@ def lt_decoding_complexity(num_inputs=None, failure_prob=None,
     m += df['backsolve_rowmuls']
     m = m.values[0]
     return a*complexity.ADDITION_COMPLEXITY + m*complexity.MULTIPLICATION_COMPLEXITY
-
-    # table = {
-    #     (10, 1e-1, 1.3): (0.4493, 1.39178),
-    #     (24, 1e-1, 1.3): (1.18493333333333, 2.715446875),
-    #     (140, 1e-1, 1.3): (3.8155, 5.716915),
-    #     (850, 1e-1, 1.3): (12.8237, 8.91052611764706),
-    #     (2160, 1e-1, 1.3): (33.9801, 11.6024421296296),
-    #     (4000, 1e-1, 1.3): (89.1511, 15.25142045),
-    #     (5250, 1e-1, 1.3): (145.7618, 17.9338159238095),
-    #     (6000, 1e-1, 1.3): (186.733432835821, 19.6625636401327),
-    #     (13400, 1e-1, 1.3): (932.3553, 34.861085641791),
-    #     (14000, 1e-1, 1.3): (1018.248, 35.8704439047619),
-    #     (134000, 1e-3, 1.3): ()
-    # }
-    # key = (num_inputs, failure_prob, target_overhead)
-    # if key not in table:
-    #     logging.warning("LT decoding complexity key {} not in table".format(key))
-    #     return math.inf
-    # raise ValueError('no results for key {}'.format(key))
-
-    # num_inactivations = df['inactivations'].values[0]
-    # num_rowops = df['rowmuls'].values[0]
-    # num_rowops *= num_inputs # undo normalization
-    # # num_rowops += avg_degree + pow(num_inactivations, 2)
-    # c = num_rowops * complexity.ADDITION_COMPLEXITY
-    # c += num_rowops * complexity.MULTIPLICATION_COMPLEXITY
-    # c += pyrateless.optimize.complexity._optimal_decoding_additions(
-    #     avg_degree, # assume density 1
-    #     num_inactivations,
-    #     num_inputs,
-    #     num_inputs*target_overhead,
-    #     1, # packet size
-    # ) * complexity.ADDITION_COMPLEXITY
-    # c += pyrateless.optimize.complexity._optimal_decoding_multiplications(
-    #     avg_degree, # assume density 1
-    #     num_inactivations,
-    #     num_inputs,
-    #     num_inputs*target_overhead,
-    #     1, # packet size
-    # ) * complexity.MULTIPLICATION_COMPLEXITY
-    # print('returning c={}'.format(c))
-    # return c
 
 def evaluate(parameters, target_overhead=None,
              target_failure_probability=None,
@@ -218,11 +190,15 @@ def evaluate(parameters, target_overhead=None,
     decoding_complexity *= parameters.num_outputs
 
     # find good code parameters
-    c, delta, mode = optimize_lt_parameters(
-        num_inputs=num_inputs,
-        target_overhead=target_overhead,
-        target_failure_probability=target_failure_probability,
-    )
+    if num_inputs == 2:
+        mode = 2
+        delta = 0.9999999701976676
+    else:
+        c, delta, mode = optimize_lt_parameters(
+            num_inputs=num_inputs,
+            target_overhead=target_overhead,
+            target_failure_probability=target_failure_probability,
+        )
     logging.debug(
         'LT mode=%d, delta=%f for %d input symbols, target overhead %f, target failure probability %f. partitioned: %r',
         mode, delta, parameters.num_source_rows,
@@ -230,38 +206,9 @@ def evaluate(parameters, target_overhead=None,
         partitioned,
     )
 
-    # simulate the the code performance. we only extract the number of
-    # multiplications required for encoding and decoding from this simulation.
-    # df = pyrateless.simulate({
-    #     'num_inputs': num_inputs,
-    #     'failure_prob': delta,
-    #     'mode': mode,
-    # }, overhead=target_overhead)
-
-
-    # average the columns of the df
-    # mean = {label:df[label].mean() for label in df}
-
     # scale the number of multiplications required for encoding/decoding and
     # store in a new dict.
     result = dict()
-
-    # we encode each column of the input matrix separately
-    # result['encoding_multiplications'] = mean['encoding_multiplications']
-    # result['encoding_multiplications'] *= parameters.num_columns
-    # result['encoding_multiplications'] *= 8
-
-    # we decode each output vector separately
-    # result['decoding_multiplications'] = mean['decoding_multiplications']
-    # result['decoding_multiplications'] *= parameters.num_outputs
-    # result['decoding_multiplications'] *= 8
-
-    # scale by the number of partitions
-    # result['encoding_multiplications'] *= num_partitions
-    # result['decoding_multiplications'] *= num_partitions
-
-    # each coded row is encoded by server_storage * q = muq servers.
-    # result['encoding_multiplications'] *= parameters.muq
 
     # compute encoding delay
     result['encode'] = stats.order_mean_shiftexp(
@@ -325,7 +272,7 @@ def lt_success_pdf(overhead_levels, num_inputs=None, mode=None, delta=None):
 
     # differentiate the CDF to obtain the PDF
     decoding_pdf = np.diff(decoding_cdf)
-    return decoding_pdf / decoding_pdf.sum()
+    return decoding_pdf
 
 def lt_success_samples(n, target_overhead=None, num_inputs=None, mode=None, delta=None):
     '''sample the decoding probability distribution.
@@ -436,8 +383,12 @@ def performance_integral(parameters=None, num_inputs=None, target_overhead=None,
     df = pd.DataFrame(results)
     return {label:df[label].sum() for label in df}
 
-def order_pdf(parameters=None, target_overhead=None, target_failure_probability=None,
-              partitioned=False, num_overhead_levels=100, num_samples=100000,
+def order_pdf(parameters=None,
+              target_overhead=None,
+              target_failure_probability=None,
+              partitioned=False,
+              num_overhead_levels=100,
+              num_samples=100000,
               cachedir=None):
     '''simulate the order PDF, i.e., the PDF over the number of servers needed to
     decode successfully.
@@ -460,7 +411,7 @@ def order_pdf(parameters=None, target_overhead=None, target_failure_probability=
         num_partitions = 1
 
     # guaranteed to be an integer
-    num_inputs = int(parameters.num_source_rows / num_partitions)
+    num_inputs = int(round(parameters.num_source_rows / num_partitions))
 
     # find good LT code parameters
     c, delta, mode = optimize_lt_parameters(
@@ -487,9 +438,6 @@ def order_pdf(parameters=None, target_overhead=None, target_failure_probability=
     # number of samples taken is weighted by the probability of needing this
     # overhead.
     results = list()
-    print(overhead_levels)
-    print(decoding_probabilities)
-    print(decoding_probabilities.sum())
     for overhead_level, decoding_probability in zip(overhead_levels, decoding_probabilities):
 
         # the number of samples correspond to the probability of decoding at
@@ -502,11 +450,13 @@ def order_pdf(parameters=None, target_overhead=None, target_failure_probability=
             overhead=overhead_level,
             design_overhead=target_overhead,
             num_samples=overhead_samples,
+            cachedir=cachedir,
         )
         results.append(df)
 
     # concatenate all samples into a single dataframe
     samples = pd.concat(results, ignore_index=True)
+    print('rateless samples', samples)
 
     # compute the empiric order cdf and return
     order_count = samples['servers'].value_counts(normalize=True)

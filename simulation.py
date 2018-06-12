@@ -33,6 +33,7 @@ import stats
 
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from multiprocessing import Pool
 from solvers import Solver
 from model import SystemParameters
 from assignments.sparse import SparseAssignment
@@ -42,20 +43,120 @@ from evaluation import AssignmentEvaluator
 # increase computing and I/O throughput, respectively.
 # there is a bug when using more than 1 worker:
 # https://bitbucket.org/pypy/pypy/issues/2530/segfault-with-threadpool-pandas-when
-process_executor = ProcessPoolExecutor(max_workers=1)
+process_pool = Pool(processes=12)
 thread_executor = ThreadPoolExecutor(max_workers=1)
 
-def cdf_from_samples(samples, loc=None):
+def completion_cdf(x, distributions=None, probabilities=None):
+    '''CDF of the computational delay.
+
+    Args:
+
+    distributions: dict with mapping the number of servers needed to
+    decode to the corresponding probability distribution.
+
+    probabilities: dict mapping the number of servers needed to decode
+    to the probability of needing the number of servers.
+
+    '''
+    assert isinstance(distributions, dict)
+    assert isinstance(probabilities, dict)
+    assert len(distributions) == len(probabilities)
+    result = 0
+    for servers in distributions:
+        server_probability = probabilities[servers]
+        a, loc, scale = distributions[servers]
+        t = scipy.stats.gamma.cdf(x, a, loc, scale)
+        if np.isnan(t):
+            return 1
+        result += server_probability*t
+    return result
+
+def infer_completion_cdf(parameters=None,
+                         order_values=None,
+                         order_probabilities=None,
+                         num_samples=1000,
+                         map_complexity_fun=None,
+                         encode_complexity_fun=None,
+                         reduce_complexity_fun=None):
+    '''Return a CDF of the computational delay inferred from simulations.
+
+    '''
+
+
+    distributions = dict()
+    probabilities = dict()
+    samples = np.zeros(num_samples)
+    if encode_complexity_fun:
+        encoding_distribution = stats.ShiftexpOrder(
+            parameter=encode_complexity_fun(parameters) / parameters.num_servers,
+            total=parameters.num_servers,
+            order=parameters.num_servers,
+        )
+
+    if reduce_complexity_fun:
+        reduce_distribution = stats.ShiftexpOrder(
+            parameter=reduce_complexity_fun(parameters) / parameters.q,
+            total=parameters.q,
+            order=parameters.q,
+        )
+
+    # for each unique number of servers, fit a gamma distribution
+    minv, maxv = 0, 0
+    for order, probability in zip(order_values, order_probabilities):
+        samples[:] = 0
+        if encode_complexity_fun:
+            samples += encoding_distribution.sample(n=num_samples)
+
+        if reduce_complexity_fun:
+            samples += reduce_distribution.sample(n=num_samples)
+
+        map_distribution = stats.ShiftexpOrder(
+            parameter=map_complexity_fun(parameters),
+            total=parameters.num_servers,
+            order=order,
+        )
+        samples += map_distribution.sample(n=num_samples)
+
+        # normalize
+        samples /= parameters.num_source_rows * parameters.num_outputs
+
+        # store the minimum and maximum values
+        minv = min(minv, samples.min())
+        maxv = max(maxv, samples.max())
+
+        # fit a distribution and store the order probability
+        distributions[order] = scipy.stats.gamma.fit(samples, loc=samples.min())
+        probabilities[order] = probability
+
+    return partial(
+        completion_cdf,
+        distributions=distributions,
+        probabilities=probabilities,
+    ), minv, maxv
+
+def cdf_from_samples(samples, loc=None, n=1):
     '''infer the cdf from samples. assumes the samples are gamma distributed.
+
+    The sum of exponentially distributed random variables is gamma
+    distributed. fit a CDF accordingly.
 
     returns: lambda expression cdf(t) that gives the probability of the
     computation completing before time t.
 
     '''
+    a, loc, scale = 0, 0, 0
+    for _ in range(n):
+        np.random.shuffle(samples)
+        # a0, loc0, scale0 = scipy.stats.gamma.fit(samples)
+        a0, loc0, scale0 = scipy.stats.gamma.fit(samples, loc=samples.min())
+        a += a0
+        loc += loc0
+        scale += scale0
 
-    # the sum of exponentially distributed random variables is gamma
-    # distributed. fit a CDF accordingly.
-    a, loc, scale = scipy.stats.gamma.fit(samples, loc=samples.min())
+    a /= n
+    loc /= n
+    scale /= n
+    logging.info("found Gamma distribution parameters a={}, loc={}, scale={}".format(a, loc, scale))
     return lambda t: scipy.stats.gamma.cdf(t, a, loc=loc, scale=scale)
 
 def delay_samples(dataframe, num_samples=100000, parameters=None, map_complexity_fun=None,
@@ -138,18 +239,23 @@ def delay_samples(dataframe, num_samples=100000, parameters=None, map_complexity
     # the probability of needing to wait for that number of servers in the map
     # phase.
     i = 0
+    a = 0
     for order, probability in zip(order_values, order_probabilities):
         map_distribution = stats.ShiftexpOrder(
             parameter=map_complexity_fun(parameters),
             total=parameters.num_servers,
             order=order,
         )
+        a += num_samples*probability
         num_order_samples = min(
             num_samples-i,
-            int(round(num_samples*probability)),
+            int(round(a)),
         )
+        if num_order_samples <= 0:
+            continue
         samples[i:i+num_order_samples] += map_distribution.sample(n=num_order_samples)
         i += num_order_samples
+        a -= num_order_samples
 
     # normalize the values
     samples /= parameters.num_source_rows * parameters.num_outputs
@@ -384,9 +490,6 @@ def simulate(parameters, directory='./results/', rerun=False, samples=None,
     best_avg_load = math.inf
     best_avg_delay = math.inf
 
-    printout_interval = datetime.timedelta(seconds=10)
-    prev_printout = datetime.datetime.utcnow()
-
     # select the simulation type
     if solver is None:
         f = partial(
@@ -404,7 +507,8 @@ def simulate(parameters, directory='./results/', rerun=False, samples=None,
         )
 
     # run simulations in parallel using a process pool
-    results = process_executor.map(f, range(samples))
+    # with Pool(processes=8) as pool:
+    results = map(f, range(samples))
 
     # concatenate the DataFrames and write the result to disk
     dataframe = pd.concat(results)

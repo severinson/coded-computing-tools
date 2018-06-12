@@ -30,7 +30,7 @@ import itertools
 import numpy as np
 import pandas as pd
 import model
-import numtools
+import pynumeric
 
 from functools import lru_cache
 from scipy.special import comb as nchoosek
@@ -90,7 +90,7 @@ def performance_from_overhead(parameters=None, overhead=1, design_overhead=None,
             df = pd.read_csv(filename)
             if len(df) >= num_samples:
                 return df[:num_samples]
-        except FileNotFoundError:
+        except:
             pass
 
     # check all possible completion orders or num_samples randomly selected
@@ -252,7 +252,7 @@ def delay_from_order(parameters=None, order=None, overhead=None):
             return 1
         return 0
 
-    required_servers = numtools.numinv(
+    required_servers = pynumeric.numinv(
         fun=decodeable,
         target=1,
         lower=parameters.q,
