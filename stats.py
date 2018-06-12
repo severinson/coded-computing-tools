@@ -206,7 +206,7 @@ class ShiftexpOrder(object):
         '''
         assert 0 < parameter < math.inf
         assert 0 < total < math.inf and total % 1 == 0
-        assert 0 < order <= total and order % 1 == 0
+        assert 0 <= order <= total and order % 1 == 0
         self.parameter = parameter
         self.total = total
         self.order = order
@@ -238,6 +238,8 @@ class ShiftexpOrder(object):
 
     def mean(self):
         '''Expected value.'''
+        if self.order == 0:
+            return 0.0
         return order_mean_shiftexp(
             self.total,
             self.order,
@@ -300,6 +302,26 @@ class Shiftexp(object):
     def mean(self):
         '''Expected value.'''
         return self.parameter
+
+class ExpSum(object):
+    '''Random variable representing the sum of order RVs with exponential
+    distribution and given parameter.
+
+    '''
+
+    def __init__(self, scale=None, order=None):
+        self.b = order
+        self.scale = scale
+        return
+
+    def mean(self):
+        return self.scale*self.order
+
+    def pdf(self, value):
+        return scipy.stats.gamma.pdf(value, self.b, scale=self.scale, loc=0)
+
+    def cdf(self, value):
+        return scipy.stats.gamma.cdf(value, self.b, scale=self.scale, loc=0)
 
 def validate():
     '''Validate the analytic computation of the order stats.'''
