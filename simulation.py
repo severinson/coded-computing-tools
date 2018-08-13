@@ -298,13 +298,40 @@ def flatten_dataframes(dataframe_iter):
         for dataframe in dataframe_iter
     ])
 
-def simulate_parameter_list(parameter_list=None, simulate_fun=None,
-                            map_complexity_fun=None, encode_delay_fun=None, reduce_delay_fun=None):
+def recompute_map_delay(dataframe, parameters, scale, map_complexity_fun):
+    '''Recompute the delay of the map phase for a given ratio between the
+    shift and tail scale of the shifted exponential (see
+    stats.order_mean_shiftexp())
+
+    '''
+    parameter = map_complexity_fun(parameters)
+    dataframe['delay'] = np.fromiter(
+        (parameters.computational_delay(
+            q=q,
+            parameter=parameter,
+            scale=scale)
+         for q in dataframe['servers']),
+        dtype=float,
+    )
+    return dataframe
+
+def simulate_parameter_list(parameter_list=None,
+                            tail_scale=None,
+                            simulate_fun=None,
+                            map_complexity_fun=None,
+                            encode_delay_fun=None,
+                            reduce_delay_fun=None):
     '''Run simulations for a list of parameters.
 
     args
 
     parameter_list: list of SystemParameters for which to run simulations.
+
+    shift_tail_ratio: the ratio between the shift and tail scale of
+    the shifted exponential (see stats.order_mean_shiftexp()). if
+    None, the delay of the map phase in the dataframe loaded from disk
+    is used. otherwise the delay of the map phase is recomputed using
+    the given ratio.
 
     simulation_fun: function to apply to each SystemParameters object. use
     functools.partial to set the arguments to the simulate() function below and
@@ -329,7 +356,19 @@ def simulate_parameter_list(parameter_list=None, simulate_fun=None,
 
     # run simulations for all parameters. we use a thread pool as most of the
     # time is spent waiting for I/O when loading cached results from disk.
-    dataframe_iter = list(thread_executor.map(simulate_fun, parameter_list))
+    dataframe_iter = thread_executor.map(simulate_fun, parameter_list)
+
+    # recompute the delay of the map phase if a ratio is given
+    if tail_scale is not None:
+        dataframe_iter = (
+            recompute_map_delay(
+                dataframe,
+                parameters,
+                tail_scale,
+                map_complexity_fun,
+            )
+            for (dataframe, parameters) in zip(dataframe_iter, parameter_list)
+        )
 
     # flatten the iterable of dataframes into a single dataframe
     dataframe = flatten_dataframes(dataframe_iter)
@@ -338,11 +377,12 @@ def simulate_parameter_list(parameter_list=None, simulate_fun=None,
     dataframe = set_load(dataframe)
 
     # scale the map phase delay by its complexity
-    map_complexity = np.fromiter(
-        (map_complexity_fun(parameters) for parameters in parameter_list),
-        dtype=float,
-    )
-    dataframe['delay'] *= map_complexity
+    if tail_scale is None:
+        map_complexity = np.fromiter(
+            (map_complexity_fun(parameters) for parameters in parameter_list),
+            dtype=float,
+        )
+        dataframe['delay'] *= map_complexity
 
     #  compute the encoding and reduce (decoding) delay
     if encode_delay_fun:

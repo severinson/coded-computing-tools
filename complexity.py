@@ -17,7 +17,10 @@ MULTIPLICATION_COMPLEXITY = 1
 # ADDITION_COMPLEXITY = 64
 # MULTIPLICATION_COMPLEXITY = 64*math.log2(64) # n logn
 
-def partitioned_encode_delay(parameters, partitions=None, algorithm='gen'):
+def partitioned_encode_delay(parameters,
+                             partitions=None,
+                             algorithm='gen',
+                             tail_scale=None):
     '''Compute delay incurred by the encoding phase. Assumes a shifted exponential
     distribution.
 
@@ -32,6 +35,9 @@ def partitioned_encode_delay(parameters, partitions=None, algorithm='gen'):
     Berlekamp-Massey and 'fft' for one based on the fast Fourier
     transform.
 
+    tail_scale: scale factor for the tail of the shifted exponential
+    distribution (see stats.order_mean_shiftexp()).
+
     Returns: The reduce delay.
 
     '''
@@ -40,21 +46,22 @@ def partitioned_encode_delay(parameters, partitions=None, algorithm='gen'):
     if partitions is None:
         partitions = parameters.num_partitions
 
-    delay = stats.order_mean_shiftexp(
-        parameters.num_servers,
-        parameters.num_servers,
-    )
-
     # scale by the total encoding complexity
-    delay *= partitioned_encode_complexity(
+    shift = partitioned_encode_complexity(
         parameters,
         partitions=partitions,
         algorithm=algorithm,
     )
 
     # split the work over all servers
-    delay /= parameters.num_servers
+    shift /= parameters.num_servers
 
+    delay = stats.order_mean_shiftexp(
+        parameters.num_servers,
+        parameters.num_servers,
+        parameter=shift,
+        scale=tail_scale,
+    )
     return delay
 
 def partitioned_encode_complexity(parameters, partitions=None, algorithm='gen'):
@@ -119,7 +126,10 @@ def stragglerc_encode_delay(parameters):
         algorithm='gen',
     )
 
-def partitioned_reduce_delay(parameters, partitions=None, algorithm='fft'):
+def partitioned_reduce_delay(parameters,
+                             partitions=None,
+                             algorithm='fft',
+                             tail_scale=None):
     '''Compute delay incurred by the reduce phase. Assumes a shifted
     exponential distribution.
 
@@ -133,35 +143,38 @@ def partitioned_reduce_delay(parameters, partitions=None, algorithm='fft'):
     algorithm: 'bm' for Berlekamp-Massey and 'fft' for one based on the fast
     Fourier transform.
 
+    tail_scale: scale factor for the tail of the shifted exponential
+    distribution (see stats.order_mean_shiftexp()).
+
     Returns: The reduce delay.
 
     '''
     assert partitions is None or (isinstance(partitions, int) and partitions > 0)
-    assert algorithm in ['bm', 'fft'], algorithm
     if partitions is None:
         partitions = parameters.num_partitions
 
-    delay = stats.order_mean_shiftexp(
-        parameters.q,
-        parameters.q,
-    )
-
-    # scale by the total decoding complexity
-    delay *= partitioned_reduce_complexity(
+    # shift by the total decoding complexity
+    shift = partitioned_reduce_complexity(
         parameters,
         partitions=partitions,
         algorithm=algorithm,
     )
 
     # split the work over all servers
-    delay /= parameters.q
+    shift /= parameters.q
+
+    delay = stats.order_mean_shiftexp(
+        parameters.q,
+        parameters.q,
+        parameter=shift,
+        scale=tail_scale,
+    )
 
     return delay
 
 def partitioned_reduce_complexity(parameters, partitions=None, algorithm='fft'):
     '''total reduce complexity for the partitioned scheme'''
     assert partitions is None or partitions % 1 == 0
-    assert algorithm in ['bm', 'fft'], algorithm
     if partitions is None:
         partitions = parameters.num_partitions
 
@@ -175,8 +188,10 @@ def partitioned_reduce_complexity(parameters, partitions=None, algorithm='fft'):
     elif algorithm == 'fft':
         partition_length = parameters.num_coded_rows / partitions
         c = rs_decoding_complexity_fft(partition_length)*partitions
+    elif algorithm == 'uncoded':
+        return 0
     else:
-        raise ValueError('algorithm must be either "bm" or "fft"')
+        raise ValueError('algorithm must be either "bm", "fft" or "uncoded"')
 
     c *= parameters.num_outputs
     return c

@@ -430,7 +430,7 @@ class SystemParameters(object):
             return load_2
 
     @functools.lru_cache(maxsize=128)
-    def computational_delay(self, q=None):
+    def computational_delay(self, q=None, parameter=1, scale=None):
         '''Return the delay incurred in the map phase.
 
         Calculates the computational delay assuming a shifted
@@ -439,6 +439,8 @@ class SystemParameters(object):
         Args:
 
         q: The number of servers to wait for. If q is None, the value in self is used.
+
+        scale: passed to stats.order_mean_shiftexp.
 
         returns: The normalized computational delay. Multiply the result by
         complexity.matrix_vector_complexity(self.server_storage*self.num_coded_rows,
@@ -454,7 +456,12 @@ class SystemParameters(object):
             return math.inf
 
         # delay per source row and input/output vector
-        delay = stats.order_mean_shiftexp(self.num_servers, q)
+        delay = stats.order_mean_shiftexp(
+            self.num_servers,
+            q,
+            parameter=parameter,
+            scale=scale,
+        )
         return delay
 
 def uncoded_initialization_load(parameters, multicast_cost=None):

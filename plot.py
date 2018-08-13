@@ -259,7 +259,7 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
                     normalize=None, legend='load', ncol=1, loc='best',
                     ylim_top=None, xlim_top=None,
                     ylim_bot=None, xlim_bot=None,
-                    vline=None, show=True):
+                    vline=None, title=None, show=True):
     '''Create a plot with two subplots for load and delay respectively.
 
     Args:
@@ -339,6 +339,9 @@ def load_delay_plot(results, plot_settings, xdata, xlabel='',
             borderaxespad=0.1,
             ncol=ncol,
         )
+
+    if title:
+        plt.title(title)
 
     # Plot delay
     ax2 = plt.subplot(212, sharex=ax1)
