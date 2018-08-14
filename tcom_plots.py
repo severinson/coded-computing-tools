@@ -14,6 +14,7 @@ import overhead
 
 from functools import partial
 from scipy.special import comb as nchoosek
+from matplotlib2tikz import save as tikz_save
 from evaluation import analytic
 from evaluation.binsearch import SampleEvaluator
 from solvers.heuristicsolver import HeuristicSolver
@@ -150,26 +151,26 @@ rs_fun = partial(
 rerun = False
 lt_fun = partial(
     simulation.simulate,
-    directory='./results/LT_335_1/',
+    directory='./results/LT_3_1/',
     samples=1,
     parameter_eval=partial(
         rateless.evaluate,
-        target_overhead=1.335,
+        target_overhead=1.3,
         target_failure_probability=1e-1,
-        cachedir='./results/LT_335_1/overhead',
+        cachedir='./results/LT_3_1/overhead',
     ),
     rerun=rerun,
 )
 lt_partitioned_fun = partial(
     simulation.simulate,
-    directory='./results/LT_335_1_partitioned/',
+    directory='./results/LT_3_1_partitioned/',
     samples=1,
     parameter_eval=partial(
         rateless.evaluate,
-        target_overhead=1.335,
+        target_overhead=1.3,
         target_failure_probability=1e-1,
         partitioned=True,
-        cachedir='./results/LT_335_1_partitioned/overhead',
+        cachedir='./results/LT_3_1_partitioned/overhead',
     ),
     rerun=rerun,
 )
@@ -630,6 +631,11 @@ def lt_plots():
     )
     # plt.savefig('./plots/tcom/lt.pdf')
     # plt.savefig('./plots/tcom/lt.pdf', dpi='figure', bbox_inches='tight')
+    tikz_save(
+        './plots/tcom/lt.tex',
+        figureheight='\\figureheightd',
+        figurewidth='\\figurewidth'
+    )
     plt.show()
     return
 
@@ -757,7 +763,12 @@ def partition_plot():
         xlim_bot=(2, 3000),
     )
     # plt.savefig('./plots/tcom/partitions.png', dpi='figure')
-    plt.savefig('./plots/tcom/partitions.pdf', dpi='figure', bbox_inches='tight')
+    # plt.savefig('./plots/tcom/partitions.pdf', dpi='figure', bbox_inches='tight')
+    tikz_save(
+        './plots/tcom/partitions.tex',
+        figureheight='\\figureheightd',
+        figurewidth='\\figurewidth'
+    )
 
     plot.load_delay_plot(
         [heuristic,
@@ -778,7 +789,12 @@ def partition_plot():
         xlim_bot=(2, 3000),
     )
     # plt.savefig('./plots/tcom/solvers_partitions.png', dpi='figure')
-    plt.savefig('./plots/tcom/solvers_partitions.pdf', dpi='figure', bbox_inches='tight')
+    # plt.savefig('./plots/tcom/solvers_partitions.pdf', dpi='figure', bbox_inches='tight')
+    tikz_save(
+        './plots/tcom/solvers_partitions.tex',
+        figureheight='\\figureheightd',
+        figurewidth='\\figurewidth'
+    )
 
     plot.encode_decode_plot(
         [heuristic,
@@ -943,7 +959,12 @@ def size_plot():
         ylim_bot=(0.5, 2.5),
     )
     # plt.savefig('./plots/tcom/size.png', dpi='figure')
-    plt.savefig('./plots/tcom/size.pdf', dpi='figure', bbox_inches='tight')
+    # plt.savefig('./plots/tcom/size.pdf', dpi='figure', bbox_inches='tight')
+    tikz_save(
+        './plots/tcom/size.tex',
+        figureheight='\\figureheightd',
+        figurewidth='\\figurewidth'
+    )
 
     plot.load_delay_plot(
         [heuristic,
@@ -961,7 +982,12 @@ def size_plot():
         ylim_bot=(0.5, 2.5),
     )
     # plt.savefig('./plots/tcom/solvers_size.png', dpi='figure')
-    plt.savefig('./plots/tcom/solvers_size.pdf', dpi='figure', bbox_inches='tight')
+    # plt.savefig('./plots/tcom/solvers_size.pdf', dpi='figure', bbox_inches='tight')
+    tikz_save(
+        './plots/tcom/solvers_size.tex',
+        figureheight='\\figureheightd',
+        figurewidth='\\figurewidth'
+    )
 
     plot.encode_decode_plot(
         [rs,
@@ -1122,6 +1148,11 @@ def workload_plot():
     )
     # plt.savefig('./plots/tcom/workload.png', dpi='figure')
     # plt.savefig('./plots/tcom/workload.pdf', dpi='figure', bbox_inches='tight')
+    tikz_save(
+        './plots/tcom/workload.tex',
+        figureheight='\\figureheightd',
+        figurewidth='\\figurewidth'
+    )
 
     plot.encode_decode_plot(
         [# heuristic_100,
@@ -1569,24 +1600,32 @@ def tradeoff_plot():
         heuristic_101['load'],
         heuristic_plot_settings['color']+heuristic_plot_settings['marker'],
         label='BDC, Heuristic, $1$\%',
+        markerfacecolor='none',
+        markeredgewidth=1.0,
     )
     plt.plot(
         heuristic_110['overall_delay'],
         heuristic_110['load'],
         'ms-',
         label='BDC, Heuristic, $10$\%',
+        markerfacecolor='none',
+        markeredgewidth=1.0,
     )
     plt.plot(
         lt_partitioned_03['overall_delay'],
         lt_partitioned_03['load'],
         lt_partitioned_plot_settings['color']+lt_partitioned_plot_settings['marker'],
         label='LT, Partitioned',
+        markerfacecolor='none',
+        markeredgewidth=1.0,
     )
     plt.plot(
         rs['overall_delay'],
         rs['load'],
         rs_plot_settings['color']+rs_plot_settings['marker'],
         label='Unified',
+        markerfacecolor='none',
+        markeredgewidth=1.0,
     )
     plt.autoscale(enable=True)
     plt.tight_layout()
@@ -1601,7 +1640,12 @@ def tradeoff_plot():
     # plt.plot(heuristic['reduce'], heuristic['load'], label='Reduce BDC, Heuristic')
     # plt.plot(rs['reduce'], rs['load'], label='Reduce Unified')
     plt.legend()
-    plt.savefig('./plots/tcom/tradeoff.pdf', dpi='figure', bbox_inches='tight')
+    # plt.savefig('./plots/tcom/tradeoff.pdf', dpi='figure', bbox_inches='tight')
+    tikz_save(
+        './plots/tcom/tradeoff.tex',
+        figureheight='\\figureheight',
+        figurewidth='\\figurewidth'
+    )
     plt.show()
     return
 
@@ -1830,6 +1874,8 @@ def deadline_plot(target_overhead=1.335,
         heuristic_plot_settings['color']+'o-',
         label='BDC, Heuristic',
         markevery=0.2,
+        markerfacecolor='none',
+        markeredgewidth=1.0,
     )
 
     t_max = pynumeric.cnuminv(fun=cdf_lt_9, target=1-1e-9)
@@ -1841,6 +1887,8 @@ def deadline_plot(target_overhead=1.335,
         label='LT',
         # label='LT, $(1.335, 10^{-9})$',
         markevery=0.2,
+        markerfacecolor='none',
+        markeredgewidth=1.0,
     )
 
     # t_max = pynumeric.cnuminv(fun=cdf_lt_6, target=1-1e-6)
@@ -1871,6 +1919,8 @@ def deadline_plot(target_overhead=1.335,
         rs_plot_settings['color']+'d--',
         label='Unified',
         markevery=0.2,
+        markerfacecolor='none',
+        markeredgewidth=1.0,
     )
     plt.semilogy(
         t,
@@ -1878,6 +1928,8 @@ def deadline_plot(target_overhead=1.335,
         uncoded_plot_settings['color'],
         label='UC',
         markevery=0.2,
+        markerfacecolor='none',
+        markeredgewidth=1.0,
     )
     plt.ylabel(r'$\Pr(\rm{Delay} > t)$')
     plt.xlabel(r'$t$')
@@ -1889,7 +1941,12 @@ def deadline_plot(target_overhead=1.335,
         numpoints=1,
         loc='best',
     )
-    plt.savefig('./plots/tcom/deadline.pdf', dpi='figure', bbox_inches='tight')
+    # plt.savefig('./plots/tcom/deadline.pdf', dpi='figure', bbox_inches='tight')
+    tikz_save(
+        './plots/tcom/deadline.tex',
+        figureheight='\\figureheight',
+        figurewidth='\\figurewidth'
+    )
     plt.show()
     return
 

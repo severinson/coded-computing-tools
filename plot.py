@@ -607,9 +607,25 @@ def plot_result(result, plot_settings, xdata, ydata, xlabel='',
         ymean /= normalize[ydata]
 
     if plot_type == 'semilogx':
-        plt.semilogx(xarray, ymean, style, label=label, markevery=markevery)
+        plt.semilogx(
+            xarray,
+            ymean,
+            style,
+            label=label,
+            markevery=markevery,
+            markerfacecolor='none',
+            markeredgewidth=1.0,
+        )
     elif plot_type == 'loglog':
-        plt.loglog(xarray, ymean, style, label=label, markevery=markevery)
+        plt.loglog(
+            xarray,
+            ymean,
+            style,
+            label=label,
+            markevery=markevery,
+            markerfacecolor='none',
+            markeredgewidth=1.0,
+        )
 
     if errorbars:
         plt.errorbar(xarray, ymean, yerr=yerr, fmt='none', ecolor=color)
