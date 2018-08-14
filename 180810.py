@@ -8,6 +8,11 @@ import tcom_plots
 import plot
 
 from functools import partial
+from matplotlib2tikz import save as tikz_save
+
+# matplotlib2tikz requires the modification given in
+# https://github.com/nschloe/matplotlib2tikz/issues/202 to display
+# legend entries correctly
 
 # pyplot setup
 plt.style.use('seaborn-paper')
@@ -21,6 +26,7 @@ parameters = tcom_plots.get_parameters_constant_workload()
 parameters_all_t = tcom_plots.get_parameters_constant_workload(all_T=True)
 
 def main():
+
     # set arithmetic complexity
     l = math.log2(parameters[-1].num_coded_rows)
     complexity.ADDITION_COMPLEXITY = l/64
@@ -28,8 +34,28 @@ def main():
 
     # set tail scale
     map_complexity = 99220529
-    for tail_factor in [None, 0, 1/2, 1, 10, 100, 1000]:
-        plots(tail_factor, map_complexity)
+    # for tail_factor in [None, 0, 1/2, 1, 10, 100, 1000]:
+    plot_params = [
+        {'color': 'r', 'marker': 'o'},
+        {'color': 'g', 'marker': 's'},
+        {'color': 'b', 'marker': '^'},
+        {'color': 'm', 'marker': 'd'},
+    ]
+    for tail_factor, pp in zip([0, 1, 10, 100], plot_params):
+        plots(tail_factor, map_complexity, pp)
+
+    plt.grid(True, which='both')
+    plt.legend()
+    plt.autoscale(enable=True)
+    plt.tight_layout()
+    plt.xlim((6, 300))
+    plt.ylim(1, pow(2, 5))
+    tikz_save(
+        './plots/180810/scale.tex',
+        figureheight='\\figureheight',
+        figurewidth='\\figurewidth'
+    )
+    # plt.savefig('./plots/180810/scale_plot.pdf', dpi='figure', bbox_inches='tight')
     plt.show()
     # tail_scale = None
 
@@ -40,7 +66,7 @@ def main():
     # return
 
 # no tail, 1, 10, 100
-def plots(tail_factor, map_complexity):
+def plots(tail_factor, map_complexity, plot_params):
     if tail_factor is None:
         tail_scale = None
     else:
@@ -138,23 +164,42 @@ def plots(tail_factor, map_complexity):
     # ]
     # heuristic_110.reset_index(inplace=True)
 
-    plot.load_delay_plot(
-        [heuristic_101,
-         rs],
-        [tcom_plots.heuristic_plot_settings,
-         tcom_plots.rs_plot_settings],
-        'num_servers',
-        xlabel=r'$K$',
-        normalize=uncoded,
-        legend='load',
-        ncol=2,
-        show=False,
-        title=r'$\beta={} \sigma_\mathsf{{map}}$'.format(tail_factor),
-        xlim_bot=(6, 300),
-        ylim_top=(0.4, 0.7),
-        # ylim_bot=(0, 25),
+    plt.loglog(
+        heuristic_101['num_servers'],
+        heuristic_101['overall_delay'] / uncoded['overall_delay'],
+        plot_params['color']+'-'+plot_params['marker'],
+        markerfacecolor='none', markeredgewidth=1.0,
+        markevery=0.2,
+        label=r'BDC, Heuristic, $\omega={}$'.format(tail_factor),
+        basey=2,
     )
-    plt.savefig('./plots/180810/scale_factor_{}.png'.format(tail_factor), dpi='figure', bbox_inches='tight')
+    plt.loglog(
+        rs['num_servers'],
+        rs['overall_delay'] / uncoded['overall_delay'],
+        plot_params['color']+'--'+plot_params['marker'],
+        markerfacecolor='none', markeredgewidth=1.0,
+        markevery=0.2,
+        label=r'Unified, $\omega={}$'.format(tail_factor),
+        basey=2,
+    )
+
+    # plot.load_delay_plot(
+    #     [heuristic_101,
+    #      rs],
+    #     [tcom_plots.heuristic_plot_settings,
+    #      tcom_plots.rs_plot_settings],
+    #     'num_servers',
+    #     xlabel=r'$K$',
+    #     normalize=uncoded,
+    #     legend='load',
+    #     ncol=2,
+    #     show=False,
+    #     title=r'$\beta={} \sigma_\mathsf{{map}}$'.format(tail_factor),
+    #     xlim_bot=(6, 300),
+    #     ylim_top=(0.4, 0.7),
+    #     # ylim_bot=(0, 25),
+    # )
+    # plt.savefig('./plots/180810/scale_factor_{}.png'.format(tail_factor), dpi='figure', bbox_inches='tight')
     # plt.title(r'$\beta={} \sigma_\mathsf{{map}}$'.format(tail_factor))
     # plt.tight_layout()
 
