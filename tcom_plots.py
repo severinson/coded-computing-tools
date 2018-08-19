@@ -1122,6 +1122,11 @@ def workload_plot():
     )
     # plt.savefig('./plots/tcom/workload.png', dpi='figure')
     # plt.savefig('./plots/tcom/workload.pdf', dpi='figure', bbox_inches='tight')
+    tikz_save(
+        './plots/tcom/workload.tex',
+        figureheight='\\figureheight',
+        figurewidth='\\figurewidth'
+    )
 
     plot.encode_decode_plot(
         [# heuristic_100,
@@ -1914,9 +1919,9 @@ if __name__ == '__main__':
     # lt_parameters(tfp=1e-9, to=1.335, partitioned=False)
     # lt_plots()
     # partition_plot()
-    # size_plot()
+    size_plot()
     # workload_plot()
     # deadline_plot()
-    tradeoff_plot()
+    # tradeoff_plot()
     # hist_from_samples()
     # get_parameters_deadline()
