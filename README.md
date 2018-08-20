@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/71626661.svg)](https://zenodo.org/badge/latestdoi/71626661)
+
 # Coded Computing Tools
 This project contains the code relating to our research on applications of coding theory to distributed computing. This code is used to generate all results in these papers:
 * [Block-Diagonal Coding for Distributed Computing With Straggling Servers][1] (published in the proceedings of the 2018 IEEE Information Theory Workshop, Kaohsiung, Taiwan)
