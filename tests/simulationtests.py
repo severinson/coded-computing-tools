@@ -23,7 +23,9 @@ import math
 import unittest
 import tempfile
 import pandas as pd
-from simulation import Simulator
+import simulation
+
+from functools import partial
 from model import SystemParameters
 from solvers.heuristicsolver import HeuristicSolver
 from evaluation.binsearch import SampleEvaluator
@@ -79,19 +81,39 @@ class EvaluationTests(unittest.TestCase):
         '''Test basic functionality.'''
         parameters = SystemParameters(rows_per_batch=5, num_servers=10, q=9, num_outputs=9,
                                       server_storage=1/3, num_partitions=5)
-        correct = {'servers': 9, 'batches': 324, 'delay': 25.460714285714285,
-                   'unicast_load_1': 720 / 540, 'multicast_load_1': 840 / 540,
-                   'unicast_load_2': 0, 'multicast_load_2': 1470 / 540}
+        correct = {'servers': 9, 'batches': 324, 'delay': 25.460714285714285/9,
+                   'unicast_load_1': 720/540/9, 'multicast_load_1': 840/540/9,
+                   'unicast_load_2': 0, 'multicast_load_2': 1470/540/9}
         solver = HeuristicSolver()
         evaluator = SampleEvaluator(num_samples=1000)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             filename = os.path.join(tmpdir, parameters.identifier() + '.csv')
-            simulator = Simulator(solver=solver, assignment_eval=evaluator, directory=tmpdir)
-            dataframe = simulator.simulate(parameters)
+            dataframe = simulation.simulate(
+                parameters,
+                directory=tmpdir,
+                rerun=False,
+                samples=10,
+                solver=solver,
+                assignment_eval=evaluator,
+            )
             self.verify_result(dataframe, correct)
 
-            results = simulator.simulate_parameter_list([parameters])
-            self.verify_result(results.dataframes[0], correct)
+            simulate_fun = partial(
+                simulation.simulate,
+                directory=tmpdir,
+                rerun=False,
+                samples=10,
+                solver=solver,
+                assignment_eval=evaluator,
+            )
+            dataframe = simulation.simulate_parameter_list(
+                parameter_list=[parameters],
+                simulate_fun=simulate_fun,
+                map_complexity_fun=lambda x: 1,
+                encode_delay_fun=lambda x: 0,
+                reduce_delay_fun=lambda x: 0,
+            )
+            self.verify_result(dataframe, correct)
 
         return

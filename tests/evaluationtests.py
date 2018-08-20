@@ -31,24 +31,11 @@ from evaluation import analytic
 class EvaluationTests(unittest.TestCase):
     '''Tests for the evaluation'''
 
-    def test_lt(self):
-        '''Test the analytic LT code evaluation.'''
-        correct_results = [{'servers': 7, 'delay': 13.97},
-                           {'servers': 7, 'delay': 13.97},
-                           {'servers': 7, 'delay': 13.97}]
-
-        for par, correct_result in zip(self.get_parameters_partitioning(),
-                                       correct_results):
-            result = analytic.lt_performance(par)
-            self.verify_result(result, correct_result, delta=0.01)
-
-        return
-
     def test_mds(self):
         '''Test the analytic MDS code evaluation.'''
-        correct_results = [{'servers': 6, 'batches': 48, 'delay': 11.97},
-                           {'servers': 6, 'batches': 48, 'delay': 11.97},
-                           {'servers': 6, 'batches': 48, 'delay': 11.97}]
+        correct_results = [{'servers': 6, 'batches': 48, 'delay': 11.97/6},
+                           {'servers': 6, 'batches': 48, 'delay': 11.97/6},
+                           {'servers': 6, 'batches': 48, 'delay': 11.97/6}]
 
         for par, correct_result in zip(self.get_parameters_partitioning(),
                                        correct_results):
@@ -113,9 +100,9 @@ class EvaluationTests(unittest.TestCase):
     def test_heuristic(self):
         '''Test the heuristic solver'''
         solver = HeuristicSolver()
-        correct_results = [{'servers': 6, 'batches': 48, 'unicast_load_1': 1.5, 'delay': 11.3},
-                           {'servers': 6, 'batches': 48, 'unicast_load_1': 1.5, 'delay': 11.3},
-                           {'servers': 6, 'batches': 49.512, 'unicast_load_1': 1.836, 'delay': 11.56}]
+        correct_results = [{'servers': 6, 'batches': 48, 'unicast_load_1': 1.5/6, 'delay': 11.3/6},
+                           {'servers': 6, 'batches': 48, 'unicast_load_1': 1.5/6, 'delay': 11.3/6},
+                           {'servers': 6, 'batches': 49.512, 'unicast_load_1': 1.836/6, 'delay': 11.56/6}]
 
         parameters = self.get_parameters_partitioning()
         self.verify_solver(solver, parameters, correct_results)
@@ -125,9 +112,9 @@ class EvaluationTests(unittest.TestCase):
         '''Test the evaluation.'''
         parameters = model.SystemParameters(rows_per_batch=2, num_servers=6, q=4, num_outputs=4,
                                             server_storage=1/2, num_partitions=1)
-        correct = {'servers': 4, 'batches': 20, 'delay': 7.1333333333333293,
-                   'unicast_load_1': 0.8, 'multicast_load_1': 0.6,
-                   'unicast_load_2': 0.8, 'multicast_load_2': math.inf}
+        correct = {'servers': 4, 'batches': 20, 'delay': 7.1333333333333293/4,
+                   'unicast_load_1': 0.8/4, 'multicast_load_1': 0.6/4,
+                   'unicast_load_2': 0.8/4, 'multicast_load_2': math.inf}
         solver = HeuristicSolver()
         self.verify_solver(solver, [parameters], [correct])
         return
@@ -136,18 +123,18 @@ class EvaluationTests(unittest.TestCase):
         '''Test the evaluation.'''
         parameters = model.SystemParameters(rows_per_batch=5, num_servers=10, q=9, num_outputs=9,
                                             server_storage=1/3, num_partitions=5)
-        correct = {'servers': 9, 'batches': 324, 'delay': 25.460714285714285,
-                   'unicast_load_1': 720 / 540, 'multicast_load_1': 840 / 540,
-                   'unicast_load_2': 0, 'multicast_load_2': 1470 / 540}
+        correct = {'servers': 9, 'batches': 324, 'delay': 25.460714285714285/9,
+                   'unicast_load_1': 720/540/9, 'multicast_load_1': 840/540/9,
+                   'unicast_load_2': 0, 'multicast_load_2': 1470/540/9}
         solver = HeuristicSolver()
         self.verify_solver(solver, [parameters], [correct])
         return
 
     def test_heuristic_analytic(self):
         '''Test the analytic heuristic assignment evaluation.'''
-        correct_results = [{'servers': 6, 'batches': 48, 'delay': 11.3},
-                           {'servers': 6, 'batches': 48, 'delay': 11.3},
-                           {'servers': 6, 'batches': 48, 'delay': 11.3}]
+        correct_results = [{'servers': 6, 'batches': 48, 'delay': 11.3/6},
+                           {'servers': 6, 'batches': 48, 'delay': 11.3/6},
+                           {'servers': 6, 'batches': 48, 'delay': 11.3/6}]
 
         for par, correct_result in zip(self.get_parameters_partitioning(),
                                         correct_results):

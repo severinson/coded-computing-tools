@@ -23,7 +23,7 @@ import unittest
 import tempfile
 import logging
 import model
-import examples
+import plot
 from solvers import heuristicsolver
 from solvers.randomsolver import RandomSolver
 from solvers.hybrid import HybridSolver
@@ -37,7 +37,7 @@ class HybridSolverTests(unittest.TestCase):
         '''Test the hybrid solver.'''
         logging.basicConfig(level=logging.DEBUG)
         solver = HybridSolver(initialsolver=heuristicsolver.HeuristicSolver())
-        parameters = examples.get_parameters_partitioning()[1]
+        parameters = plot.get_parameters_partitioning()[1]
         parameters = self.get_parameters()
         assignment = solver.solve(parameters)
         self.assertTrue(assignment.is_valid())

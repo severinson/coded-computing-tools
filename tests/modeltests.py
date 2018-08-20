@@ -50,7 +50,7 @@ class Modeltests(unittest.TestCase):
         parameters = model.SystemParameters(rows_per_batch=2, num_servers=6, q=4, num_outputs=4,
                                             server_storage=1/2, num_partitions=5)
         load_1, load_2 = parameters.multicast_load()
-        self.assertEqual(load_1 * parameters.num_source_rows, 12)
+        self.assertEqual(load_1 * parameters.num_source_rows * parameters.num_outputs, 12)
         self.assertEqual(load_2, math.inf)
         return
 
@@ -59,8 +59,8 @@ class Modeltests(unittest.TestCase):
         parameters = model.SystemParameters(rows_per_batch=5, num_servers=10, q=9, num_outputs=9,
                                             server_storage=1/3, num_partitions=5)
         load_1, load_2 = parameters.multicast_load()
-        self.assertAlmostEqual(load_1 * parameters.num_source_rows, 840)
-        self.assertEqual(load_2 * parameters.num_source_rows, 1470)
+        self.assertAlmostEqual(load_1 * parameters.num_source_rows * parameters.num_outputs, 840)
+        self.assertEqual(load_2 * parameters.num_source_rows * parameters.num_outputs, 1470)
         return
 
     def test_unpartitioned_load_1(self):
@@ -73,7 +73,7 @@ class Modeltests(unittest.TestCase):
 
         load_best = parameters.unpartitioned_load(strategy='best')
         self.assertEqual(load_1, load_best)
-        self.assertAlmostEqual(load_1, 1.4)
+        self.assertAlmostEqual(load_1, 1.4/parameters.num_outputs)
         return
 
     def test_unpartitioned_load_2(self):
@@ -84,6 +84,6 @@ class Modeltests(unittest.TestCase):
         load_2 = parameters.unpartitioned_load(strategy='2')
         load_best = parameters.unpartitioned_load(strategy='best')
         self.assertEqual(load_2, load_best)
-        self.assertAlmostEqual(load_1, 2.8888888888888897)
-        self.assertAlmostEqual(load_2, 2.7222222222222223)
+        self.assertAlmostEqual(load_1, 2.8888888888888897/parameters.num_outputs)
+        self.assertAlmostEqual(load_2, 2.7222222222222223/parameters.num_outputs)
         return
