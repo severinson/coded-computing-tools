@@ -4,7 +4,7 @@ setup:
 	echo activate the virtual environment with 'source venv/bin/activate'
 
 test:
-	python3 -m unittest tests/*.py
+	venv/bin/python3 -m unittest tests/*.py
 
 check:
 	pylint3 -E ./*
