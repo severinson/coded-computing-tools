@@ -3,7 +3,7 @@ This project contains the code relating to our research on applications of codin
 * [Block-Diagonal Coding for Distributed Computing With Straggling Servers][1] (published in the proceedings of the 2018 IEEE Information Theory Workshop, Kaohsiung, Taiwan)
 * [Block-Diagonal and LT Codes for Distributed Computing With Straggling Servers][2] (under review, IEEE Transactions on Communications journal)
 
-The project is written in Python and includes the modules and packages described below. Our inactivation decoder used for simulating the decoding complexity of Luby Transform codes is found in a [separate repository][https://github.com/severinson/RaptorCodes].
+The project is written in Python and includes the modules and packages described below. Our inactivation decoder used for simulating the decoding complexity of Luby Transform codes is found in a [separate repository][3].
 
 ## Modules
 * model: System model description and analytic computational delay/communication load of the unpartitioned scheme.
@@ -32,3 +32,4 @@ Easiest is to send me a message on Github explaining what you wand to do :)
 
 [1]: https://arxiv.org/abs/1701.06631
 [2]: https://arxiv.org/abs/1712.08230
+[3]: https://github.com/severinson/RaptorCodes
