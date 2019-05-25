@@ -643,7 +643,8 @@ def partition_plot():
     parameters = get_parameters_partitioning()
 
     # set arithmetic complexity
-    l = math.log2(parameters[-1].num_coded_rows)
+    # l = math.log2(parameters[-1].num_coded_rows)
+    l = math.ceil(math.log2(parameters[-1].num_coded_rows + 1))
     complexity.ADDITION_COMPLEXITY = l/64
     complexity.MULTIPLICATION_COMPLEXITY = l*math.log2(l)
 
@@ -1967,13 +1968,13 @@ def deadline_plot(target_overhead=1.335,
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-    [print(p) for p in get_parameters_N()]
+    # [print(p) for p in get_parameters_N()]
     # lt_parameters(tfp=1e-9, to=1.335, partitioned=False)
     # lt_plots()
     # partition_plot()
-    size_plot()
+    # size_plot()
     # workload_plot()
-    # deadline_plot()
+    deadline_plot()
     # tradeoff_plot()
     # hist_from_samples()
     # get_parameters_deadline()
